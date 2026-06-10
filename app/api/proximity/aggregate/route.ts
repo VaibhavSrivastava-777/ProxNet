@@ -1,0 +1,82 @@
+import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/session";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { haversineDistanceMeters, jitterCoordinate } from "@/lib/geo/haversine";
+import { companyLogoUrl, resolveUserLocation } from "@/lib/anonymize";
+import type { User, UserVisibility } from "@/lib/types";
+
+export async function GET(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const lat = parseFloat(searchParams.get("lat") ?? "");
+  const lng = parseFloat(searchParams.get("lng") ?? "");
+  const radius = parseInt(searchParams.get("radius") ?? "100", 10);
+
+  if (Number.isNaN(lat) || Number.isNaN(lng) || Number.isNaN(radius)) {
+    return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
+  }
+
+  const supabase = createAdminClient();
+  const { data: users, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("is_active", true)
+    .neq("id", user.id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const { data: currentLocations } = await supabase.from("user_current_locations").select("*");
+  const locationMap = new Map(
+    (currentLocations ?? []).map((l) => [l.user_id, { lat: Number(l.lat), lng: Number(l.lng) }])
+  );
+
+  const clusters = new Map<
+    string,
+    { company: string; count: number; latSum: number; lngSum: number; logoUrl: string }
+  >();
+
+  for (const u of (users ?? []) as User[]) {
+    const visibility = u.visibility as UserVisibility;
+    if (!visibility?.showCompany || !u.company?.trim()) continue;
+
+    const current = locationMap.get(u.id);
+    const loc = resolveUserLocation(u, current?.lat, current?.lng);
+    if (!loc) continue;
+
+    const distance = haversineDistanceMeters(lat, lng, loc.lat, loc.lng);
+    if (distance > radius) continue;
+
+    const key = u.company.trim();
+    const existing = clusters.get(key);
+    if (existing) {
+      existing.count += 1;
+      existing.latSum += loc.lat;
+      existing.lngSum += loc.lng;
+    } else {
+      clusters.set(key, {
+        company: key,
+        count: 1,
+        latSum: loc.lat,
+        lngSum: loc.lng,
+        logoUrl: companyLogoUrl(key, u.profile_photo_url),
+      });
+    }
+  }
+
+  const result = Array.from(clusters.values()).map((c) => {
+    const centroidLat = c.latSum / c.count;
+    const centroidLng = c.lngSum / c.count;
+    const jittered = jitterCoordinate(centroidLat, centroidLng, c.company);
+    return {
+      company: c.company,
+      logoUrl: c.logoUrl,
+      count: c.count,
+      lat: jittered.lat,
+      lng: jittered.lng,
+    };
+  });
+
+  return NextResponse.json({ clusters: result });
+}
