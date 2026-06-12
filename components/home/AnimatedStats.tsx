@@ -8,7 +8,7 @@ const fetcher = (url: string) => fetch(url).then((res) => {
   return res.json();
 });
 
-export function TypewriterText({ text }: { text: string }) {
+export function TypewriterText({ text, speedMs = 40 }: { text: string, speedMs?: number }) {
   const [displayedText, setDisplayedText] = useState("");
   
   useEffect(() => {
@@ -20,10 +20,10 @@ export function TypewriterText({ text }: { text: string }) {
       if (i >= text.length) {
         clearInterval(intervalId);
       }
-    }, 40); // 40ms per character for Apple-style smooth typing
+    }, speedMs);
     
     return () => clearInterval(intervalId);
-  }, [text]);
+  }, [text, speedMs]);
 
   return (
     <span style={{ 

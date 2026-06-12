@@ -89,7 +89,10 @@ export default async function HomePage() {
         <div className="relative mx-auto max-w-4xl animate-fadeInUp">
           <h1 className="text-display mb-6 text-white leading-tight">Who Else Is In Your Vicinity?</h1>
           <div className="text-body-lg mx-auto mb-10 max-w-2xl text-white/90" style={{ minHeight: "84px" }}>
-            <TypewriterText text="Discover professionals from top companies living in your apartment complex. Ask questions, network anonymously, and unlock opportunities — all without revealing your identity." />
+            <TypewriterText 
+              speedMs={65} 
+              text="Discover professionals from top companies living in your apartment complex. Ask questions, network anonymously, and unlock opportunities — all without revealing your identity." 
+            />
           </div>
           <div className="flex flex-col items-center justify-center gap-4">
             <Link href="/login" className="btn btn-linkedin btn-lg shadow-xl shadow-black/20">
