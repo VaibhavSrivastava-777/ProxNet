@@ -226,8 +226,8 @@ export function ProximityMap() {
           padding: 0,
           overflow: "hidden",
           borderRadius: "var(--radius-lg)",
-          height: "calc(100vh - 240px)",
-          minHeight: 400,
+          height: "calc(100vh - 380px)",
+          minHeight: 300,
         }}
       >
         {center ? (
