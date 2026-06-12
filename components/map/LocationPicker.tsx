@@ -23,9 +23,21 @@ interface Props {
   onChange: (lat: string, lng: string) => void;
   /** Auto-request browser location on mount when coordinates are empty */
   autoCapture?: boolean;
+  radius?: number;
+  clusters?: any[];
+  onCompanyClick?: (company: string) => void;
 }
 
-export function LocationPicker({ legend, lat, lng, onChange, autoCapture = false }: Props) {
+export function LocationPicker({
+  legend,
+  lat,
+  lng,
+  onChange,
+  autoCapture = false,
+  radius,
+  clusters,
+  onCompanyClick,
+}: Props) {
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState("");
   const [showMap, setShowMap] = useState(Boolean(lat && lng));
@@ -117,6 +129,9 @@ export function LocationPicker({ legend, lat, lng, onChange, autoCapture = false
               onChange={(newLat, newLng) => {
                 onChange(newLat.toFixed(6), newLng.toFixed(6));
               }}
+              radius={radius}
+              clusters={clusters}
+              onCompanyClick={onCompanyClick}
             />
           </div>
           <p className="text-xs text-zinc-500">

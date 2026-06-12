@@ -5,21 +5,25 @@ import { SupabaseSetupBanner } from "@/components/admin/SupabaseSetupBanner";
 
 export default function AdminDashboardPage() {
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Admin dashboard</h1>
-          <p className="text-sm text-zinc-600">Manage ProxNet users</p>
+    <div className="mx-auto max-w-6xl p-6 md:p-8 animate-fadeIn" style={{ minHeight: "100vh" }}>
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-4">
+          <h1 className="text-h1 m-0">Admin Dashboard</h1>
+          <span className="badge badge-accent shadow-sm" style={{ padding: "4px 10px" }}>Admin</span>
         </div>
-        <AdminLogout />
+        <div className="flex items-center gap-4">
+          <Link href="/" className="btn btn-ghost btn-sm">
+            Back to site
+          </Link>
+          <AdminLogout />
+        </div>
       </div>
-      <SupabaseSetupBanner />
+      
+      <div className="mb-6">
+        <SupabaseSetupBanner />
+      </div>
+      
       <UserTable />
-      <p className="text-xs text-zinc-500">
-        <Link href="/" className="hover:underline">
-          Back to site
-        </Link>
-      </p>
     </div>
   );
 }

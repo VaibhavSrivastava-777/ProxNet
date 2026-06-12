@@ -7,10 +7,10 @@ export default async function ProximityPage() {
   if (!user) redirect("/login");
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Professionals in your proximity</h1>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+    <div className="mx-auto max-w-6xl p-6 md:p-8 animate-fadeIn" style={{ paddingBottom: "3rem" }}>
+      <div style={{ marginBottom: 16 }}>
+        <h1 className="text-h1">Proximity Map</h1>
+        <p className="text-body-sm" style={{ marginTop: 4 }}>
           Adjust the search radius and explore anonymized company clusters on the map.
         </p>
       </div>

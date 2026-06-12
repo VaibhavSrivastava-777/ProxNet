@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
 import { resolveUserLocation } from "@/lib/anonymize";
 import type { User } from "@/lib/types";
+import { sendNotification } from "@/lib/notifications";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -14,27 +15,84 @@ export async function GET() {
   const { data: asked } = await supabase
     .from("questions")
     .select("*, question_targets(status)")
-    .eq("asker_id", user.id)
-    .order("created_at", { ascending: false });
+    .eq("asker_id", user.id);
 
   const { data: targeted } = await supabase
     .from("question_targets")
-    .select("*, questions(*)")
-    .eq("professional_id", user.id)
-    .order("id", { ascending: false });
+    .select("*, questions(*, question_targets(status, professional_id))")
+    .eq("professional_id", user.id);
 
-  const incoming = (targeted ?? []).map((t) => ({
-    id: t.questions.id,
-    body: t.questions.body,
-    status: t.status,
-    company_filter: t.questions.company_filter,
-    title_filter: t.questions.title_filter,
-    created_at: t.questions.created_at,
-    asker_alias: `Resident-${t.questions.asker_id.slice(0, 4)}`,
-    target_id: t.id,
-  }));
+  const { data: sessions } = await supabase
+    .from("chat_sessions")
+    .select("id, question_id, created_at, chat_messages(body, created_at, sender_id)");
 
-  return NextResponse.json({ asked: asked ?? [], incoming });
+  const sessionActivityMap = new Map<string, { time: string; body: string | null; sender_id: string | null }>();
+  if (sessions) {
+    for (const session of sessions) {
+      if (!session.question_id) continue;
+      let latestTime = session.created_at;
+      let latestBody = null;
+      let latestSender = null;
+      
+      if (session.chat_messages && session.chat_messages.length > 0) {
+        const latestMsg = session.chat_messages.reduce((prev: any, current: any) => 
+          (new Date(prev.created_at).getTime() > new Date(current.created_at).getTime()) ? prev : current
+        );
+        latestTime = latestMsg.created_at;
+        latestBody = latestMsg.body;
+        latestSender = latestMsg.sender_id;
+      }
+      
+      const currentLatest = sessionActivityMap.get(session.question_id);
+      if (!currentLatest || new Date(latestTime).getTime() > new Date(currentLatest.time).getTime()) {
+        sessionActivityMap.set(session.question_id, { time: latestTime, body: latestBody, sender_id: latestSender });
+      }
+    }
+  }
+
+  const askedWithActivity = (asked ?? []).map((q) => {
+    const activity = sessionActivityMap.get(q.id);
+    return { 
+      ...q, 
+      latest_activity_at: activity?.time || q.created_at,
+      latest_message_body: activity?.body || null,
+      latest_message_sender: activity?.sender_id || null,
+    };
+  });
+  askedWithActivity.sort((a, b) => new Date(b.latest_activity_at).getTime() - new Date(a.latest_activity_at).getTime());
+
+  const filteredTargeted = (targeted ?? []).filter((t) => {
+    if (t.status === "responded") return true;
+    const qTargets = t.questions?.question_targets ?? [];
+    const hasAnyOtherResponded = qTargets.some(
+      (qt: any) => qt.status === "responded" && qt.professional_id !== user.id
+    );
+    return !hasAnyOtherResponded;
+  });
+
+  const incomingWithActivity = filteredTargeted.map((t) => {
+    const q = t.questions;
+    const activity = sessionActivityMap.get(q.id);
+    return {
+      id: q.id,
+      body: q.body,
+      status: t.status,
+      company_filter: q.company_filter,
+      title_filter: q.title_filter,
+      created_at: q.created_at,
+      asker_alias: `Resident-${q.asker_id.slice(0, 4)}`,
+      target_id: t.id,
+      latest_activity_at: activity?.time || q.created_at,
+      latest_message_body: activity?.body || null,
+      latest_message_sender: activity?.sender_id || null,
+    };
+  });
+  incomingWithActivity.sort((a, b) => new Date(b.latest_activity_at).getTime() - new Date(a.latest_activity_at).getTime());
+
+  return NextResponse.json({
+    asked: askedWithActivity,
+    incoming: incomingWithActivity,
+  });
 }
 
 export async function POST(request: Request) {
@@ -97,6 +155,20 @@ export async function POST(request: Request) {
 
   if (targets.length > 0) {
     await supabase.from("question_targets").insert(targets);
+
+    // Notify targeted professionals
+    try {
+      const notifications = targets.map((t) =>
+        sendNotification(t.professional_id, {
+          title: "New Incoming Question",
+          body: `A neighbor asked a question: "${question.body.slice(0, 60)}${question.body.length > 60 ? "..." : ""}"`,
+          url: "/qa",
+        })
+      );
+      await Promise.all(notifications);
+    } catch (err) {
+      console.error("Bulk notifications trigger error:", err);
+    }
   }
 
   return NextResponse.json({ question, targetCount: targets.length });

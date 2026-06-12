@@ -7,10 +7,18 @@ export default async function ProfilePage() {
   if (!user) redirect("/login");
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Your profile</h1>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+    <div
+      className="animate-fadeIn"
+      style={{
+        maxWidth: 720,
+        marginLeft: "auto",
+        marginRight: "auto",
+        padding: "32px 16px",
+      }}
+    >
+      <div style={{ marginBottom: 24 }}>
+        <h1 className="text-h1">Your Profile</h1>
+        <p className="text-body-sm" style={{ marginTop: 4 }}>
           Manage your professional details and privacy settings.
         </p>
       </div>

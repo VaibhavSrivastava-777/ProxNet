@@ -1,0 +1,18 @@
+{
+  "name": "ProxNet",
+  "short_name": "ProxNet",
+  "description": "Discover professionals living nearby, ask questions anonymously, and network.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#171717",
+  "theme_color": "#004182",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "orientation": "portrait-primary"
+}

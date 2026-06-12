@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendNotification } from "@/lib/notifications";
 
 async function assertParticipant(sessionId: string, userId: string) {
   const supabase = createAdminClient();
@@ -80,6 +81,26 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Notify the other participant
+  try {
+    const { data: otherParticipant } = await supabase
+      .from("chat_participants")
+      .select("user_id")
+      .eq("session_id", sessionId)
+      .neq("user_id", user.id)
+      .maybeSingle();
+
+    if (otherParticipant) {
+      await sendNotification(otherParticipant.user_id, {
+        title: "New Message",
+        body: `${participant.alias}: "${body.trim().slice(0, 60)}${body.trim().length > 60 ? "..." : ""}"`,
+        url: `/chat/${sessionId}`,
+      });
+    }
+  } catch (err) {
+    console.error("Chat message notification trigger error:", err);
+  }
 
   return NextResponse.json({
     message: {

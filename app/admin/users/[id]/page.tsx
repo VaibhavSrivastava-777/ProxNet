@@ -18,7 +18,7 @@ export default async function EditUserPage({
   if (!data) notFound();
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-4xl p-4 md:p-8 animate-fadeIn space-y-6">
       <h1 className="text-2xl font-bold">Edit user</h1>
       <UserForm user={data as User} />
     </div>

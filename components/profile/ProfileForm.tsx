@@ -1,9 +1,148 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import type { User, UserVisibility } from "@/lib/types";
 
+/* ----------------------------------------------------------------
+   Collapsible Section
+   ---------------------------------------------------------------- */
+function CollapsibleSection({
+  icon,
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [maxHeight, setMaxHeight] = useState<string>(defaultOpen ? "none" : "0px");
+
+  useEffect(() => {
+    if (open) {
+      const el = contentRef.current;
+      if (el) {
+        // Temporarily remove max-height limit to measure
+        setMaxHeight(`${el.scrollHeight}px`);
+        // After transition, set to "none" so inner content can grow freely
+        const timer = setTimeout(() => setMaxHeight("none"), 300);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      // First set explicit height so browser can transition from it
+      const el = contentRef.current;
+      if (el) {
+        setMaxHeight(`${el.scrollHeight}px`);
+        // Force reflow then collapse
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setMaxHeight("0px");
+          });
+        });
+      }
+    }
+  }, [open]);
+
+  return (
+    <div className="card" style={{ overflow: "hidden" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          width: "100%",
+          padding: "18px 20px",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "var(--color-text)",
+        }}
+      >
+        <span style={{ display: "flex", color: "var(--color-accent)", fontSize: 20 }}>
+          {icon}
+        </span>
+        <span className="text-h3" style={{ flex: 1, textAlign: "left" }}>
+          {title}
+        </span>
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+          style={{
+            transition: `transform var(--transition-normal)`,
+            transform: open ? "rotate(180deg)" : "rotate(0deg)",
+            color: "var(--color-text-tertiary)",
+          }}
+        >
+          <path
+            d="M5 7.5L10 12.5L15 7.5"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      <div
+        ref={contentRef}
+        style={{
+          maxHeight,
+          overflow: "hidden",
+          transition: `max-height var(--transition-normal)`,
+        }}
+      >
+        <div style={{ padding: "0 20px 20px" }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------
+   SVG icons (inline for zero-dep)
+   ---------------------------------------------------------------- */
+const PersonIcon = (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+    <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 0114 0H3z" />
+  </svg>
+);
+
+const MapPinIcon = (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+    <path
+      fillRule="evenodd"
+      d="M10 2a6 6 0 00-6 6c0 4.5 6 10 6 10s6-5.5 6-10a6 6 0 00-6-6zm0 8a2 2 0 100-4 2 2 0 000 4z"
+      clipRule="evenodd"
+    />
+  </svg>
+);
+
+const ShieldIcon = (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+    <path
+      fillRule="evenodd"
+      d="M10 1l7 3v5c0 4.5-3 8.25-7 9.5C6 17.25 3 13.5 3 9V4l7-3zm0 2.18L5 5.54v3.64c0 3.5 2.3 6.58 5 7.72 2.7-1.14 5-4.22 5-7.72V5.54L10 3.18z"
+      clipRule="evenodd"
+    />
+  </svg>
+);
+
+const PencilIcon = (
+  <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+    <path d="M13.586 3.586a2 2 0 112.828 2.828l-10 10A2 2 0 015 17H3v-2a2 2 0 01.586-1.414l10-10z" />
+  </svg>
+);
+
+/* ----------------------------------------------------------------
+   Profile Form
+   ---------------------------------------------------------------- */
 interface Props {
   initialUser: User;
 }
@@ -12,6 +151,7 @@ export function ProfileForm({ initialUser }: Props) {
   const [user, setUser] = useState(initialUser);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [editing, setEditing] = useState(false);
 
   const visibility = user.visibility as UserVisibility;
 
@@ -41,6 +181,7 @@ export function ProfileForm({ initialUser }: Props) {
       const data = await res.json();
       setUser(data);
       setMessage("Profile saved.");
+      setEditing(false);
     } else {
       setMessage("Failed to save profile.");
     }
@@ -55,140 +196,380 @@ export function ProfileForm({ initialUser }: Props) {
 
   const needsCompletion = !user.company || !user.job_title;
 
+  /* Initials helper */
+  const initials = user.full_name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  const subtitle = [user.job_title, user.company].filter(Boolean).join(" at ");
+
   return (
-    <form onSubmit={handleSave} className="space-y-6">
+    <form onSubmit={handleSave} className="stagger-children" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* ---- Completion Warning ---- */}
       {needsCompletion && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          Complete your company and job title to appear in proximity searches.
+        <div className="alert alert-warning">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" style={{ flexShrink: 0, marginTop: 1 }}>
+            <path
+              fillRule="evenodd"
+              d="M8.257 3.099c.765-1.36 2.72-1.36 3.486 0l6.518 11.59c.75 1.333-.213 2.961-1.742 2.961H3.48c-1.529 0-2.492-1.628-1.742-2.961L8.257 3.1zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <span>Complete your company and job title to appear in proximity searches.</span>
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm">
-          <span className="font-medium">Full name</span>
-          <input
-            className="mt-1 w-full rounded border px-3 py-2"
-            value={user.full_name}
-            onChange={(e) => setUser({ ...user, full_name: e.target.value })}
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="font-medium">Email</span>
-          <input
-            className="mt-1 w-full rounded border bg-zinc-50 px-3 py-2"
-            value={user.email ?? ""}
-            disabled
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="font-medium">Company</span>
-          <input
-            className="mt-1 w-full rounded border px-3 py-2"
-            value={user.company ?? ""}
-            onChange={(e) => setUser({ ...user, company: e.target.value })}
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="font-medium">Job title</span>
-          <input
-            className="mt-1 w-full rounded border px-3 py-2"
-            value={user.job_title ?? ""}
-            onChange={(e) => setUser({ ...user, job_title: e.target.value })}
-          />
-        </label>
-        <label className="block text-sm sm:col-span-2">
-          <span className="font-medium">Profile photo URL</span>
-          <input
-            className="mt-1 w-full rounded border px-3 py-2"
-            value={user.profile_photo_url ?? ""}
-            onChange={(e) => setUser({ ...user, profile_photo_url: e.target.value })}
-          />
-        </label>
-        <label className="block text-sm sm:col-span-2">
-          <span className="font-medium">LinkedIn profile URL</span>
-          <input
-            className="mt-1 w-full rounded border px-3 py-2"
-            value={user.linkedin_profile_url ?? ""}
-            onChange={(e) => setUser({ ...user, linkedin_profile_url: e.target.value })}
-          />
-        </label>
+      {/* ---- Success / Error Messages ---- */}
+      {message && (
+        <div
+          className={`alert ${message === "Profile saved." ? "alert-success" : "alert-error"}`}
+        >
+          {message === "Profile saved." ? (
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" style={{ flexShrink: 0, marginTop: 1 }}>
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clipRule="evenodd"
+              />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" style={{ flexShrink: 0, marginTop: 1 }}>
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                clipRule="evenodd"
+              />
+            </svg>
+          )}
+          <span>{message}</span>
+        </div>
+      )}
+
+      {/* ---- Profile Header Card ---- */}
+      <div className="card" style={{ overflow: "hidden", position: "relative" }}>
+        {/* Banner */}
+        <div
+          style={{
+            height: 80,
+            background: "linear-gradient(135deg, var(--color-primary), var(--color-accent))",
+          }}
+        />
+
+        {/* Edit button */}
+        <button
+          type="button"
+          onClick={() => setEditing((v) => !v)}
+          className="btn btn-secondary btn-sm"
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            background: "rgba(255,255,255,0.85)",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          {PencilIcon}
+          <span>{editing ? "Cancel" : "Edit Profile"}</span>
+        </button>
+
+        {/* Profile info */}
+        <div
+          style={{
+            padding: "0 20px 20px",
+            marginTop: -40,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-start",
+            gap: 8,
+          }}
+        >
+          {/* Avatar */}
+          <div
+            className="avatar avatar-xl"
+            style={{
+              border: "3px solid var(--color-surface)",
+              boxShadow: "var(--shadow-md)",
+            }}
+          >
+            {user.profile_photo_url ? (
+              <img src={user.profile_photo_url} alt={user.full_name} />
+            ) : (
+              initials
+            )}
+          </div>
+
+          <div>
+            <h2 className="text-h2">{user.full_name}</h2>
+            {subtitle && (
+              <p className="text-body-sm" style={{ marginTop: 2 }}>
+                {subtitle}
+              </p>
+            )}
+            {user.email && (
+              <p className="text-caption" style={{ marginTop: 2 }}>
+                {user.email}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
-      <fieldset className="rounded-lg border p-4">
-        <legend className="px-1 text-sm font-medium">Default location mode</legend>
-        <div className="mt-2 flex flex-wrap gap-4 text-sm">
-          {(["home", "office", "current"] as const).map((loc) => (
-            <label key={loc} className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="active_location"
-                checked={user.active_location === loc}
-                onChange={() => setUser({ ...user, active_location: loc })}
-              />
-              {loc.charAt(0).toUpperCase() + loc.slice(1)}
-            </label>
-          ))}
+      {/* ---- Section: Personal Information ---- */}
+      <CollapsibleSection icon={PersonIcon} title="Personal Information" defaultOpen>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+            gap: 16,
+          }}
+        >
+          <div>
+            <label className="label">Full name</label>
+            <input
+              className="input"
+              value={user.full_name}
+              onChange={(e) => setUser({ ...user, full_name: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="label">Email</label>
+            <input className="input" value={user.email ?? ""} disabled />
+          </div>
+
+          <div>
+            <label className="label">Company</label>
+            <input
+              className="input"
+              value={user.company ?? ""}
+              placeholder="Where do you work?"
+              onChange={(e) => setUser({ ...user, company: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="label">Job title</label>
+            <input
+              className="input"
+              value={user.job_title ?? ""}
+              placeholder="Your current role"
+              onChange={(e) => setUser({ ...user, job_title: e.target.value })}
+            />
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="label">Profile photo URL</label>
+            <input
+              className="input"
+              value={user.profile_photo_url ?? ""}
+              placeholder="https://..."
+              onChange={(e) =>
+                setUser({ ...user, profile_photo_url: e.target.value })
+              }
+            />
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="label">LinkedIn profile URL</label>
+            <input
+              className="input"
+              value={user.linkedin_profile_url ?? ""}
+              placeholder="https://linkedin.com/in/..."
+              onChange={(e) =>
+                setUser({ ...user, linkedin_profile_url: e.target.value })
+              }
+            />
+          </div>
         </div>
-      </fieldset>
+      </CollapsibleSection>
 
-      <LocationPicker
-        legend="Home location"
-        lat={user.home_lat?.toString() ?? ""}
-        lng={user.home_lng?.toString() ?? ""}
-        onChange={(home_lat, home_lng) =>
-          setUser({
-            ...user,
-            home_lat: home_lat ? Number(home_lat) : null,
-            home_lng: home_lng ? Number(home_lng) : null,
-          })
-        }
-      />
+      {/* ---- Section: Location Settings ---- */}
+      <CollapsibleSection icon={MapPinIcon} title="Location Settings">
+        {/* Location mode radio cards */}
+        <div style={{ marginBottom: 20 }}>
+          <label className="label" style={{ marginBottom: 10 }}>
+            Default location mode
+          </label>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 10,
+            }}
+          >
+            {(["home", "office", "current"] as const).map((loc) => {
+              const selected = user.active_location === loc;
+              const icons: Record<string, ReactNode> = {
+                home: (
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7A1 1 0 003 11h1v6a1 1 0 001 1h3a1 1 0 001-1v-3h2v3a1 1 0 001 1h3a1 1 0 001-1v-6h1a1 1 0 00.707-1.707l-7-7z" />
+                  </svg>
+                ),
+                office: (
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                      fillRule="evenodd"
+                      d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                ),
+                current: (
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                      fillRule="evenodd"
+                      d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                ),
+              };
 
-      <LocationPicker
-        legend="Office location"
-        lat={user.office_lat?.toString() ?? ""}
-        lng={user.office_lng?.toString() ?? ""}
-        onChange={(office_lat, office_lng) =>
-          setUser({
-            ...user,
-            office_lat: office_lat ? Number(office_lat) : null,
-            office_lng: office_lng ? Number(office_lng) : null,
-          })
-        }
-      />
+              return (
+                <div
+                  key={loc}
+                  className={`radio-card ${selected ? "selected" : ""}`}
+                  onClick={() => setUser({ ...user, active_location: loc })}
+                  style={{
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    textAlign: "center",
+                    padding: "14px 8px",
+                    gap: 6,
+                  }}
+                >
+                  <span
+                    style={{
+                      color: selected
+                        ? "var(--color-primary)"
+                        : "var(--color-text-secondary)",
+                    }}
+                  >
+                    {icons[loc]}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "0.8125rem",
+                      fontWeight: 600,
+                      color: selected
+                        ? "var(--color-primary)"
+                        : "var(--color-text)",
+                    }}
+                  >
+                    {loc.charAt(0).toUpperCase() + loc.slice(1)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-      <fieldset className="rounded-lg border p-4">
-        <legend className="px-1 text-sm font-medium">Visibility in anonymized views</legend>
-        <div className="mt-2 space-y-2 text-sm">
+        <hr className="divider" style={{ margin: "16px 0" }} />
+
+        {/* Location pickers */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <LocationPicker
+            legend="Home location"
+            lat={user.home_lat?.toString() ?? ""}
+            lng={user.home_lng?.toString() ?? ""}
+            onChange={(home_lat, home_lng) =>
+              setUser({
+                ...user,
+                home_lat: home_lat ? Number(home_lat) : null,
+                home_lng: home_lng ? Number(home_lng) : null,
+              })
+            }
+          />
+
+          <LocationPicker
+            legend="Office location"
+            lat={user.office_lat?.toString() ?? ""}
+            lng={user.office_lng?.toString() ?? ""}
+            onChange={(office_lat, office_lng) =>
+              setUser({
+                ...user,
+                office_lat: office_lat ? Number(office_lat) : null,
+                office_lng: office_lng ? Number(office_lng) : null,
+              })
+            }
+          />
+        </div>
+      </CollapsibleSection>
+
+      {/* ---- Section: Privacy Settings ---- */}
+      <CollapsibleSection icon={ShieldIcon} title="Privacy Settings">
+        <p className="text-body-sm" style={{ marginBottom: 16 }}>
+          Control what information is visible in anonymized proximity views.
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           {(
             [
-              ["showCompany", "Show company"],
-              ["showTitle", "Show job title"],
-              ["showPhoto", "Show photo"],
+              ["showCompany", "Show company", "Display your company name to nearby professionals"],
+              ["showTitle", "Show job title", "Display your job title in search results"],
+              ["showPhoto", "Show photo", "Show your profile photo to others"],
             ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={visibility[key]}
-                onChange={() => toggleVisibility(key)}
-              />
-              {label}
-            </label>
+          ).map(([key, label, description], idx, arr) => (
+            <div
+              key={key}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "14px 0",
+                borderBottom:
+                  idx < arr.length - 1
+                    ? "1px solid var(--color-border-light)"
+                    : "none",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 500, color: "var(--color-text)" }}>
+                  {label}
+                </div>
+                <div className="text-caption">{description}</div>
+              </div>
+
+              <div
+                className={`toggle-track ${visibility[key] ? "active" : ""}`}
+                role="switch"
+                aria-checked={visibility[key]}
+                tabIndex={0}
+                onClick={() => toggleVisibility(key)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    toggleVisibility(key);
+                  }
+                }}
+              >
+                <div className="toggle-thumb" />
+              </div>
+            </div>
           ))}
         </div>
-      </fieldset>
+      </CollapsibleSection>
 
-      <div className="flex items-center gap-4">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {saving ? "Saving..." : "Save profile"}
-        </button>
-        {message && <p className="text-sm text-zinc-600">{message}</p>}
-      </div>
+      {/* ---- Save Button ---- */}
+      <button
+        type="submit"
+        disabled={saving}
+        className="btn btn-primary btn-lg"
+        style={{ width: "100%" }}
+      >
+        {saving ? (
+          <>
+            <span className="spinner spinner-sm" style={{ borderTopColor: "var(--color-text-inverse)" }} />
+            Saving…
+          </>
+        ) : (
+          "Save profile"
+        )}
+      </button>
     </form>
   );
 }

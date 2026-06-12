@@ -1,21 +1,42 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "ProxNet — Professionals in Your Proximity",
-  description: "Discover anonymized professionals nearby in your society",
+  title: "ProxNet — Discover Professionals in Your Proximity",
+  description:
+    "Your neighbor could be your next career connection. ProxNet helps you discover professionals living nearby, ask questions anonymously, and network — all without revealing identities.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ProxNet",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1.0,
+  maximumScale: 1.0,
+  userScalable: false,
+  themeColor: "#004182",
 };
 
 export default function RootLayout({
@@ -26,11 +47,14 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
     >
-      <body className="flex min-h-full flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-        <Nav />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
+      <body>
+        <ThemeProvider>
+          <Nav />
+          <main className="main-content">{children}</main>
+        </ThemeProvider>
       </body>
     </html>
   );

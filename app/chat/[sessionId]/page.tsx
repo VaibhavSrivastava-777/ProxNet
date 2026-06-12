@@ -12,10 +12,5 @@ export default async function ChatPage({
 
   const { sessionId } = await params;
 
-  return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Anonymous chat</h1>
-      <ChatRoom sessionId={sessionId} />
-    </div>
-  );
+  return <ChatRoom sessionId={sessionId} />;
 }

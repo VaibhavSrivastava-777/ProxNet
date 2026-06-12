@@ -22,8 +22,7 @@ export async function GET(request: Request) {
   const { data: users, error } = await supabase
     .from("users")
     .select("*")
-    .eq("is_active", true)
-    .neq("id", user.id);
+    .eq("is_active", true);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -42,11 +41,24 @@ export async function GET(request: Request) {
     if (!visibility?.showCompany || !u.company?.trim()) continue;
 
     const current = locationMap.get(u.id);
-    const loc = resolveUserLocation(u, current?.lat, current?.lng);
-    if (!loc) continue;
+    let bestLoc: { lat: number; lng: number } | null = null;
+    let minDistance = Infinity;
 
-    const distance = haversineDistanceMeters(lat, lng, loc.lat, loc.lng);
-    if (distance > radius) continue;
+    const locsToCheck = [];
+    if (u.home_lat != null && u.home_lng != null) locsToCheck.push({ lat: Number(u.home_lat), lng: Number(u.home_lng) });
+    if (u.office_lat != null && u.office_lng != null) locsToCheck.push({ lat: Number(u.office_lat), lng: Number(u.office_lng) });
+    if (current?.lat != null && current?.lng != null) locsToCheck.push({ lat: current.lat, lng: current.lng });
+
+    for (const loc of locsToCheck) {
+      const distance = haversineDistanceMeters(lat, lng, loc.lat, loc.lng);
+      if (distance <= radius && distance < minDistance) {
+        minDistance = distance;
+        bestLoc = loc;
+      }
+    }
+
+    if (!bestLoc) continue;
+    const loc = bestLoc;
 
     const key = u.company.trim();
     const existing = clusters.get(key);
@@ -60,7 +72,7 @@ export async function GET(request: Request) {
         count: 1,
         latSum: loc.lat,
         lngSum: loc.lng,
-        logoUrl: companyLogoUrl(key, u.profile_photo_url),
+        logoUrl: companyLogoUrl(key),
       });
     }
   }
