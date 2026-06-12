@@ -219,6 +219,11 @@ export function ProximityMap() {
         </div>
       )}
 
+      {/* Hint */}
+      <p className="text-caption" style={{ textAlign: "center", marginBottom: "-8px" }}>
+        Click a company logo to ask questions. Company counts are anonymized and positions are approximate.
+      </p>
+
       {/* Map Container */}
       <div
         className="card"
@@ -260,12 +265,6 @@ export function ProximityMap() {
           />
         )}
       </div>
-
-      {/* Footer Hint */}
-      <p className="text-caption" style={{ textAlign: "center" }}>
-        Click a company logo to ask questions. Company counts are anonymized and positions are
-        approximate.
-      </p>
 
       {/* Q&A Modal */}
       {selectedCompany && center && (
