@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/session";
-import { AnimatedStats } from "@/components/home/AnimatedStats";
+import { AnimatedStats, TypewriterText } from "@/components/home/AnimatedStats";
 
 export default async function HomePage() {
   const session = await auth();
@@ -88,9 +88,9 @@ export default async function HomePage() {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iLjE1Ii8+PC9zdmc+')] bg-[length:24px_24px] opacity-20" />
         <div className="relative mx-auto max-w-4xl animate-fadeInUp">
           <h1 className="text-display mb-6 text-white leading-tight">Who Else Is In Your Vicinity?</h1>
-          <p className="text-body-lg mx-auto mb-10 max-w-2xl text-white/90">
-            Discover professionals from top companies living in your apartment complex. Ask questions, network anonymously, and unlock opportunities — all without revealing your identity.
-          </p>
+          <div className="text-body-lg mx-auto mb-10 max-w-2xl text-white/90" style={{ minHeight: "84px" }}>
+            <TypewriterText text="Discover professionals from top companies living in your apartment complex. Ask questions, network anonymously, and unlock opportunities — all without revealing your identity." />
+          </div>
           <div className="flex flex-col items-center justify-center gap-4">
             <Link href="/login" className="btn btn-linkedin btn-lg shadow-xl shadow-black/20">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 mr-1">

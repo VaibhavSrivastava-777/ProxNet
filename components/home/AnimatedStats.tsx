@@ -8,7 +8,7 @@ const fetcher = (url: string) => fetch(url).then((res) => {
   return res.json();
 });
 
-function TypewriterText({ text }: { text: string }) {
+export function TypewriterText({ text }: { text: string }) {
   const [displayedText, setDisplayedText] = useState("");
   
   useEffect(() => {
