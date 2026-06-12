@@ -199,6 +199,4 @@ export function QuestionList({ refreshKey }: Props) {
       })}
     </div>
   );
-}>
-  );
 }
