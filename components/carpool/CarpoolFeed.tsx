@@ -53,7 +53,7 @@ export function CarpoolFeed({ onRequiresPost }: CarpoolFeedProps) {
       <div className="text-center py-12 text-[var(--color-text-secondary)] animate-fadeInUp">
         <p>No matches found right now.</p>
         <p className="text-sm mt-1">We'll let you know when someone posts a matching route.</p>
-        <button onClick={onRequiresPost} className="btn btn-ghost btn-sm mt-4">
+        <button onClick={onRequiresPost} className="btn btn-secondary btn-sm mt-4">
           Update My Route
         </button>
       </div>
@@ -99,7 +99,7 @@ export function CarpoolFeed({ onRequiresPost }: CarpoolFeedProps) {
         <h3 className="text-h3">
           {myPost.type === "giver" ? "Professionals Needing a Ride" : "Professionals Driving Your Way"}
         </h3>
-        <button onClick={onRequiresPost} className="btn btn-ghost btn-sm">
+        <button onClick={onRequiresPost} className="btn btn-secondary btn-sm">
           Edit Route
         </button>
       </div>
