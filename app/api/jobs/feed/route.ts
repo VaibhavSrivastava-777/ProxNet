@@ -76,9 +76,25 @@ export async function GET(request: Request) {
   const filtered = scoredCandidates
     .sort((a, b) => b.score - a.score);
 
+  // 4. Get count of others of the same type
+  let othersCount = 0;
+  if (myPost) {
+    const { count, error: countError } = await supabase
+      .from("job_posts")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "active")
+      .eq("type", myPost.type)
+      .neq("user_id", user.id);
+      
+    if (!countError && count) {
+      othersCount = count;
+    }
+  }
+
   return NextResponse.json({ 
     posts: filtered, 
     myPost: myPost,
+    othersCount,
     requiresPost: false,
     currentUserId: user.id
   });

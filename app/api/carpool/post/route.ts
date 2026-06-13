@@ -7,10 +7,14 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { type, start_lat, start_lng, dest_lat, dest_lng, date, time_start, time_end, seats } = body;
+  const { type, start_lat, start_lng, dest_lat, dest_lng, date, time_start, time_end, seats, is_recurring, recurring_days } = body;
 
-  if (!type || !start_lat || !start_lng || !dest_lat || !dest_lng || !date || !time_start || !time_end || !seats) {
+  if (!type || !start_lat || !start_lng || !dest_lat || !dest_lng || !time_start || !time_end || !seats) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+  
+  if (!is_recurring && !date) {
+    return NextResponse.json({ error: "Missing date for one-time trip" }, { status: 400 });
   }
 
   if (type !== "giver" && type !== "seeker") {
@@ -39,6 +43,8 @@ export async function POST(request: Request) {
       dest_lat,
       dest_lng,
       date,
+      is_recurring: is_recurring || false,
+      recurring_days: is_recurring ? recurring_days : null,
       time_start,
       time_end,
       seats,
@@ -52,4 +58,25 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ ok: true, id: data.id });
+}
+
+export async function DELETE(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const supabase = createAdminClient();
+
+  // Expire any existing active posts for this user
+  const { error } = await supabase
+    .from("carpool_posts")
+    .update({ status: "expired" })
+    .eq("user_id", user.id)
+    .eq("status", "active");
+
+  if (error) {
+    console.error("Error canceling carpool post:", error);
+    return NextResponse.json({ error: "Database error" }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
 }

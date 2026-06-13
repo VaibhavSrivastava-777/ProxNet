@@ -49,7 +49,7 @@ export function CarpoolClient({ user }: { user: User }) {
 
       <div className="animate-fadeInUp">
         {activeTab === "feed" ? (
-          <CarpoolFeed onRequiresPost={() => setShowForm(true)} />
+          <CarpoolFeed onRequiresPost={(post) => setShowForm(post || true)} />
         ) : (
           <CarpoolInbox />
         )}

@@ -22,14 +22,50 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
   const [destLng, setDestLng] = useState(initialData?.dest_lng?.toString() || "");
   
   const [date, setDate] = useState(initialData?.date || "");
+  const [isRecurring, setIsRecurring] = useState(initialData?.is_recurring || false);
+  const [recurringDays, setRecurringDays] = useState<number[]>(initialData?.recurring_days || [1, 2, 3, 4, 5]); // Default Mon-Fri
   const [timeStart, setTimeStart] = useState(initialData?.time_start?.slice(0,5) || "");
   const [timeEnd, setTimeEnd] = useState(initialData?.time_end?.slice(0,5) || "");
   const [seatsStr, setSeatsStr] = useState(initialData?.seats?.toString() || "1");
 
+  const toggleDay = (dayIndex: number) => {
+    if (recurringDays.includes(dayIndex)) {
+      setRecurringDays(recurringDays.filter(d => d !== dayIndex));
+    } else {
+      setRecurringDays([...recurringDays, dayIndex].sort());
+    }
+  };
+
+  async function handleCancel() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/carpool/post", {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to cancel route");
+      }
+      onPostCreated(); // trigger a refresh and return to feed
+    } catch (err: any) {
+      setError(err.message);
+      setLoading(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!startLat || !startLng || !destLat || !destLng || !date || !timeStart || !timeEnd) {
+    if (!startLat || !startLng || !destLat || !destLng || !timeStart || !timeEnd) {
       setError("Please fill all location and time fields.");
+      return;
+    }
+    if (!isRecurring && !date) {
+      setError("Please select a date for your one-time trip.");
+      return;
+    }
+    if (isRecurring && recurringDays.length === 0) {
+      setError("Please select at least one day for your recurring commute.");
       return;
     }
 
@@ -46,10 +82,12 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
           start_lng: parseFloat(startLng),
           dest_lat: parseFloat(destLat),
           dest_lng: parseFloat(destLng),
-          date,
+          date: isRecurring ? null : date,
+          is_recurring: isRecurring,
+          recurring_days: isRecurring ? recurringDays : null,
           time_start: timeStart,
           time_end: timeEnd,
-          seats: parseInt(seatsStr) || 1,
+          seats: parseInt(seatsStr, 10),
         }),
       });
 
@@ -65,8 +103,13 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
   }
 
   return (
-    <div className="card p-6 animate-fadeInUp">
-      <h2 className="text-h2 mb-4">Create a Carpool Route</h2>
+    <div className="card max-w-2xl mx-auto p-6 md:p-8 animate-scaleIn">
+      <h2 className="text-h2 mb-4">
+        {initialData ? "Edit Carpool Route" : "Create a Carpool Route"}
+      </h2>
+      <p className="text-body-sm text-[var(--color-text-secondary)] mb-8">
+        Set up your route to {type === "giver" ? "offer" : "request"} rides.
+      </p>
       
       <div className="flex gap-2 mb-6">
         <button
@@ -123,17 +166,65 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label className="flex flex-col gap-1">
-            <span className="label">Date</span>
-            <input 
-              type="date" 
-              className="input" 
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              min={new Date().toISOString().split('T')[0]}
-              required
-            />
-          </label>
+          <div className="flex flex-col gap-1 md:col-span-2">
+            <span className="label">Schedule Type</span>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="scheduleType" 
+                  checked={!isRecurring} 
+                  onChange={() => setIsRecurring(false)}
+                  className="accent-[var(--color-primary)]"
+                />
+                <span className="text-body-sm">One-time Trip</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="scheduleType" 
+                  checked={isRecurring} 
+                  onChange={() => setIsRecurring(true)}
+                  className="accent-[var(--color-primary)]"
+                />
+                <span className="text-body-sm">Recurring Commute</span>
+              </label>
+            </div>
+          </div>
+
+          {!isRecurring ? (
+            <label className="flex flex-col gap-1 md:col-span-2">
+              <span className="label">Date</span>
+              <input 
+                type="date" 
+                className="input" 
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                required={!isRecurring}
+              />
+            </label>
+          ) : (
+            <div className="flex flex-col gap-1 md:col-span-2">
+              <span className="label">Days of the Week</span>
+              <div className="flex flex-wrap gap-2">
+                {[1, 2, 3, 4, 5, 6, 0].map((dayNum) => {
+                  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                  return (
+                    <label key={dayNum} className={`px-3 py-1.5 rounded-full border text-sm cursor-pointer transition-colors ${recurringDays.includes(dayNum) ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]" : "border-[var(--color-border-light)] text-[var(--color-text-secondary)] hover:border-[var(--color-primary)]"}`}>
+                      <input 
+                        type="checkbox" 
+                        className="sr-only"
+                        checked={recurringDays.includes(dayNum)}
+                        onChange={() => toggleDay(dayNum)}
+                      />
+                      {days[dayNum]}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <label className="flex flex-col gap-1">
             <span className="label">{type === "giver" ? "Seats Available" : "Seats Needed"}</span>
@@ -173,13 +264,25 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
           </label>
         </div>
 
-        <button 
-          type="submit" 
-          disabled={loading}
-          className={`btn w-full btn-lg ${type === "giver" ? "btn-accent" : "btn-primary"}`}
-        >
-          {loading ? "Posting..." : `Post as ${type === "giver" ? "Giver" : "Seeker"}`}
-        </button>
+        <div className="flex gap-4">
+          {initialData && (
+            <button 
+              type="button" 
+              onClick={handleCancel}
+              disabled={loading}
+              className="btn w-full btn-lg btn-ghost border border-[var(--color-border)] text-[var(--color-error)]"
+            >
+              {loading ? "Canceling..." : "Cancel Route"}
+            </button>
+          )}
+          <button 
+            type="submit" 
+            disabled={loading}
+            className={`btn w-full btn-lg ${type === "giver" ? "btn-accent" : "btn-primary"}`}
+          >
+            {loading ? "Posting..." : (initialData ? "Update Route" : `Post as ${type === "giver" ? "Giver" : "Seeker"}`)}
+          </button>
+        </div>
       </form>
     </div>
   );

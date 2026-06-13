@@ -18,6 +18,7 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
   const [posts, setPosts] = useState<JobPost[]>([]);
   const [myPost, setMyPost] = useState<JobPost | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [othersCount, setOthersCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [startingChat, setStartingChat] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
@@ -37,6 +38,7 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
         setPosts(data.posts || []);
         setMyPost(data.myPost || null);
         setCurrentUserId(data.currentUserId || null);
+        setOthersCount(data.othersCount || 0);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -210,13 +212,12 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
       )}
 
       {myPost ? (
-        <div className="alert alert-info">
-          <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" className="shrink-0 mt-0.5">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-          </svg>
-          <span>
-            You have an active post as a <strong>{myPost.type === "seeker" ? "Seeker" : "Giver"}</strong> for <strong>{myPost.role}</strong>.
-          </span>
+        <div className="text-center py-3 text-sm text-[var(--color-text-secondary)]">
+          {myPost.type === "giver" ? (
+            <>You are offering a referral &bull; <strong>along with {othersCount} more offerings</strong></>
+          ) : (
+            <>You are seeking a referral &bull; <strong>along with {othersCount} more seekers</strong></>
+          )}
         </div>
       ) : (
         <div className="alert alert-warning">
@@ -243,17 +244,14 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
         </div>
       ) : (
         posts.map((post: any) => {
-          const isMyOwnPost = post.user_id === currentUserId;
-
           return (
-            <div key={post.id} className={`card p-5 animate-fadeInUp flex flex-col gap-4 ${isMyOwnPost ? "border-primary" : ""}`}>
+            <div key={post.id} className="card p-5 animate-fadeInUp flex flex-col gap-4">
               <div>
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-2">
                     <h4 className="text-h3 mb-1 text-primary">{post.role}</h4>
-                    {isMyOwnPost && <span className="badge badge-accent text-xs">Your Post</span>}
                   </div>
-                  {post.score && post.score > 20 && !isMyOwnPost && (
+                  {post.score && post.score > 20 && (
                     <span className="badge badge-success text-xs">High Match</span>
                   )}
                 </div>
@@ -283,14 +281,12 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
                 <button
                   className="btn btn-primary btn-sm"
                   onClick={() => handleStartChat(post.id)}
-                  disabled={startingChat === post.id || draftingPostId === post.id || isMyOwnPost}
+                  disabled={startingChat === post.id || draftingPostId === post.id}
                 >
                   {draftingPostId === post.id ? (
                     <><span className="spinner-sm mr-2" /> Drafting AI Profile...</>
                   ) : startingChat === post.id && myPost ? (
                     <><span className="spinner-sm mr-2" /> Connecting...</>
-                  ) : isMyOwnPost ? (
-                    "Your Post"
                   ) : (
                     "Message Anonymously"
                   )}

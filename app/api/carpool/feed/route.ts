@@ -46,8 +46,7 @@ export async function GET(request: Request) {
   const myPost = activePosts[0];
   const targetType = myPost.type === "giver" ? "seeker" : "giver";
 
-  // 2. Fetch active candidates of the opposite type on the same date
-  // Also only fetch posts where the date is today or in the future
+  // 2. Fetch all active candidates of the opposite type
   const todayStr = new Date().toISOString().split('T')[0];
 
   let query = supabase
@@ -62,7 +61,6 @@ export async function GET(request: Request) {
     `)
     .eq("type", targetType)
     .eq("status", "active")
-    .eq("date", myPost.date) // Exact date match required
     .neq("user_id", user.id);
 
   if (targetType === "giver") {
@@ -76,11 +74,32 @@ export async function GET(request: Request) {
   const { data: candidates, error: candError } = await query;
   if (candError) return NextResponse.json({ error: candError.message }, { status: 500 });
 
+  // Filter candidates by date/recurring logic
+  const dateFilteredCandidates = (candidates || []).filter(cand => {
+    // 1. Cand must be today or future if one-time
+    if (!cand.is_recurring && cand.date < todayStr) return false;
+
+    // 2. Check overlap
+    if (!myPost.is_recurring && !cand.is_recurring) {
+      return myPost.date === cand.date;
+    } else if (myPost.is_recurring && cand.is_recurring) {
+      return myPost.recurring_days.some((d: number) => cand.recurring_days.includes(d));
+    } else {
+      // One is recurring, one is not
+      const recurringPost = myPost.is_recurring ? myPost : cand;
+      const oneTimePost = myPost.is_recurring ? cand : myPost;
+      // Note: assumes YYYY-MM-DD
+      const oneTimeDate = new Date(oneTimePost.date + "T00:00:00Z");
+      const oneTimeDay = oneTimeDate.getUTCDay(); // 0=Sun, 1=Mon, etc
+      return recurringPost.recurring_days.includes(oneTimeDay);
+    }
+  });
+
   // 3. Calculate Scores
   const myStartMins = timeToMinutes(myPost.time_start);
   const myEndMins = timeToMinutes(myPost.time_end);
 
-  const scoredCandidates = (candidates || []).map(candidate => {
+  const scoredCandidates = dateFilteredCandidates.map(candidate => {
     const destDist = haversineDistance(myPost.dest_lat, myPost.dest_lng, candidate.dest_lat, candidate.dest_lng);
     const startDist = haversineDistance(myPost.start_lat, myPost.start_lng, candidate.start_lat, candidate.start_lng);
     
@@ -115,9 +134,40 @@ export async function GET(request: Request) {
     .filter(c => c.score >= 40)
     .sort((a, b) => b.score - a.score);
 
+  // 4. Get count of others of the same type
+  // Use a simple fetch and filter for accurate count given the complex logic
+  let othersCount = 0;
+  if (myPost) {
+    const { data: allSameType } = await supabase
+      .from("carpool_posts")
+      .select("id, date, is_recurring, recurring_days")
+      .eq("status", "active")
+      .eq("type", myPost.type)
+      .neq("user_id", user.id);
+      
+    if (allSameType) {
+      othersCount = allSameType.filter(post => {
+        if (!post.is_recurring && post.date < todayStr) return false;
+        
+        if (!myPost.is_recurring && !post.is_recurring) {
+          return myPost.date === post.date;
+        } else if (myPost.is_recurring && post.is_recurring) {
+          return myPost.recurring_days.some((d: number) => post.recurring_days.includes(d));
+        } else {
+          const recurringPost = myPost.is_recurring ? myPost : post;
+          const oneTimePost = myPost.is_recurring ? post : myPost;
+          const oneTimeDate = new Date(oneTimePost.date + "T00:00:00Z");
+          const oneTimeDay = oneTimeDate.getUTCDay();
+          return recurringPost.recurring_days.includes(oneTimeDay);
+        }
+      }).length;
+    }
+  }
+
   return NextResponse.json({ 
     posts: filtered, 
     myPost: myPost,
+    othersCount,
     requiresPost: false 
   });
 }

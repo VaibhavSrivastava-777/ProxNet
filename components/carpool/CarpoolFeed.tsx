@@ -73,10 +73,18 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
     return <span className="badge badge-neutral">{score}% Match</span>;
   };
 
-  const displayPosts = myPost ? [{ ...myPost, isMine: true }, ...posts] : posts;
-
   return (
     <div className="space-y-4 stagger-children">
+      {myPost && (
+        <div className="text-center py-3 text-sm text-[var(--color-text-secondary)]">
+          {myPost.type === "giver" ? (
+            <>You are offering {myPost.seats} seat{myPost.seats > 1 ? "s" : ""} &bull; <strong>along with {data.othersCount || 0} more offerings</strong></>
+          ) : (
+            <>You are seeking {myPost.seats} seat{myPost.seats > 1 ? "s" : ""} &bull; <strong>along with {data.othersCount || 0} more seekers</strong></>
+          )}
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-6 mt-6">
         <h3 className="text-h3">
           {myPost.type === "giver" ? "Professionals Needing a Ride" : "Professionals Driving Your Way"}
@@ -86,43 +94,42 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
         </button>
       </div>
 
-      {displayPosts.length === 1 && displayPosts[0].isMine && (
+      {posts.length === 0 && (
         <div className="text-center py-12 text-[var(--color-text-secondary)] animate-fadeInUp">
           <p>No matches found right now.</p>
           <p className="text-sm mt-1">We'll let you know when someone posts a matching route for this date.</p>
         </div>
       )}
 
-      {displayPosts.map((post: any) => (
-        <div key={post.id} className={`card p-5 flex flex-col sm:flex-row gap-4 items-start sm:items-center transition-colors ${post.isMine ? "border-[var(--color-primary)]" : "hover:bg-[var(--color-surface-hover)]"}`}>
+      {posts.map((post: any) => (
+        <div key={post.id} className="card p-5 flex flex-col sm:flex-row gap-4 items-start sm:items-center hover:bg-[var(--color-surface-hover)] transition-colors">
           <div className="flex-1">
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-2 mb-2">
-                {post.isMine ? (
-                  <span className="badge badge-accent text-xs">Your Route</span>
-                ) : (
-                  getScoreBadge(post.score)
-                )}
+                {getScoreBadge(post.score)}
                 <span className="text-caption text-[var(--color-text-secondary)]">
                   {post.type === "giver" ? "Offering" : "Needs"} {post.seats} seat{post.seats > 1 ? "s" : ""}
                 </span>
               </div>
             </div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-semibold">{post.isMine ? "You" : post.user?.job_title}</span>
-              {!post.isMine && (
-                <>
-                  <span className="text-[var(--color-text-tertiary)]">at</span>
-                  <span className="font-semibold text-[var(--color-primary)]">{post.user?.company}</span>
-                </>
-              )}
+              <span className="font-semibold">{post.user?.job_title}</span>
+              <span className="text-[var(--color-text-tertiary)]">at</span>
+              <span className="font-semibold text-[var(--color-primary)]">{post.user?.company}</span>
             </div>
             <div className="text-sm text-[var(--color-text-secondary)] grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 mt-3">
+              <div className="flex items-center gap-1.5 col-span-1 sm:col-span-2 text-[var(--color-text-primary)]">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                {post.is_recurring 
+                  ? `Recurring: ${post.recurring_days.map((d: number) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]).join(", ")}` 
+                  : new Date(post.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+                }
+              </div>
               <div className="flex items-center gap-1.5">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
                 {post.time_start.slice(0,5)} - {post.time_end.slice(0,5)}
               </div>
-              {!post.isMine && post.distance !== undefined && (
+              {post.distance !== undefined && (
                 <div className="flex items-center gap-1.5">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
                   Destination within {post.distance < 1000 ? Math.round(post.distance) + "m" : (post.distance/1000).toFixed(1) + "km"}
@@ -133,10 +140,10 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
           <div className="w-full sm:w-auto">
             <button 
               onClick={() => handleInitiateChat(post.id)}
-              disabled={initiating === post.id || post.isMine}
-              className={`btn w-full sm:w-auto ${post.type === "giver" ? "btn-accent" : "btn-primary"} ${post.isMine ? "btn-disabled" : ""}`}
+              disabled={initiating === post.id}
+              className={`btn w-full sm:w-auto ${post.type === "giver" ? "btn-accent" : "btn-primary"}`}
             >
-              {initiating === post.id ? "Opening..." : post.isMine ? "Your Route" : "Message Anonymously"}
+              {initiating === post.id ? "Opening..." : "Message Anonymously"}
             </button>
           </div>
         </div>
