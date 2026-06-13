@@ -19,15 +19,10 @@ export async function GET(request: Request) {
 
   if (activeError) return NextResponse.json({ error: activeError.message }, { status: 500 });
   
-  if (!activePosts || activePosts.length === 0) {
-    return NextResponse.json({ posts: [], requiresPost: true });
-  }
+  const myPost = activePosts && activePosts.length > 0 ? activePosts[0] : null;
 
-  const myPost = activePosts[0];
-  const targetType = myPost.type === "giver" ? "seeker" : "giver";
-
-  // 2. Fetch active candidates of the opposite type
-  const { data: candidates, error: candError } = await supabase
+  // 2. Fetch active candidates
+  let query = supabase
     .from("job_posts")
     .select(`
       *,
@@ -37,35 +32,39 @@ export async function GET(request: Request) {
         job_title
       )
     `)
-    .eq("type", targetType)
-    .eq("status", "active")
-    .neq("user_id", user.id);
+    .eq("status", "active");
+
+  if (myPost) {
+    const targetType = myPost.type === "giver" ? "seeker" : "giver";
+    query = query.eq("type", targetType);
+  }
+
+  const { data: candidates, error: candError } = await query;
 
   if (candError) return NextResponse.json({ error: candError.message }, { status: 500 });
 
   // 3. Calculate Scores
-  // Score based on role keywords and skills match
-
   const scoredCandidates = (candidates || []).map((cand: any) => {
     let score = 0;
     
-    const myRoleWords = (myPost.role || "").toLowerCase().split(/\W+/);
-    const candRoleWords = (cand.role || "").toLowerCase().split(/\W+/);
+    if (myPost) {
+      const myRoleWords = (myPost.role || "").toLowerCase().split(/\W+/);
+      const candRoleWords = (cand.role || "").toLowerCase().split(/\W+/);
 
-    // Intersection of role words
-    const roleOverlap = myRoleWords.filter((w: string) => candRoleWords.includes(w)).length;
-    if (roleOverlap > 0) score += 50;
+      // Intersection of role words
+      const roleOverlap = myRoleWords.filter((w: string) => candRoleWords.includes(w)).length;
+      if (roleOverlap > 0) score += 50;
 
-    // Intersection of skills words
-    const mySkillsWords = (myPost.skills || "").toLowerCase().split(/\W+/);
-    const candSkillsWords = (cand.skills || "").toLowerCase().split(/\W+/);
-    const skillsOverlap = mySkillsWords.filter((w: string) => candSkillsWords.includes(w)).length;
-    if (skillsOverlap > 0) score += (skillsOverlap * 10);
-
-    // Limit score to 100
-    score = Math.min(100, score);
+      // Intersection of skills words
+      const mySkillsWords = (myPost.skills || "").toLowerCase().split(/\W+/);
+      const candSkillsWords = (cand.skills || "").toLowerCase().split(/\W+/);
+      const skillsOverlap = mySkillsWords.filter((w: string) => candSkillsWords.includes(w)).length;
+      if (skillsOverlap > 0) score += (skillsOverlap * 10);
+      
+      score = Math.min(100, score);
+    }
     
-    // Add a base score so all posts show up, sorted by relevance
+    // Add a base score so all posts show up
     score += 10;
 
     return {
@@ -80,6 +79,7 @@ export async function GET(request: Request) {
   return NextResponse.json({ 
     posts: filtered, 
     myPost: myPost,
-    requiresPost: false 
+    requiresPost: false,
+    currentUserId: user.id
   });
 }
