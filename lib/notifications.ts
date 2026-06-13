@@ -14,7 +14,7 @@ if (vapidPublicKey && vapidPrivateKey) {
 
 export async function sendNotification(
   userId: string,
-  { title, body, url }: { title: string; body: string; url: string }
+  { title, body, url, data }: { title: string; body: string; url: string; data?: Record<string, any> }
 ) {
   const supabase = createAdminClient();
 
@@ -32,7 +32,7 @@ export async function sendNotification(
     title,
     body,
     icon: "/logo.png",
-    data: { url },
+    data: { url, ...data },
   });
 
   // 2. Dispatch Web Push notifications

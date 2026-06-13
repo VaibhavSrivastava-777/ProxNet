@@ -27,6 +27,8 @@ export function QuestionForm({
   const [isSuccess, setIsSuccess] = useState(false);
   const [availableCompanies, setAvailableCompanies] = useState<string[]>([]);
   const [fetchingCompanies, setFetchingCompanies] = useState(false);
+  const [availableTitles, setAvailableTitles] = useState<string[]>([]);
+  const [fetchingTitles, setFetchingTitles] = useState(false);
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [clusters, setClusters] = useState<any[]>([]);
@@ -57,6 +59,22 @@ export function QuestionForm({
       }
     }
   }, [fixedCompany, lat, lng, radius]);
+
+  useEffect(() => {
+    if (companyFilter) {
+      setFetchingTitles(true);
+      fetch(`/api/companies/titles?company=${encodeURIComponent(companyFilter)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          setAvailableTitles(data.titles || []);
+          setFetchingTitles(false);
+        })
+        .catch(() => setFetchingTitles(false));
+    } else {
+      setAvailableTitles([]);
+      setTitleFilter("");
+    }
+  }, [companyFilter]);
 
   useEffect(() => {
     if (message) {
@@ -188,13 +206,30 @@ export function QuestionForm({
         </div>
         <div>
           <label className="label">Job Title Filter</label>
-          <input
-            className="input"
-            placeholder="e.g. Software Engineer (optional)"
-            value={titleFilter}
-            onChange={(e) => setTitleFilter(e.target.value)}
-            style={{ width: "100%" }}
-          />
+          {companyFilter ? (
+            <select
+              className="input"
+              value={titleFilter}
+              onChange={(e) => setTitleFilter(e.target.value)}
+              disabled={fetchingTitles}
+              style={{ width: "100%", color: titleFilter ? "var(--color-text)" : "var(--color-text-tertiary)" }}
+            >
+              <option value="">Any Designation (Optional)</option>
+              {availableTitles.map((t) => (
+                <option key={t} value={t} style={{ color: "var(--color-text)" }}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className="input"
+              placeholder="Select a company first"
+              value={titleFilter}
+              disabled
+              style={{ width: "100%", backgroundColor: "var(--color-surface-secondary)", cursor: "not-allowed" }}
+            />
+          )}
         </div>
       </div>
 

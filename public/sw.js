@@ -66,12 +66,14 @@ self.addEventListener("push", (event) => {
     const body = payload.body || "";
     const icon = payload.icon || "/logo.png";
     const data = payload.data || {};
+    const sound = data.sound || undefined;
 
     const options = {
       body,
       icon,
       badge: "/logo.png",
       data,
+      ...(sound && { sound }), // Optional custom sound for supported platforms
     };
 
     // Update app badge if supported

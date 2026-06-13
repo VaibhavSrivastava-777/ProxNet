@@ -20,6 +20,7 @@ export interface User {
   profile_photo_url: string | null;
   source: UserSource;
   visibility: UserVisibility;
+  phone_number: string | null;
   home_lat: number | null;
   home_lng: number | null;
   office_lat: number | null;

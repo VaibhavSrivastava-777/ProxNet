@@ -43,18 +43,23 @@ export async function POST(request: Request) {
     if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
     sessionId = session.id;
 
-    // Look up companies for both participants to build @Company aliases
+    // Look up companies and job titles for both participants to build aliases
     const { data: usersData } = await supabase
       .from("users")
-      .select("id, company")
+      .select("id, company, job_title")
       .in("id", [askerId, user.id]);
 
-    const askerCompany = usersData?.find((u) => u.id === askerId)?.company ?? null;
-    const proCompany = usersData?.find((u) => u.id === user.id)?.company ?? null;
+    const asker = usersData?.find((u) => u.id === askerId);
+    const pro = usersData?.find((u) => u.id === user.id);
+
+    const getAlias = (u: any, defaultType: "resident" | "professional") => {
+      if (u && u.job_title && u.company) return `${u.job_title} @ ${u.company}`;
+      return generateAlias(defaultType, 1, u?.company);
+    };
 
     await supabase.from("chat_participants").insert([
-      { session_id: sessionId, user_id: askerId, alias: generateAlias("resident", 1, askerCompany) },
-      { session_id: sessionId, user_id: user.id, alias: generateAlias("professional", 1, proCompany) },
+      { session_id: sessionId, user_id: askerId, alias: getAlias(asker, "resident") },
+      { session_id: sessionId, user_id: user.id, alias: getAlias(pro, "professional") },
     ]);
   }
 

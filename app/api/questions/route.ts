@@ -141,7 +141,7 @@ export async function POST(request: Request) {
 
   for (const u of (users ?? []) as User[]) {
     if (companyFilter && u.company?.toLowerCase() !== companyFilter.toLowerCase()) continue;
-    if (titleFilter && !u.job_title?.toLowerCase().includes(titleFilter.toLowerCase())) continue;
+    if (titleFilter && u.job_title?.toLowerCase() !== titleFilter.toLowerCase()) continue;
 
     const current = locationMap.get(u.id);
     const loc = resolveUserLocation(u, current?.lat, current?.lng);

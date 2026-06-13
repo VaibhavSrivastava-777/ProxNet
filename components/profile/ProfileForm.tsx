@@ -166,6 +166,7 @@ export function ProfileForm({ initialUser }: Props) {
         full_name: user.full_name,
         company: user.company,
         job_title: user.job_title,
+        phone_number: user.phone_number,
         profile_photo_url: user.profile_photo_url,
         linkedin_profile_url: user.linkedin_profile_url,
         home_lat: user.home_lat ? Number(user.home_lat) : null,
@@ -357,6 +358,17 @@ export function ProfileForm({ initialUser }: Props) {
               value={user.job_title ?? ""}
               placeholder="Your current role"
               onChange={(e) => setUser({ ...user, job_title: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="label">Phone number</label>
+            <input
+              className="input"
+              type="tel"
+              value={user.phone_number ?? ""}
+              placeholder="+1 234 567 8900"
+              onChange={(e) => setUser({ ...user, phone_number: e.target.value })}
             />
           </div>
 
