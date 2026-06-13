@@ -7,23 +7,24 @@ import { User } from "@/lib/types";
 interface CarpoolFormProps {
   user: User;
   onPostCreated: () => void;
+  initialData?: any;
 }
 
-export function CarpoolForm({ user, onPostCreated }: CarpoolFormProps) {
-  const [type, setType] = useState<"giver" | "seeker">("seeker");
+export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormProps) {
+  const [type, setType] = useState<"giver" | "seeker">(initialData?.type || "seeker");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   
-  // Default source to Home location if it exists
-  const [startLat, setStartLat] = useState(user.home_lat?.toString() || "");
-  const [startLng, setStartLng] = useState(user.home_lng?.toString() || "");
-  const [destLat, setDestLat] = useState("");
-  const [destLng, setDestLng] = useState("");
+  // Default source to Home location if it exists, or initialData if provided
+  const [startLat, setStartLat] = useState(initialData?.start_lat?.toString() || user.home_lat?.toString() || "");
+  const [startLng, setStartLng] = useState(initialData?.start_lng?.toString() || user.home_lng?.toString() || "");
+  const [destLat, setDestLat] = useState(initialData?.dest_lat?.toString() || "");
+  const [destLng, setDestLng] = useState(initialData?.dest_lng?.toString() || "");
   
-  const [date, setDate] = useState("");
-  const [timeStart, setTimeStart] = useState("");
-  const [timeEnd, setTimeEnd] = useState("");
-  const [seatsStr, setSeatsStr] = useState("1");
+  const [date, setDate] = useState(initialData?.date || "");
+  const [timeStart, setTimeStart] = useState(initialData?.time_start?.slice(0,5) || "");
+  const [timeEnd, setTimeEnd] = useState(initialData?.time_end?.slice(0,5) || "");
+  const [seatsStr, setSeatsStr] = useState(initialData?.seats?.toString() || "1");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

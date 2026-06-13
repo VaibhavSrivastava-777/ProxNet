@@ -7,16 +7,17 @@ import { CarpoolFeed } from "./CarpoolFeed";
 import { CarpoolInbox } from "./CarpoolInbox";
 
 export function CarpoolClient({ user }: { user: User }) {
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState<boolean | any>(false);
   const [activeTab, setActiveTab] = useState<"feed" | "inbox">("feed");
 
   if (showForm) {
+    const initialData = typeof showForm === "object" ? showForm : undefined;
     return (
       <div className="space-y-6 animate-fadeInUp">
         <button onClick={() => setShowForm(false)} className="btn btn-ghost btn-sm -ml-3">
           ← Back to Feed
         </button>
-        <CarpoolForm user={user} onPostCreated={() => setShowForm(false)} />
+        <CarpoolForm user={user} onPostCreated={() => setShowForm(false)} initialData={initialData} />
       </div>
     );
   }

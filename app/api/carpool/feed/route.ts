@@ -62,7 +62,7 @@ export async function GET(request: Request) {
     `)
     .eq("type", targetType)
     .eq("status", "active")
-    .gte("date", todayStr) // only today or future
+    .eq("date", myPost.date) // Exact date match required
     .neq("user_id", user.id);
 
   if (targetType === "giver") {
