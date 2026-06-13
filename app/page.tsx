@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/session";
 import { AnimatedStats, TypewriterText } from "@/components/home/AnimatedStats";
+import { LoginButton } from "@/components/auth/LoginButton";
 
 export default async function HomePage() {
   const session = await auth();
@@ -95,12 +96,7 @@ export default async function HomePage() {
             />
           </div>
           <div className="flex flex-col items-center justify-center gap-4">
-            <Link href="/login" className="btn btn-linkedin btn-lg shadow-xl shadow-black/20">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 mr-1">
-                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-              </svg>
-              Sign in with LinkedIn
-            </Link>
+            <LoginButton className="btn btn-linkedin btn-lg shadow-xl shadow-black/20" />
             <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • LINKEDIN VERIFIED • FREE TO USE</p>
           </div>
         </div>
@@ -139,9 +135,9 @@ export default async function HomePage() {
       </section>
 
       {/* Bottom CTA */}
-      <section className="px-4 py-24 text-center bg-[var(--color-surface)]">
+      <section className="px-4 py-24 text-center bg-[var(--color-surface)] flex flex-col items-center">
         <h2 className="text-h2 mb-8">Ready to discover who's next door?</h2>
-        <Link href="/login" className="btn btn-linkedin btn-lg">Sign in with LinkedIn</Link>
+        <LoginButton className="btn btn-linkedin btn-lg" />
       </section>
 
       {/* Footer */}
