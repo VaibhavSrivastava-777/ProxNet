@@ -25,6 +25,7 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
 
   // Auto-Draft Modal State
   const [draftingPostId, setDraftingPostId] = useState<string | null>(null);
+  const [targetPostIdForDraft, setTargetPostIdForDraft] = useState<string | null>(null);
   const [draftData, setDraftData] = useState<any>(null);
   const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
 
@@ -45,6 +46,7 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
     if (!myPost) {
       // Auto-draft flow
       setDraftingPostId(targetPostId);
+      setTargetPostIdForDraft(targetPostId);
       try {
         const res = await fetch("/api/jobs/auto-draft", {
           method: "POST",
@@ -60,6 +62,7 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
         console.error(err);
         setErrorMsg("Failed to auto-draft profile. " + (err.message || ""));
         setTimeout(() => setErrorMsg(""), 5000);
+        setTargetPostIdForDraft(null);
       } finally {
         setDraftingPostId(null);
       }
@@ -87,10 +90,10 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
 
   async function handleConfirmDraft(e: React.FormEvent) {
     e.preventDefault();
-    if (!draftData || !startingChat) return; // Note: startingChat acts as targetPostId here
+    if (!draftData || !targetPostIdForDraft) return;
 
     try {
-      setStartingChat(draftData.targetPostId); // Use it as a loading spinner
+      setStartingChat(targetPostIdForDraft); // Use it as a loading spinner
       
       // 1. Create the post
       const postRes = await fetch("/api/jobs/post", {
@@ -114,7 +117,7 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
       const chatRes = await fetch("/api/jobs/chat/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetPostId: startingChat, myPostId: postData.post.id }),
+        body: JSON.stringify({ targetPostId: targetPostIdForDraft, myPostId: postData.post.id }),
       });
       const chatData = await chatRes.json();
       if (chatData.threadId) {
@@ -126,6 +129,7 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
       setTimeout(() => setErrorMsg(""), 5000);
     } finally {
       setStartingChat(null);
+      setTargetPostIdForDraft(null);
     }
   }
 
