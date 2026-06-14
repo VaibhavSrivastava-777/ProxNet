@@ -19,6 +19,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ thre
 
   if (!participant) return NextResponse.json({ error: "Not a participant" }, { status: 403 });
 
+  // Update last_read_at
+  await supabase
+    .from("carpool_participants")
+    .update({ last_read_at: new Date().toISOString() })
+    .eq("thread_id", threadId)
+    .eq("user_id", user.id);
+
   const { data: thread } = await supabase
     .from("carpool_threads")
     .select("status")

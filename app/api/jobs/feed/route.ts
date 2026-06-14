@@ -6,6 +6,11 @@ export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { searchParams } = new URL(request.url);
+  const radius = parseFloat(searchParams.get("radius") || "1000");
+  const lat = parseFloat(searchParams.get("lat") || "0");
+  const lng = parseFloat(searchParams.get("lng") || "0");
+
   const supabase = createAdminClient();
 
   // 1. Get user's active post
@@ -21,6 +26,10 @@ export async function GET(request: Request) {
   
   const myPost = activePosts && activePosts.length > 0 ? activePosts[0] : null;
 
+  if (myPost) {
+    await supabase.from("job_posts").update({ last_checked_matches_at: new Date().toISOString() }).eq("id", myPost.id);
+  }
+
   // 2. Fetch active candidates
   let query = supabase
     .from("job_posts")
@@ -32,7 +41,8 @@ export async function GET(request: Request) {
         job_title
       )
     `)
-    .eq("status", "active");
+    .eq("status", "active")
+    .neq("user_id", user.id);
 
   if (myPost) {
     const targetType = myPost.type === "giver" ? "seeker" : "giver";
@@ -40,13 +50,50 @@ export async function GET(request: Request) {
   }
 
   const { data: candidates, error: candError } = await query;
-
   if (candError) return NextResponse.json({ error: candError.message }, { status: 500 });
 
-  // 3. Calculate Scores
+  // 3. Fetch current locations for these candidates to calculate distance
+  const userIds = candidates ? Array.from(new Set(candidates.map((c: any) => c.user_id))) : [];
+  let userLocations: Record<string, {lat: number, lng: number}> = {};
+  
+  if (userIds.length > 0) {
+    const { data: locs } = await supabase
+      .from("user_current_locations")
+      .select("user_id, lat, lng")
+      .in("user_id", userIds);
+      
+    if (locs) {
+      for (const loc of locs) {
+        userLocations[loc.user_id] = { lat: loc.lat, lng: loc.lng };
+      }
+    }
+  }
+
+  // Haversine formula
+  const haversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+  };
+
+  // 4. Filter by radius and calculate Scores
   const scoredCandidates = (candidates || []).map((cand: any) => {
+    const candLoc = userLocations[cand.user_id];
+    let distance = -1;
+    if (lat && lng && candLoc) {
+      distance = haversineDistance(lat, lng, candLoc.lat, candLoc.lng);
+    }
+
     let score = 0;
-    
     if (myPost) {
       const myRoleWords = (myPost.role || "").toLowerCase().split(/\W+/);
       const candRoleWords = (cand.role || "").toLowerCase().split(/\W+/);
@@ -63,18 +110,23 @@ export async function GET(request: Request) {
       
       score = Math.min(100, score);
     }
-    
-    // Add a base score so all posts show up
-    score += 10;
 
     return {
       ...cand,
-      score
+      score,
+      distance
     };
   });
 
-  const filtered = scoredCandidates
-    .sort((a, b) => b.score - a.score);
+  // Filter by radius (exclude if distance > radius, unless distance is unknown)
+  let filtered = scoredCandidates.filter((c: any) => c.distance === -1 || c.distance <= radius);
+
+  // Sort: if myPost exists, sort by match % descending. Else sort by created_at descending.
+  if (myPost) {
+    filtered = filtered.sort((a, b) => b.score - a.score);
+  } else {
+    filtered = filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
 
   // 4. Get count of others of the same type
   let othersCount = 0;

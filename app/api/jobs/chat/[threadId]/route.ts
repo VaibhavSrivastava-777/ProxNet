@@ -24,6 +24,13 @@ export async function GET(
 
   if (!participant) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  // Update last_read_at
+  await supabase
+    .from("job_participants")
+    .update({ last_read_at: new Date().toISOString() })
+    .eq("thread_id", threadId)
+    .eq("user_id", user.id);
+
   // Get thread status and all participants
   const { data: thread } = await supabase
     .from("job_threads")

@@ -26,6 +26,11 @@ export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { searchParams } = new URL(request.url);
+  const radius = parseFloat(searchParams.get("radius") || "1000");
+  const lat = parseFloat(searchParams.get("lat") || "0");
+  const lng = parseFloat(searchParams.get("lng") || "0");
+
   const supabase = createAdminClient();
 
   // 1. Get user's active post
@@ -39,14 +44,13 @@ export async function GET(request: Request) {
 
   if (activeError) return NextResponse.json({ error: activeError.message }, { status: 500 });
   
-  if (!activePosts || activePosts.length === 0) {
-    return NextResponse.json({ posts: [], requiresPost: true });
+  const myPost = activePosts && activePosts.length > 0 ? activePosts[0] : null;
+
+  // Update last_checked_matches_at
+  if (myPost) {
+    await supabase.from("carpool_posts").update({ last_checked_matches_at: new Date().toISOString() }).eq("id", myPost.id);
   }
 
-  const myPost = activePosts[0];
-  const targetType = myPost.type === "giver" ? "seeker" : "giver";
-
-  // 2. Fetch all active candidates of the opposite type
   const todayStr = new Date().toISOString().split('T')[0];
 
   let query = supabase
@@ -59,80 +63,78 @@ export async function GET(request: Request) {
         job_title
       )
     `)
-    .eq("type", targetType)
     .eq("status", "active")
     .neq("user_id", user.id);
 
-  if (targetType === "giver") {
-    // I am a seeker, I need a giver with enough seats
-    query = query.gte("seats", myPost.seats);
-  } else {
-    // I am a giver, I need a seeker who needs seats <= what I have
-    query = query.lte("seats", myPost.seats);
+  if (myPost) {
+    const targetType = myPost.type === "giver" ? "seeker" : "giver";
+    query = query.eq("type", targetType);
+    if (targetType === "giver") {
+      query = query.gte("seats", myPost.seats);
+    } else {
+      query = query.lte("seats", myPost.seats);
+    }
   }
 
   const { data: candidates, error: candError } = await query;
   if (candError) return NextResponse.json({ error: candError.message }, { status: 500 });
 
-  // Filter candidates by date/recurring logic
-  const dateFilteredCandidates = (candidates || []).filter(cand => {
-    // 1. Cand must be today or future if one-time
-    if (!cand.is_recurring && cand.date < todayStr) return false;
+  let filtered = [];
 
-    // 2. Check overlap
-    if (!myPost.is_recurring && !cand.is_recurring) {
-      return myPost.date === cand.date;
-    } else if (myPost.is_recurring && cand.is_recurring) {
-      return myPost.recurring_days.some((d: number) => cand.recurring_days.includes(d));
-    } else {
-      // One is recurring, one is not
-      const recurringPost = myPost.is_recurring ? myPost : cand;
-      const oneTimePost = myPost.is_recurring ? cand : myPost;
-      // Note: assumes YYYY-MM-DD
-      const oneTimeDate = new Date(oneTimePost.date + "T00:00:00Z");
-      const oneTimeDay = oneTimeDate.getUTCDay(); // 0=Sun, 1=Mon, etc
-      return recurringPost.recurring_days.includes(oneTimeDay);
-    }
-  });
+  if (!myPost) {
+    // If no post, return all active posts within radius of current location
+    filtered = (candidates || []).map(cand => {
+      const startDist = lat && lng ? haversineDistance(lat, lng, cand.start_lat, cand.start_lng) : 0;
+      return { ...cand, distance: startDist, score: 0 };
+    }).filter(cand => cand.distance <= radius);
+  } else {
+    // Filter candidates by date/recurring logic
+    const dateFilteredCandidates = (candidates || []).filter(cand => {
+      if (!cand.is_recurring && cand.date < todayStr) return false;
 
-  // 3. Calculate Scores
-  const myStartMins = timeToMinutes(myPost.time_start);
-  const myEndMins = timeToMinutes(myPost.time_end);
-
-  const scoredCandidates = dateFilteredCandidates.map(candidate => {
-    const destDist = haversineDistance(myPost.dest_lat, myPost.dest_lng, candidate.dest_lat, candidate.dest_lng);
-    const startDist = haversineDistance(myPost.start_lat, myPost.start_lng, candidate.start_lat, candidate.start_lng);
-    
-    const candStartMins = timeToMinutes(candidate.time_start);
-    const candEndMins = timeToMinutes(candidate.time_end);
-
-    const timeOverlap = Math.max(0, Math.min(myEndMins, candEndMins) - Math.max(myStartMins, candStartMins));
-    const timeGap = timeOverlap > 0 ? 0 : Math.max(myStartMins, candStartMins) - Math.min(myEndMins, candEndMins);
-
-    let score = 0;
-
-    // Both start and dest should be reasonably close. Let's use dest distance as the primary anchor, but start distance must not be crazy far.
-    // If start is > 5km apart, probably a bad match regardless.
-    if (startDist <= 5000) {
-      if (destDist <= 300 && timeOverlap > 0) {
-        score = 100;
-      } else if (destDist <= 1000 && (timeOverlap > 0 || timeGap <= 60)) {
-        score = 75;
-      } else if (destDist <= 3000 && timeGap <= 120) {
-        score = 50;
+      if (!myPost.is_recurring && !cand.is_recurring) {
+        return myPost.date === cand.date;
+      } else if (myPost.is_recurring && cand.is_recurring) {
+        return myPost.recurring_days.some((d: number) => cand.recurring_days.includes(d));
+      } else {
+        const recurringPost = myPost.is_recurring ? myPost : cand;
+        const oneTimePost = myPost.is_recurring ? cand : myPost;
+        const oneTimeDate = new Date(oneTimePost.date + "T00:00:00Z");
+        const oneTimeDay = oneTimeDate.getUTCDay();
+        return recurringPost.recurring_days.includes(oneTimeDay);
       }
-    }
+    });
 
-    return {
-      ...candidate,
-      score,
-      distance: destDist
-    };
-  });
+    const myStartMins = timeToMinutes(myPost.time_start);
+    const myEndMins = timeToMinutes(myPost.time_end);
 
-  const filtered = scoredCandidates
-    .filter(c => c.score >= 40)
-    .sort((a, b) => b.score - a.score);
+    filtered = dateFilteredCandidates.map(candidate => {
+      const giver = myPost.type === "giver" ? myPost : candidate;
+      const seeker = myPost.type === "seeker" ? myPost : candidate;
+
+      const dGiverRoute = haversineDistance(giver.start_lat, giver.start_lng, giver.dest_lat, giver.dest_lng);
+      const dStart = haversineDistance(giver.start_lat, giver.start_lng, seeker.start_lat, seeker.start_lng);
+      const dSeekerRoute = haversineDistance(seeker.start_lat, seeker.start_lng, seeker.dest_lat, seeker.dest_lng);
+      const dEnd = haversineDistance(seeker.dest_lat, seeker.dest_lng, giver.dest_lat, giver.dest_lng);
+
+      const detour = dStart + dSeekerRoute + dEnd - dGiverRoute;
+      
+      const candStartMins = timeToMinutes(candidate.time_start);
+      const candEndMins = timeToMinutes(candidate.time_end);
+      const timeOverlap = Math.max(0, Math.min(myEndMins, candEndMins) - Math.max(myStartMins, candStartMins));
+
+      let score = 0;
+      if (timeOverlap > 0 || Math.max(myStartMins, candStartMins) - Math.min(myEndMins, candEndMins) <= 60) {
+        score = Math.max(0, 100 - Math.floor(detour / 50));
+      }
+
+      return {
+        ...candidate,
+        score,
+        distance: haversineDistance(myPost.dest_lat, myPost.dest_lng, candidate.dest_lat, candidate.dest_lng)
+      };
+    }).sort((a, b) => b.score - a.score);
+  }
 
   // 4. Get count of others of the same type
   // Use a simple fetch and filter for accurate count given the complex logic

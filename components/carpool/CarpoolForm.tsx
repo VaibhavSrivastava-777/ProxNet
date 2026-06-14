@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import { User } from "@/lib/types";
+import { getCurrentPosition } from "@/lib/geo/get-current-position";
 
 interface CarpoolFormProps {
   user: User;
@@ -16,11 +17,29 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
   const [error, setError] = useState("");
   
   // Default source to Home location if it exists, or initialData if provided
-  const [startLat, setStartLat] = useState(initialData?.start_lat?.toString() || user.home_lat?.toString() || "");
-  const [startLng, setStartLng] = useState(initialData?.start_lng?.toString() || user.home_lng?.toString() || "");
-  const [destLat, setDestLat] = useState(initialData?.dest_lat?.toString() || "");
-  const [destLng, setDestLng] = useState(initialData?.dest_lng?.toString() || "");
+  const [startLat, setStartLat] = useState(initialData?.start_lat?.toString() || "");
+  const [startLng, setStartLng] = useState(initialData?.start_lng?.toString() || "");
+  const [destLat, setDestLat] = useState(initialData?.dest_lat?.toString() || user.office_lat?.toString() || "");
+  const [destLng, setDestLng] = useState(initialData?.dest_lng?.toString() || user.office_lng?.toString() || "");
   
+  useEffect(() => {
+    if (!initialData && !startLat) {
+      getCurrentPosition()
+        .then((pos) => {
+          setStartLat(pos.lat.toString());
+          setStartLng(pos.lng.toString());
+          // If no office location is set, also set destination to current position
+          if (!destLat) {
+            setDestLat(pos.lat.toString());
+            setDestLng(pos.lng.toString());
+          }
+        })
+        .catch(() => {
+          // ignore error, just don't set default
+        });
+    }
+  }, [initialData, startLat, destLat]);
+
   const [date, setDate] = useState(initialData?.date || "");
   const [isRecurring, setIsRecurring] = useState(initialData?.is_recurring || false);
   const [recurringDays, setRecurringDays] = useState<number[]>(initialData?.recurring_days || [1, 2, 3, 4, 5]); // Default Mon-Fri

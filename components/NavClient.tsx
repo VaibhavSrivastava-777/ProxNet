@@ -46,6 +46,8 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [toasts, setToasts] = useState<{ id: string; title: string; body: string; url: string }[]>([]);
   const [hasIncomingOpen, setHasIncomingOpen] = useState(false);
+  const [hasCarpoolNotification, setHasCarpoolNotification] = useState(false);
+  const [hasJobsNotification, setHasJobsNotification] = useState(false);
   // Per-toast swipe state
   const [swipeDelta, setSwipeDelta] = useState<Record<string, number>>({});
   const swipeStart = useRef<Record<string, number>>({});
@@ -219,6 +221,36 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         setHasIncomingOpen(openCount > 0);
       })
       .catch(() => {});
+      
+    // Fetch carpool notifications
+    const fetchCarpoolNotifications = () => {
+      fetch("/api/carpool/notifications")
+        .then((r) => r.json())
+        .then((data) => {
+          setHasCarpoolNotification(data.unreadCount > 0 || data.newMatches > 0);
+        })
+        .catch(() => {});
+    };
+
+    // Fetch jobs notifications
+    const fetchJobsNotifications = () => {
+      fetch("/api/jobs/notifications")
+        .then((r) => r.json())
+        .then((data) => {
+          setHasJobsNotification(data.unreadCount > 0 || data.newMatches > 0);
+        })
+        .catch(() => {});
+    };
+    
+    fetchCarpoolNotifications();
+    fetchJobsNotifications();
+    
+    // Poll every 30s as a fallback
+    const interval = setInterval(() => {
+      fetchCarpoolNotifications();
+      fetchJobsNotifications();
+    }, 30000);
+    return () => clearInterval(interval);
   }, [session]);
 
   // Realtime In-App Toasts Subscription
@@ -385,7 +417,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             {session &&
               navLinks.map((l) => {
                 const active = pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href));
-                const showBadge = l.href === "/qa" && hasIncomingOpen && !active;
+                const showBadge = (l.href === "/qa" && hasIncomingOpen && !active) || (l.href === "/carpool" && hasCarpoolNotification && !active) || (l.href === "/jobs" && hasJobsNotification && !active);
                 return (
                   <Link
                     key={l.href}
@@ -573,7 +605,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         >
           {navLinks.map((l) => {
             const active = pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href));
-            const showBadge = l.href === "/qa" && hasIncomingOpen && !active;
+            const showBadge = (l.href === "/qa" && hasIncomingOpen && !active) || (l.href === "/carpool" && hasCarpoolNotification && !active) || (l.href === "/jobs" && hasJobsNotification && !active);
             return (
               <Link
                 key={l.href}

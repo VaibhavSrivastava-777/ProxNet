@@ -30,19 +30,36 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
   const [draftData, setDraftData] = useState<any>(null);
   const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
 
+  const [radius, setRadius] = useState(1000);
+
   useEffect(() => {
-    setLoading(true);
-    fetch("/api/jobs/feed")
-      .then((res) => res.json())
-      .then((data) => {
-        setPosts(data.posts || []);
-        setMyPost(data.myPost || null);
-        setCurrentUserId(data.currentUserId || null);
-        setOthersCount(data.othersCount || 0);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [refreshKey]);
+    async function fetchData() {
+      setLoading(true);
+      let lat = "";
+      let lng = "";
+      try {
+        const { getCurrentPosition } = await import("@/lib/geo/get-current-position");
+        const pos = await getCurrentPosition();
+        lat = pos.lat.toString();
+        lng = pos.lng.toString();
+      } catch (e) {
+        // Ignore
+      }
+      
+      fetch(`/api/jobs/feed?radius=${radius}&lat=${lat}&lng=${lng}`)
+        .then((res) => res.json())
+        .then((data) => {
+          setPosts(data.posts || []);
+          setMyPost(data.myPost || null);
+          setCurrentUserId(data.currentUserId || null);
+          setOthersCount(data.othersCount || 0);
+          setLoading(false);
+        })
+        .catch(() => setLoading(false));
+    }
+    
+    fetchData();
+  }, [refreshKey, radius]);
 
   async function handleStartChat(targetPostId: string) {
     if (!myPost) {
@@ -230,11 +247,32 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
         </div>
       )}
 
+      <div className="card p-4 mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="flex-1 w-full">
+          <label className="flex flex-col gap-1">
+            <span className="label text-xs">Search Radius: {radius < 1000 ? radius + 'm' : (radius/1000).toFixed(1) + 'km'}</span>
+            <input 
+              type="range" 
+              min="500" 
+              max="50000" 
+              step="500"
+              value={radius}
+              onChange={(e) => setRadius(parseInt(e.target.value))}
+              className="w-full accent-[var(--color-primary)]"
+            />
+          </label>
+        </div>
+      </div>
+
       <div className="flex justify-between items-center mb-6 mt-6">
         <h3 className="text-h3">
-          Available Referrals & Candidates
+          {myPost 
+            ? (myPost.type === "giver" ? "Professionals Seeking Referrals" : "Professionals Offering Referrals")
+            : "Available Referrals & Candidates"}
         </h3>
-        <span className="text-caption bg-surface-secondary px-2 py-1 rounded">Sorted by relevance</span>
+        <span className="text-caption bg-surface-secondary px-2 py-1 rounded">
+          {myPost ? "Sorted by exact match %" : "Sorted by recent"}
+        </span>
       </div>
 
       {posts.length === 0 ? (
@@ -251,9 +289,18 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
                   <div className="flex items-center gap-2">
                     <h4 className="text-h3 mb-1 text-primary">{post.role}</h4>
                   </div>
-                  {post.score && post.score > 20 && (
-                    <span className="badge badge-success text-xs">High Match</span>
-                  )}
+                  <div className="flex gap-2">
+                    {myPost && typeof post.score === "number" && (
+                      <span className="badge border border-[var(--color-primary)] text-[var(--color-primary)] text-xs">
+                        {Math.round(post.score)}% Match
+                      </span>
+                    )}
+                    {!myPost && typeof post.distance === "number" && post.distance >= 0 && (
+                      <span className="badge badge-neutral text-xs">
+                        {post.distance < 1000 ? Math.round(post.distance) + "m away" : (post.distance/1000).toFixed(1) + "km away"}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3 text-caption text-text-secondary mb-3">
                   <span className="badge badge-neutral text-xs px-2">{post.type === "giver" ? "Offering Referral" : "Looking for Role"}</span>

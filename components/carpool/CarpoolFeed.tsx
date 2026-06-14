@@ -1,23 +1,36 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import useSWR from "swr";
 import { useRouter } from "next/navigation";
+import { getCurrentPosition } from "@/lib/geo/get-current-position";
 
 export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) => void }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [initiating, setInitiating] = useState<string | null>(null);
+  const [radius, setRadius] = useState(1000);
   const router = useRouter();
 
   useEffect(() => {
-    fetch("/api/carpool/feed")
-      .then((res) => res.json())
-      .then((d) => {
-        setData(d);
-        setLoading(false);
-      });
-  }, []);
+    async function fetchData() {
+      setLoading(true);
+      let lat = "";
+      let lng = "";
+      try {
+        const pos = await getCurrentPosition();
+        lat = pos.lat.toString();
+        lng = pos.lng.toString();
+      } catch (e) {
+        // Ignore
+      }
+      
+      const res = await fetch(`/api/carpool/feed?radius=${radius}&lat=${lat}&lng=${lng}`);
+      const d = await res.json();
+      setData(d);
+      setLoading(false);
+    }
+    fetchData();
+  }, [radius]);
 
   if (loading) {
     return (
@@ -29,25 +42,8 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
     );
   }
 
-  if (data?.requiresPost) {
-    return (
-      <div className="text-center py-12 text-[var(--color-text-secondary)] animate-fadeInUp">
-        <div className="w-12 h-12 bg-[var(--color-surface-hover)] rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" /></svg>
-        </div>
-        <h3 className="text-h3 text-[var(--color-text)] mb-2">Ready to Carpool?</h3>
-        <p className="mb-6 max-w-md mx-auto">
-          Post a route to see other professionals heading the same way. You can offer a ride or request one.
-        </p>
-        <button onClick={() => onRequiresPost()} className="btn btn-primary">
-          Post a Route
-        </button>
-      </div>
-    );
-  }
-
-  const posts = data.posts || [];
-  const myPost = data.myPost;
+  const posts = data?.posts || [];
+  const myPost = data?.myPost;
 
   const handleInitiateChat = async (targetPostId: string) => {
     setInitiating(targetPostId);
@@ -55,7 +51,8 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
       const res = await fetch("/api/carpool/chat/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetPostId, myPostId: myPost.id }),
+        // myPostId could be undefined if they don't have a post
+        body: JSON.stringify({ targetPostId, myPostId: myPost?.id }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to start chat");
@@ -75,23 +72,39 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
 
   return (
     <div className="space-y-4 stagger-children">
-      {myPost && (
-        <div className="text-center py-3 text-sm text-[var(--color-text-secondary)]">
-          {myPost.type === "giver" ? (
-            <>You are offering {myPost.seats} seat{myPost.seats > 1 ? "s" : ""} &bull; <strong>along with {data.othersCount || 0} more offerings</strong></>
-          ) : (
-            <>You are seeking {myPost.seats} seat{myPost.seats > 1 ? "s" : ""} &bull; <strong>along with {data.othersCount || 0} more seekers</strong></>
-          )}
+      <div className="card p-4 mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="flex-1 w-full">
+          <label className="flex flex-col gap-1">
+            <span className="label text-xs">Search Radius: {radius < 1000 ? radius + 'm' : (radius/1000).toFixed(1) + 'km'}</span>
+            <input 
+              type="range" 
+              min="500" 
+              max="50000" 
+              step="500"
+              value={radius}
+              onChange={(e) => setRadius(parseInt(e.target.value))}
+              className="w-full accent-[var(--color-primary)]"
+            />
+          </label>
         </div>
-      )}
+        {!myPost && (
+          <button onClick={() => onRequiresPost()} className="btn btn-primary sm:w-auto w-full">
+            Post a Route
+          </button>
+        )}
+      </div>
 
       <div className="flex justify-between items-center mb-6 mt-6">
         <h3 className="text-h3">
-          {myPost.type === "giver" ? "Professionals Needing a Ride" : "Professionals Driving Your Way"}
+          {myPost 
+            ? (myPost.type === "giver" ? "Professionals Needing a Ride" : "Professionals Driving Your Way")
+            : "Available Carpools Near You"}
         </h3>
-        <button onClick={() => onRequiresPost(myPost)} className="btn btn-secondary btn-sm">
-          Edit Route
-        </button>
+        {myPost && (
+          <button onClick={() => onRequiresPost(myPost)} className="btn btn-secondary btn-sm">
+            Edit Route
+          </button>
+        )}
       </div>
 
       {posts.length === 0 && (
