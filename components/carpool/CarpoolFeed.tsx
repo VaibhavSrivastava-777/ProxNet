@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getCurrentPosition } from "@/lib/geo/get-current-position";
+import { LocationName } from "@/components/map/LocationName";
 
 export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) => void }) {
   const [data, setData] = useState<any>(null);
@@ -130,24 +131,39 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
               <span className="text-[var(--color-text-tertiary)]">at</span>
               <span className="font-semibold text-[var(--color-primary)]">{post.user?.company}</span>
             </div>
-            <div className="text-sm text-[var(--color-text-secondary)] grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 mt-3">
-              <div className="flex items-center gap-1.5 col-span-1 sm:col-span-2 text-[var(--color-text-primary)]">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
-                {post.is_recurring 
-                  ? `Recurring: ${post.recurring_days.map((d: number) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]).join(", ")}` 
-                  : new Date(post.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-                }
-              </div>
-              <div className="flex items-center gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
-                {post.time_start.slice(0,5)} - {post.time_end.slice(0,5)}
-              </div>
-              {post.distance !== undefined && (
-                <div className="flex items-center gap-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
-                  Destination within {post.distance < 1000 ? Math.round(post.distance) + "m" : (post.distance/1000).toFixed(1) + "km"}
+            <div className="text-sm text-[var(--color-text-secondary)] grid grid-cols-1 gap-y-2 mt-3">
+              <div className="flex flex-col gap-1.5 bg-[var(--color-surface)] p-3 rounded border border-border">
+                <div className="flex items-start gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-primary mt-0.5"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+                  <div>
+                    <span className="font-medium text-text-primary">Source: </span>
+                    <LocationName lat={post.start_lat} lng={post.start_lng} fallback={`${post.start_lat}, ${post.start_lng}`} />
+                    <span className="text-caption ml-1">@ {post.time_start.slice(0,5)} - {post.time_end.slice(0,5)}</span>
+                  </div>
                 </div>
-              )}
+                <div className="flex items-start gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-accent mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
+                  <div>
+                    <span className="font-medium text-text-primary">Destination: </span>
+                    <LocationName lat={post.dest_lat} lng={post.dest_lng} fallback={`${post.dest_lat}, ${post.dest_lng}`} />
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 mt-1">
+                <div className="flex items-center gap-1.5 text-[var(--color-text-primary)]">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                  {post.is_recurring 
+                    ? `Recurring: ${post.recurring_days.map((d: number) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]).join(", ")}` 
+                    : new Date(post.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+                  }
+                </div>
+                {post.distance !== undefined && (
+                  <div className="flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
+                    Within {post.distance < 1000 ? Math.round(post.distance) + "m" : (post.distance/1000).toFixed(1) + "km"}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <div className="w-full sm:w-auto">

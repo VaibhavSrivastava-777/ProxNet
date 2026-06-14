@@ -61,15 +61,15 @@ export async function POST(request: Request) {
 
   if (thread?.status === "active") {
     // 4. Trigger AI classification
-    // Get last 6 messages
+    // Get last 10 messages
     const { data: history } = await supabase
       .from("carpool_messages")
       .select("body, sender_id")
       .eq("thread_id", threadId)
       .order("created_at", { ascending: false })
-      .limit(6);
+      .limit(10);
 
-    if (history && history.length >= 2) {
+    if (history && history.length >= 1) {
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (apiKey) {
         // Format history
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
           `${m.sender_id === user.id ? 'UserA' : 'UserB'}: ${m.body}`
         ).join("\n");
 
-        const prompt = `Classify whether both parties have agreed on pickup time/location and are ready to coordinate logistics. 
+        const prompt = `Classify whether both parties have mutually agreed on terms (e.g. pickup time/location) and are ready to suggest exchanging contact numbers (a handshake). Even if the conversation is short, if an agreement is evident, mark ready as true.
 Respond ONLY with JSON matching this schema exactly: {"ready": true|false, "confidence": 0-100}
 
 Recent conversation:

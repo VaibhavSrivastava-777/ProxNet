@@ -6,12 +6,48 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { targetPostId, myPostId } = await request.json();
-  if (!targetPostId || !myPostId) return NextResponse.json({ error: "Missing ids" }, { status: 400 });
+  let { targetPostId, myPostId } = await request.json();
+  if (!targetPostId) return NextResponse.json({ error: "Missing target id" }, { status: 400 });
 
   const supabase = createAdminClient();
 
-  // 1. Check if thread already exists
+  // 1. Fetch the target post to get the target user details
+  const { data: targetPost } = await supabase
+    .from("carpool_posts")
+    .select("*")
+    .eq("id", targetPostId)
+    .single();
+
+  if (!targetPost) return NextResponse.json({ error: "Target post not found" }, { status: 404 });
+
+  // 1b. Create implicit post if myPostId is missing
+  if (!myPostId) {
+    const implicitType = targetPost.type === "giver" ? "seeker" : "giver";
+    const { data: newPost, error: createError } = await supabase
+      .from("carpool_posts")
+      .insert({
+        user_id: user.id,
+        type: implicitType,
+        start_lat: targetPost.start_lat,
+        start_lng: targetPost.start_lng,
+        dest_lat: targetPost.dest_lat,
+        dest_lng: targetPost.dest_lng,
+        date: targetPost.date,
+        is_recurring: targetPost.is_recurring,
+        recurring_days: targetPost.recurring_days,
+        time_start: targetPost.time_start,
+        time_end: targetPost.time_end,
+        seats: 1, // Defaulting to 1 seat for implicit posts
+        status: "implicit"
+      })
+      .select("id")
+      .single();
+
+    if (createError) return NextResponse.json({ error: "Failed to implicitly create route" }, { status: 500 });
+    myPostId = newPost.id;
+  }
+
+  // 2. Check if thread already exists
   const { data: existing } = await supabase
     .from("carpool_threads")
     .select("id")
@@ -23,14 +59,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ threadId: existing.id });
   }
 
-  // 2. Fetch the target post to get the target user details
-  const { data: targetPost } = await supabase
-    .from("carpool_posts")
-    .select("user_id, type, user:users(job_title, company)")
-    .eq("id", targetPostId)
-    .single();
-
-  if (!targetPost) return NextResponse.json({ error: "Target post not found" }, { status: 404 });
+  // 3. Fetch user details for alias generation
 
   // Fetch current user details from DB to get fresh job_title and company
   const { data: currentUserDb } = await supabase

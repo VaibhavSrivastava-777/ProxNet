@@ -88,6 +88,14 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
       return;
     }
 
+    // Distance check
+    const { haversineDistanceMeters } = await import("@/lib/geo/haversine");
+    const dist = haversineDistanceMeters(parseFloat(startLat), parseFloat(startLng), parseFloat(destLat), parseFloat(destLng));
+    if (dist < 500) {
+      const confirm = window.confirm("Your source and destination are very close to each other. Are you sure you want to proceed?");
+      if (!confirm) return;
+    }
+
     setLoading(true);
     setError("");
 
