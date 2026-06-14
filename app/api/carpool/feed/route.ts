@@ -123,10 +123,20 @@ export async function GET(request: Request) {
       const candEndMins = timeToMinutes(candidate.time_end);
       const timeOverlap = Math.max(0, Math.min(myEndMins, candEndMins) - Math.max(myStartMins, candStartMins));
 
-      let score = 0;
-      if (timeOverlap > 0 || Math.max(myStartMins, candStartMins) - Math.min(myEndMins, candEndMins) <= 60) {
-        score = Math.max(0, 100 - Math.floor(detour / 50));
+      let score = 100;
+      
+      // Distance Penalty (1% per 50m of detour)
+      const distancePenalty = Math.floor(detour / 50);
+      score -= distancePenalty;
+
+      // Time Penalty
+      if (timeOverlap <= 0) {
+        const timeGap = Math.max(myStartMins, candStartMins) - Math.min(myEndMins, candEndMins);
+        // Deduct 1% per minute of gap
+        score -= timeGap;
       }
+
+      score = Math.max(0, Math.min(100, score));
 
       return {
         ...candidate,

@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { type, start_lat, start_lng, dest_lat, dest_lng, date, time_start, time_end, seats, is_recurring, recurring_days } = body;
+  const { type, start_name, start_lat, start_lng, dest_name, dest_lat, dest_lng, date, time_start, time_end, seats, is_recurring, recurring_days } = body;
 
   if (!type || !start_lat || !start_lng || !dest_lat || !dest_lng || !time_start || !time_end || !seats) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -38,8 +38,10 @@ export async function POST(request: Request) {
       user_id: user.id,
       type,
       status: "active",
+      start_name,
       start_lat,
       start_lng,
+      dest_name,
       dest_lat,
       dest_lng,
       date,

@@ -4,6 +4,7 @@ import { AdminLogout } from "@/components/admin/AdminLogout";
 import { SupabaseSetupBanner } from "@/components/admin/SupabaseSetupBanner";
 import { AdminJobForm } from "@/components/admin/AdminJobForm";
 import { AdminCarpoolForm } from "@/components/admin/AdminCarpoolForm";
+import { AdminCarpoolTable } from "@/components/admin/AdminCarpoolTable";
 
 export default function AdminDashboardPage() {
   return (
@@ -30,6 +31,8 @@ export default function AdminDashboardPage() {
       <AdminJobForm />
 
       <AdminCarpoolForm />
+
+      <AdminCarpoolTable />
     </div>
   );
 }

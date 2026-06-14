@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getCurrentPosition } from "@/lib/geo/get-current-position";
-import { LocationName } from "@/components/map/LocationName";
 
 export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) => void }) {
   const [data, setData] = useState<any>(null);
@@ -120,7 +119,7 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
           <div className="flex-1">
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-2 mb-2">
-                {getScoreBadge(post.score)}
+                {myPost && getScoreBadge(post.score)}
                 <span className="text-caption text-[var(--color-text-secondary)]">
                   {post.type === "giver" ? "Offering" : "Needs"} {post.seats} seat{post.seats > 1 ? "s" : ""}
                 </span>
@@ -137,7 +136,7 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-primary mt-0.5"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
                   <div>
                     <span className="font-medium text-text-primary">Source: </span>
-                    <LocationName lat={post.start_lat} lng={post.start_lng} fallback={`${post.start_lat}, ${post.start_lng}`} />
+                    <span className="text-text-secondary">{post.start_name || "Location not specified"}</span>
                     <span className="text-caption ml-1">@ {post.time_start.slice(0,5)} - {post.time_end.slice(0,5)}</span>
                   </div>
                 </div>
@@ -145,7 +144,7 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-accent mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
                   <div>
                     <span className="font-medium text-text-primary">Destination: </span>
-                    <LocationName lat={post.dest_lat} lng={post.dest_lng} fallback={`${post.dest_lat}, ${post.dest_lng}`} />
+                    <span className="text-text-secondary">{post.dest_name || "Location not specified"}</span>
                   </div>
                 </div>
               </div>

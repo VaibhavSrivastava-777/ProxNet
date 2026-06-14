@@ -17,8 +17,11 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
   const [error, setError] = useState("");
   
   // Default source to Home location if it exists, or initialData if provided
+  const [startName, setStartName] = useState(initialData?.start_name || "");
   const [startLat, setStartLat] = useState(initialData?.start_lat?.toString() || "");
   const [startLng, setStartLng] = useState(initialData?.start_lng?.toString() || "");
+  
+  const [destName, setDestName] = useState(initialData?.dest_name || "");
   const [destLat, setDestLat] = useState(initialData?.dest_lat?.toString() || user.office_lat?.toString() || "");
   const [destLng, setDestLng] = useState(initialData?.dest_lng?.toString() || user.office_lng?.toString() || "");
   
@@ -105,8 +108,10 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type,
+          start_name: startName,
           start_lat: parseFloat(startLat),
           start_lng: parseFloat(startLng),
+          dest_name: destName,
           dest_lat: parseFloat(destLat),
           dest_lng: parseFloat(destLng),
           date: isRecurring ? null : date,
@@ -170,26 +175,52 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
           </div>
         )}
 
-        <div className="space-y-4">
-          <LocationPicker
-            legend="Source Location (Defaults to Home)"
-            lat={startLat}
-            lng={startLng}
-            onChange={(lat, lng) => {
-              setStartLat(lat);
-              setStartLng(lng);
-            }}
-          />
+        <div className="space-y-6">
+          <div className="space-y-2 p-4 bg-[var(--color-surface-hover)] rounded-lg border border-[var(--color-border-light)]">
+            <label className="flex flex-col gap-1">
+              <span className="label">Source Name</span>
+              <input 
+                type="text" 
+                className="input" 
+                value={startName} 
+                onChange={e => setStartName(e.target.value)} 
+                placeholder="e.g. L&T South City" 
+                required 
+              />
+            </label>
+            <LocationPicker
+              legend="Source Map Pin"
+              lat={startLat}
+              lng={startLng}
+              onChange={(lat, lng) => {
+                setStartLat(lat);
+                setStartLng(lng);
+              }}
+            />
+          </div>
 
-          <LocationPicker
-            legend={type === "giver" ? "Where are you driving to?" : "Where do you want to go?"}
-            lat={destLat}
-            lng={destLng}
-            onChange={(lat, lng) => {
-              setDestLat(lat);
-              setDestLng(lng);
-            }}
-          />
+          <div className="space-y-2 p-4 bg-[var(--color-surface-hover)] rounded-lg border border-[var(--color-border-light)]">
+            <label className="flex flex-col gap-1">
+              <span className="label">Destination Name</span>
+              <input 
+                type="text" 
+                className="input" 
+                value={destName} 
+                onChange={e => setDestName(e.target.value)} 
+                placeholder="e.g. Manyata Tech Park" 
+                required 
+              />
+            </label>
+            <LocationPicker
+              legend="Destination Map Pin"
+              lat={destLat}
+              lng={destLng}
+              onChange={(lat, lng) => {
+                setDestLat(lat);
+                setDestLng(lng);
+              }}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
