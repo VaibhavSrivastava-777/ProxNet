@@ -483,32 +483,54 @@ export function ProfileForm({ initialUser }: Props) {
         <hr className="divider" style={{ margin: "16px 0" }} />
 
         {/* Location pickers */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <LocationPicker
-            legend="Home location"
-            lat={user.home_lat?.toString() ?? ""}
-            lng={user.home_lng?.toString() ?? ""}
-            onChange={(home_lat, home_lng) =>
-              setUser({
-                ...user,
-                home_lat: home_lat ? Number(home_lat) : null,
-                home_lng: home_lng ? Number(home_lng) : null,
-              })
-            }
-          />
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div>
+              <label className="label">Home Name</label>
+              <input
+                className="input"
+                value={user.home_name ?? ""}
+                placeholder="e.g. My Apartment, L&T South City"
+                onChange={(e) => setUser({ ...user, home_name: e.target.value })}
+              />
+            </div>
+            <LocationPicker
+              legend="Home location Pin"
+              lat={user.home_lat?.toString() ?? ""}
+              lng={user.home_lng?.toString() ?? ""}
+              onChange={(home_lat, home_lng) =>
+                setUser({
+                  ...user,
+                  home_lat: home_lat ? Number(home_lat) : null,
+                  home_lng: home_lng ? Number(home_lng) : null,
+                })
+              }
+            />
+          </div>
 
-          <LocationPicker
-            legend="Office location"
-            lat={user.office_lat?.toString() ?? ""}
-            lng={user.office_lng?.toString() ?? ""}
-            onChange={(office_lat, office_lng) =>
-              setUser({
-                ...user,
-                office_lat: office_lat ? Number(office_lat) : null,
-                office_lng: office_lng ? Number(office_lng) : null,
-              })
-            }
-          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div>
+              <label className="label">Office Name</label>
+              <input
+                className="input"
+                value={user.office_name ?? ""}
+                placeholder="e.g. Manyata Tech Park"
+                onChange={(e) => setUser({ ...user, office_name: e.target.value })}
+              />
+            </div>
+            <LocationPicker
+              legend="Office location Pin"
+              lat={user.office_lat?.toString() ?? ""}
+              lng={user.office_lng?.toString() ?? ""}
+              onChange={(office_lat, office_lng) =>
+                setUser({
+                  ...user,
+                  office_lat: office_lat ? Number(office_lat) : null,
+                  office_lng: office_lng ? Number(office_lng) : null,
+                })
+              }
+            />
+          </div>
         </div>
       </CollapsibleSection>
 

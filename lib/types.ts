@@ -21,8 +21,10 @@ export interface User {
   source: UserSource;
   visibility: UserVisibility;
   phone_number: string | null;
+  home_name: string | null;
   home_lat: number | null;
   home_lng: number | null;
+  office_name: string | null;
   office_lat: number | null;
   office_lng: number | null;
   active_location: ActiveLocation;

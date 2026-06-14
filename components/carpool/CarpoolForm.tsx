@@ -17,11 +17,11 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
   const [error, setError] = useState("");
   
   // Default source to Home location if it exists, or initialData if provided
-  const [startName, setStartName] = useState(initialData?.start_name || "");
-  const [startLat, setStartLat] = useState(initialData?.start_lat?.toString() || "");
-  const [startLng, setStartLng] = useState(initialData?.start_lng?.toString() || "");
+  const [startName, setStartName] = useState(initialData?.start_name || user.home_name || "");
+  const [startLat, setStartLat] = useState(initialData?.start_lat?.toString() || user.home_lat?.toString() || "");
+  const [startLng, setStartLng] = useState(initialData?.start_lng?.toString() || user.home_lng?.toString() || "");
   
-  const [destName, setDestName] = useState(initialData?.dest_name || "");
+  const [destName, setDestName] = useState(initialData?.dest_name || user.office_name || "");
   const [destLat, setDestLat] = useState(initialData?.dest_lat?.toString() || user.office_lat?.toString() || "");
   const [destLng, setDestLng] = useState(initialData?.dest_lng?.toString() || user.office_lng?.toString() || "");
   

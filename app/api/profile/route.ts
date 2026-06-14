@@ -27,8 +27,10 @@ export async function PATCH(request: Request) {
   if (body.linkedin_profile_url !== undefined) {
     updates.linkedin_profile_url = normalizeLinkedInUrl(body.linkedin_profile_url);
   }
+  if (body.home_name !== undefined) updates.home_name = body.home_name;
   if (body.home_lat !== undefined) updates.home_lat = body.home_lat;
   if (body.home_lng !== undefined) updates.home_lng = body.home_lng;
+  if (body.office_name !== undefined) updates.office_name = body.office_name;
   if (body.office_lat !== undefined) updates.office_lat = body.office_lat;
   if (body.office_lng !== undefined) updates.office_lng = body.office_lng;
   if (body.active_location !== undefined) updates.active_location = body.active_location;
