@@ -118,8 +118,8 @@ export async function GET(request: Request) {
     };
   });
 
-  // Filter by radius (exclude if distance > radius, unless distance is unknown)
-  let filtered = scoredCandidates.filter((c: any) => c.distance === -1 || c.distance <= radius);
+  // Filter by radius (exclude if distance > radius, unless distance is unknown or radius is -1)
+  let filtered = scoredCandidates.filter((c: any) => radius === -1 || c.distance === -1 || c.distance <= radius);
 
   // Sort: if myPost exists, sort by match % descending. Else sort by created_at descending.
   if (myPost) {

@@ -66,19 +66,21 @@ export async function DELETE(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const supabase = createAdminClient();
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
 
-  // Expire any existing active posts for this user
-  const { error } = await supabase
-    .from("carpool_posts")
-    .update({ status: "expired" })
-    .eq("user_id", user.id)
-    .eq("status", "active");
-
-  if (error) {
-    console.error("Error canceling carpool post:", error);
-    return NextResponse.json({ error: "Database error" }, { status: 500 });
+  if (!id) {
+    return NextResponse.json({ error: "Missing post ID" }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true });
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("carpool_posts")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id); // Ensure user owns the post
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }

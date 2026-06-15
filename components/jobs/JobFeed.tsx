@@ -31,6 +31,7 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
   const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
 
   const [radius, setRadius] = useState(1000);
+  const [isRadiusEnabled, setIsRadiusEnabled] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -46,7 +47,8 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
         // Ignore
       }
       
-      fetch(`/api/jobs/feed?radius=${radius}&lat=${lat}&lng=${lng}`)
+      const effectiveRadius = isRadiusEnabled ? radius : -1;
+      fetch(`/api/jobs/feed?radius=${effectiveRadius}&lat=${lat}&lng=${lng}`)
         .then((res) => res.json())
         .then((data) => {
           setPosts(data.posts || []);
@@ -59,7 +61,7 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
     }
     
     fetchData();
-  }, [refreshKey, radius]);
+  }, [refreshKey, radius, isRadiusEnabled]);
 
   async function handleStartChat(targetPostId: string) {
     if (!myPost) {
@@ -149,6 +151,21 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
     } finally {
       setStartingChat(null);
       setTargetPostIdForDraft(null);
+    }
+  }
+
+  async function handleDelete() {
+    if (!myPost) return;
+    if (!confirm("Are you sure you want to delete your active post?")) return;
+    
+    try {
+      const res = await fetch(`/api/jobs/post?id=${myPost.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete post");
+      setMyPost(null);
+      // Trigger a re-fetch of the feed
+      window.location.reload();
+    } catch (err: any) {
+      alert(err.message);
     }
   }
 
@@ -247,9 +264,19 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
         </div>
       )}
 
-      <div className="card p-4 mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="flex-1 w-full">
-          <label className="flex flex-col gap-1">
+      <div className="card p-4 mb-6 flex flex-col gap-3">
+        <label className="flex items-center gap-2 cursor-pointer w-max">
+          <input 
+            type="checkbox" 
+            className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+            checked={isRadiusEnabled}
+            onChange={(e) => setIsRadiusEnabled(e.target.checked)}
+          />
+          <span className="text-body-sm font-medium">Filter by distance</span>
+        </label>
+        
+        {isRadiusEnabled && (
+          <label className="flex flex-col gap-1 animate-fadeIn">
             <span className="label text-xs">Search Radius: {radius < 1000 ? radius + 'm' : (radius/1000).toFixed(1) + 'km'}</span>
             <input 
               type="range" 
@@ -261,7 +288,7 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
               className="w-full accent-[var(--color-primary)]"
             />
           </label>
-        </div>
+        )}
       </div>
 
       <div className="flex justify-between items-center mb-6 mt-6">
@@ -274,6 +301,51 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
           {myPost ? "Sorted by exact match %" : "Sorted by recent"}
         </span>
       </div>
+
+      {myPost && (
+        <div className="card p-5 mb-6 animate-fadeIn border border-[var(--color-primary)] bg-[var(--color-primary-light)]/10">
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <span className="badge badge-primary mb-2">Your Active Post</span>
+              <h4 className="text-h3 mb-1 text-primary">{myPost.role}</h4>
+              <div className="flex items-center gap-3 text-caption text-text-secondary">
+                <span className="badge badge-neutral text-xs px-2">{myPost.type === "giver" ? "Offering Referral" : "Looking for Role"}</span>
+                {myPost.company && (
+                  <span className="flex items-center gap-1">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21h18M5 21V7l8-4v18M13 3l8 4v14M7 11h2M7 15h2M15 11h2M15 15h2" /></svg>
+                    {myPost.company}
+                  </span>
+                )}
+                <span className="flex items-center gap-1">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+                  {myPost.experience_years} years exp
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => {
+                  const evt = new CustomEvent('editJobPost', { detail: myPost });
+                  window.dispatchEvent(evt);
+                }} 
+                className="btn btn-secondary btn-sm"
+              >
+                Edit
+              </button>
+              <button onClick={handleDelete} className="btn btn-ghost btn-sm text-[var(--color-error)] hover:bg-[var(--color-error-bg)]">
+                Delete
+              </button>
+            </div>
+          </div>
+          {myPost.skills && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {myPost.skills.split(',').map((s: string) => s.trim()).filter(Boolean).map((skill: string) => (
+                <span key={skill} className="badge badge-neutral text-xs px-2">{skill}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {posts.length === 0 ? (
         <div className="card p-8 text-center border border-dashed border-border flex flex-col items-center animate-fadeIn min-h-[250px]">

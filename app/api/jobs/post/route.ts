@@ -40,3 +40,26 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ post: data });
 }
+
+export async function DELETE(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+
+  if (!id) {
+    return NextResponse.json({ error: "Missing post ID" }, { status: 400 });
+  }
+
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("job_posts")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id); // Ensure user owns the post
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}

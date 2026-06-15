@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Props {
   onPosted: () => void;
@@ -16,6 +16,20 @@ export function JobForm({ onPosted }: Props) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
+
+  useEffect(() => {
+    const handleEdit = (e: any) => {
+      const post = e.detail;
+      setIsOpen(true);
+      setType(post.type);
+      setRole(post.role || "");
+      setCompany(post.company || "");
+      setExperience(post.experience_years?.toString() || "");
+      setSkills(post.skills || "");
+    };
+    window.addEventListener("editJobPost", handleEdit);
+    return () => window.removeEventListener("editJobPost", handleEdit);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

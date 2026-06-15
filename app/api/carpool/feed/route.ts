@@ -82,11 +82,11 @@ export async function GET(request: Request) {
   let filtered = [];
 
   if (!myPost) {
-    // If no post, return all active posts within radius of current location
+    // If no post, return all active posts within radius of current location (unless radius is -1)
     filtered = (candidates || []).map(cand => {
       const startDist = lat && lng ? haversineDistance(lat, lng, cand.start_lat, cand.start_lng) : 0;
       return { ...cand, distance: startDist, score: 0 };
-    }).filter(cand => cand.distance <= radius);
+    }).filter(cand => radius === -1 || cand.distance <= radius);
   } else {
     // Filter candidates by date/recurring logic
     const dateFilteredCandidates = (candidates || []).filter(cand => {
