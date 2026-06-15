@@ -6,8 +6,8 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { targetPostId, myPostId } = await request.json();
-  if (!targetPostId || !myPostId) return NextResponse.json({ error: "Missing ids" }, { status: 400 });
+  let { targetPostId, myPostId } = await request.json();
+  if (!targetPostId) return NextResponse.json({ error: "Missing target id" }, { status: 400 });
 
   const supabase = createAdminClient();
 
@@ -37,6 +37,30 @@ export async function POST(request: Request) {
     .select("job_title, company")
     .eq("id", user.id)
     .single();
+
+  // 1b. Create implicit post if myPostId is missing
+  if (!myPostId) {
+    const implicitType = targetPost.type === "giver" ? "seeker" : "giver";
+    const { data: newPost, error: createError } = await supabase
+      .from("job_posts")
+      .insert({
+        user_id: user.id,
+        type: implicitType,
+        role: currentUserDb?.job_title || "Professional",
+        company: currentUserDb?.company || "",
+        experience_years: 0,
+        skills: "",
+        status: "active"
+      })
+      .select("id")
+      .single();
+      
+    if (createError) {
+      console.error("Implicit post error:", createError);
+      return NextResponse.json({ error: "Failed to implicitly create post" }, { status: 500 });
+    }
+    myPostId = newPost.id;
+  }
 
   // 3. Create thread
   const { data: thread, error: threadError } = await supabase

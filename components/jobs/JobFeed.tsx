@@ -24,11 +24,7 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
   const [errorMsg, setErrorMsg] = useState("");
   const router = useRouter();
 
-  // Auto-Draft Modal State
-  const [draftingPostId, setDraftingPostId] = useState<string | null>(null);
-  const [targetPostIdForDraft, setTargetPostIdForDraft] = useState<string | null>(null);
-  const [draftData, setDraftData] = useState<any>(null);
-  const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
+
 
   const [radius, setRadius] = useState(1000);
   const [isRadiusEnabled, setIsRadiusEnabled] = useState(false);
@@ -64,95 +60,29 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
   }, [refreshKey, radius, isRadiusEnabled]);
 
   async function handleStartChat(targetPostId: string) {
-    if (!myPost) {
-      // Auto-draft flow
-      setDraftingPostId(targetPostId);
-      setTargetPostIdForDraft(targetPostId);
-      try {
-        const res = await fetch("/api/jobs/auto-draft", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ targetPostId }),
-        });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        
-        setDraftData(data);
-        setIsDraftModalOpen(true);
-      } catch (err: any) {
-        console.error(err);
-        setErrorMsg("Failed to auto-draft profile. " + (err.message || ""));
-        setTimeout(() => setErrorMsg(""), 5000);
-        setTargetPostIdForDraft(null);
-      } finally {
-        setDraftingPostId(null);
-      }
-      return;
-    }
-    
-    // Normal flow
     setStartingChat(targetPostId);
     try {
       const res = await fetch("/api/jobs/chat/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetPostId, myPostId: myPost.id }),
+        body: JSON.stringify({ targetPostId, myPostId: myPost?.id }),
       });
       const data = await res.json();
       if (data.threadId) {
         router.push(`/jobs/chat/${data.threadId}`);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setStartingChat(null);
-    }
-  }
-
-  async function handleConfirmDraft(e: React.FormEvent) {
-    e.preventDefault();
-    if (!draftData || !targetPostIdForDraft) return;
-
-    try {
-      setStartingChat(targetPostIdForDraft); // Use it as a loading spinner
-      
-      // 1. Create the post
-      const postRes = await fetch("/api/jobs/post", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "seeker",
-          role: draftData.role,
-          experience_years: draftData.experience_years,
-          skills: draftData.skills,
-          company: ""
-        })
-      });
-      const postData = await postRes.json();
-      if (!postRes.ok) throw new Error(postData.error);
-      
-      setMyPost(postData.post);
-      setIsDraftModalOpen(false);
-
-      // 2. Start the chat
-      const chatRes = await fetch("/api/jobs/chat/init", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetPostId: targetPostIdForDraft, myPostId: postData.post.id }),
-      });
-      const chatData = await chatRes.json();
-      if (chatData.threadId) {
-        router.push(`/jobs/chat/${chatData.threadId}`);
+      } else {
+        throw new Error(data.error || "Failed to start chat");
       }
     } catch (err: any) {
       console.error(err);
-      setErrorMsg("Failed to create post or start chat: " + (err.message || ""));
+      setErrorMsg("Failed to start chat: " + (err.message || ""));
       setTimeout(() => setErrorMsg(""), 5000);
     } finally {
       setStartingChat(null);
-      setTargetPostIdForDraft(null);
     }
   }
+
+
 
   async function handleDelete() {
     if (!myPost) return;
@@ -181,86 +111,19 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
 
   return (
     <div className="space-y-4 stagger-children relative">
-      {/* Auto-Draft Modal */}
-      {isDraftModalOpen && draftData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-fadeIn">
-          <div className="bg-surface card p-6 w-full max-w-lg shadow-xl animate-scaleIn relative">
-            <button 
-              onClick={() => setIsDraftModalOpen(false)}
-              className="absolute top-4 right-4 text-text-tertiary hover:text-text-primary"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-            <h2 className="text-h2 mb-2 flex items-center gap-2">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-              AI Profile Draft
-            </h2>
-            <p className="text-body-sm text-text-secondary mb-6">
-              We generated this anonymous "Seeker" profile to match the role you want to message. Review and edit before confirming.
-            </p>
-            <form onSubmit={handleConfirmDraft} className="space-y-4">
-              <label className="flex flex-col gap-1">
-                <span className="label">Role</span>
-                <input 
-                  type="text" 
-                  className="input" 
-                  value={draftData.role}
-                  onChange={e => setDraftData({...draftData, role: e.target.value})}
-                  required
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="label">Skills</span>
-                <input 
-                  type="text" 
-                  className="input" 
-                  value={draftData.skills}
-                  onChange={e => setDraftData({...draftData, skills: e.target.value})}
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="label">Experience (Years)</span>
-                <input 
-                  type="number" 
-                  className="input" 
-                  value={draftData.experience_years}
-                  onChange={e => setDraftData({...draftData, experience_years: e.target.value})}
-                  required
-                />
-              </label>
-              <div className="flex justify-end gap-3 pt-4 border-t border-border-light">
-                <button type="button" onClick={() => setIsDraftModalOpen(false)} className="btn btn-ghost">Cancel</button>
-                <button type="submit" disabled={!!startingChat} className="btn btn-primary">
-                  {startingChat ? "Confirming..." : "Confirm & Message"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {errorMsg && (
         <div className="alert alert-error animate-fadeInUp">
           {errorMsg}
         </div>
       )}
 
-      {myPost ? (
+      {myPost && (
         <div className="text-center py-3 text-sm text-[var(--color-text-secondary)]">
           {myPost.type === "giver" ? (
             <>You are offering a referral &bull; <strong>along with {othersCount} more offerings</strong></>
           ) : (
             <>You are seeking a referral &bull; <strong>along with {othersCount} more seekers</strong></>
           )}
-        </div>
-      ) : (
-        <div className="alert alert-warning">
-          <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" className="shrink-0 mt-0.5">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-          </svg>
-          <span>
-            You are browsing the feed without an active post. <strong>Create a post</strong> to message professionals!
-          </span>
         </div>
       )}
 
@@ -400,11 +263,9 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
                 <button
                   className="btn btn-primary btn-sm"
                   onClick={() => handleStartChat(post.id)}
-                  disabled={startingChat === post.id || draftingPostId === post.id}
+                  disabled={startingChat === post.id}
                 >
-                  {draftingPostId === post.id ? (
-                    <><span className="spinner-sm mr-2" /> Drafting AI Profile...</>
-                  ) : startingChat === post.id && myPost ? (
+                  {startingChat === post.id ? (
                     <><span className="spinner-sm mr-2" /> Connecting...</>
                   ) : (
                     "Message Anonymously"

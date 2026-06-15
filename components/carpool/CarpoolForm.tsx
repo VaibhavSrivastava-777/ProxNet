@@ -199,6 +199,29 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
             />
           </div>
 
+          <div className="flex justify-center -my-3 relative z-10">
+            <button
+              type="button"
+              onClick={() => {
+                const tempName = startName;
+                const tempLat = startLat;
+                const tempLng = startLng;
+                setStartName(destName);
+                setStartLat(destLat);
+                setStartLng(destLng);
+                setDestName(tempName);
+                setDestLat(tempLat);
+                setDestLng(tempLng);
+              }}
+              className="btn btn-secondary rounded-full w-10 h-10 p-0 flex items-center justify-center shadow-md bg-[var(--color-surface)] border border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] hover:text-primary transition-all group"
+              title="Swap Locations"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="group-hover:rotate-180 transition-transform duration-300">
+                <path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+              </svg>
+            </button>
+          </div>
+
           <div className="space-y-2 p-4 bg-[var(--color-surface-hover)] rounded-lg border border-[var(--color-border-light)]">
             <label className="flex flex-col gap-1">
               <span className="label">Destination Name</span>
