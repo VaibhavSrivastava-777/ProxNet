@@ -23,12 +23,11 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
 
-  // Expire any existing active posts of the same type for this user
+  // Expire any existing active posts for this user (only one active post allowed)
   await supabase
     .from("carpool_posts")
     .update({ status: "expired" })
     .eq("user_id", user.id)
-    .eq("type", type)
     .eq("status", "active");
 
   // Insert the new post

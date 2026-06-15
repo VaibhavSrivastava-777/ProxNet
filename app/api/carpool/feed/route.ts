@@ -44,7 +44,20 @@ export async function GET(request: Request) {
 
   if (activeError) return NextResponse.json({ error: activeError.message }, { status: 500 });
   
-  const myPost = activePosts && activePosts.length > 0 ? activePosts[0] : null;
+  let myPost = activePosts && activePosts.length > 0 ? activePosts[0] : null;
+
+  const nowMs = Date.now();
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+
+  // Auto-expire myPost if it's past time_end + 1 hour and not recurring
+  if (myPost && !myPost.is_recurring) {
+    // Assuming local time for date parsing (YYYY-MM-DDTHH:MM:SS)
+    const endDateTime = new Date(`${myPost.date}T${myPost.time_end}`);
+    if (nowMs > endDateTime.getTime() + ONE_HOUR_MS) {
+      await supabase.from("carpool_posts").update({ status: "expired" }).eq("id", myPost.id);
+      myPost = null;
+    }
+  }
 
   // Update last_checked_matches_at
   if (myPost) {
@@ -66,18 +79,27 @@ export async function GET(request: Request) {
     .eq("status", "active")
     .neq("user_id", user.id);
 
-  if (myPost) {
-    const targetType = myPost.type === "giver" ? "seeker" : "giver";
-    query = query.eq("type", targetType);
-    if (targetType === "giver") {
-      query = query.gte("seats", myPost.seats);
-    } else {
-      query = query.lte("seats", myPost.seats);
-    }
-  }
+  // Removed targetType filtering to show all posts
 
-  const { data: candidates, error: candError } = await query;
+  const { data: rawCandidates, error: candError } = await query;
   if (candError) return NextResponse.json({ error: candError.message }, { status: 500 });
+
+  let candidates = rawCandidates || [];
+  const expiredCandidateIds: string[] = [];
+
+  candidates = candidates.filter((cand: any) => {
+    if (cand.is_recurring) return true;
+    const endDateTime = new Date(`${cand.date}T${cand.time_end}`);
+    if (nowMs > endDateTime.getTime() + ONE_HOUR_MS) {
+      expiredCandidateIds.push(cand.id);
+      return false;
+    }
+    return true;
+  });
+
+  if (expiredCandidateIds.length > 0) {
+    // We will fire the update at the end of the file
+  }
 
   let filtered = [];
 
@@ -109,6 +131,14 @@ export async function GET(request: Request) {
     const myEndMins = timeToMinutes(myPost.time_end);
 
     filtered = dateFilteredCandidates.map(candidate => {
+      if (candidate.type === myPost.type) {
+         return {
+            ...candidate,
+            score: -1,
+            distance: haversineDistance(myPost.dest_lat, myPost.dest_lng, candidate.dest_lat, candidate.dest_lng)
+         };
+      }
+
       const giver = myPost.type === "giver" ? myPost : candidate;
       const seeker = myPost.type === "seeker" ? myPost : candidate;
 
@@ -152,14 +182,21 @@ export async function GET(request: Request) {
   if (myPost) {
     const { data: allSameType } = await supabase
       .from("carpool_posts")
-      .select("id, date, is_recurring, recurring_days")
+      .select("id, date, is_recurring, recurring_days, time_end")
       .eq("status", "active")
       .eq("type", myPost.type)
       .neq("user_id", user.id);
       
     if (allSameType) {
       othersCount = allSameType.filter(post => {
-        if (!post.is_recurring && post.date < todayStr) return false;
+        if (!post.is_recurring) {
+          const endDateTime = new Date(`${post.date}T${post.time_end}`);
+          if (nowMs > endDateTime.getTime() + ONE_HOUR_MS) {
+            expiredCandidateIds.push(post.id);
+            return false;
+          }
+          if (post.date < todayStr) return false;
+        }
         
         if (!myPost.is_recurring && !post.is_recurring) {
           return myPost.date === post.date;
@@ -176,10 +213,48 @@ export async function GET(request: Request) {
     }
   }
 
+  if (expiredCandidateIds.length > 0) {
+    // Fire and forget update for all expired candidates found in this request
+    supabase.from("carpool_posts").update({ status: "expired" }).in("id", expiredCandidateIds).then();
+  }
+
+  let suggestions: any[] = [];
+  if (user.home_lat && user.home_lng && user.office_lat && user.office_lng) {
+    const { data: allUsers } = await supabase
+      .from("users")
+      .select("id, full_name, company, job_title, profile_photo_url, home_lat, home_lng, office_lat, office_lng")
+      .neq("id", user.id)
+      .not("home_lat", "is", null)
+      .not("office_lat", "is", null);
+      
+    if (allUsers) {
+      suggestions = allUsers.map((u: any) => {
+         const homeDist = haversineDistance(user.home_lat!, user.home_lng!, u.home_lat, u.home_lng);
+         const officeDist = haversineDistance(user.office_lat!, user.office_lng!, u.office_lat, u.office_lng);
+         const scoreHome = Math.max(0, 100 - (homeDist / 5000) * 100);
+         const scoreOffice = Math.max(0, 100 - (officeDist / 5000) * 100);
+         const score = Math.round((scoreHome + scoreOffice) / 2);
+         return {
+            user: {
+              id: u.id,
+              company: u.company,
+              job_title: u.job_title,
+              full_name: u.full_name,
+              profile_photo_url: u.profile_photo_url
+            },
+            score,
+            homeDist,
+            officeDist
+         };
+      }).filter(s => s.score > 50).sort((a, b) => b.score - a.score).slice(0, 3);
+    }
+  }
+
   return NextResponse.json({ 
     posts: filtered, 
     myPost: myPost,
     othersCount,
+    suggestions,
     requiresPost: false 
   });
 }

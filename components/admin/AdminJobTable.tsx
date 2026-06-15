@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 
-export function AdminCarpoolTable() {
+export function AdminJobTable() {
   const [posts, setPosts] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modal State
@@ -13,19 +14,17 @@ export function AdminCarpoolTable() {
 
   // Form State
   const [editId, setEditId] = useState<string | null>(null);
+  const [userId, setUserId] = useState("");
   const [type, setType] = useState<"giver" | "seeker">("giver");
-  const [seats, setSeats] = useState("1");
-  const [startName, setStartName] = useState("");
-  const [destName, setDestName] = useState("");
-  const [date, setDate] = useState("");
-  const [timeStart, setTimeStart] = useState("");
-  const [timeEnd, setTimeEnd] = useState("");
-  const [isRecurring, setIsRecurring] = useState(false);
+  const [role, setRole] = useState("");
+  const [company, setCompany] = useState("");
+  const [experience, setExperience] = useState("");
+  const [skills, setSkills] = useState("");
   const [status, setStatus] = useState("active");
 
   const fetchPosts = () => {
     setLoading(true);
-    fetch("/api/admin/carpool")
+    fetch("/api/admin/jobs")
       .then(res => res.json())
       .then(data => {
         setPosts(data.posts || []);
@@ -37,29 +36,53 @@ export function AdminCarpoolTable() {
       });
   };
 
+  const fetchUsers = () => {
+    fetch("/api/admin/users")
+      .then(res => res.json())
+      .then(data => {
+        setUsers(data.users || []);
+        if (data.users?.length > 0 && !userId) {
+          setUserId(data.users[0].id);
+        }
+      })
+      .catch(console.error);
+  };
+
   useEffect(() => {
     fetchPosts();
+    fetchUsers();
   }, []);
+
+  const openAddModal = () => {
+    setEditId(null);
+    if (users.length > 0) setUserId(users[0].id);
+    setType("giver");
+    setRole("");
+    setCompany("");
+    setExperience("");
+    setSkills("");
+    setStatus("active");
+    setErrorMsg("");
+    setIsModalOpen(true);
+  };
 
   const openEditModal = (post: any) => {
     setEditId(post.id);
+    setUserId(post.user_id);
     setType(post.type);
-    setSeats(post.seats?.toString() || "1");
-    setStartName(post.start_name || "");
-    setDestName(post.dest_name || "");
-    setDate(post.date ? new Date(post.date).toISOString().split('T')[0] : "");
-    setTimeStart(post.time_start || "");
-    setTimeEnd(post.time_end || "");
-    setIsRecurring(!!post.is_recurring);
+    setRole(post.role || "");
+    setCompany(post.company || "");
+    setExperience(post.experience_years?.toString() || "0");
+    setSkills(post.skills || "");
     setStatus(post.status || "active");
     setErrorMsg("");
     setIsModalOpen(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this carpool post?")) return;
+    if (!confirm("Are you sure you want to delete this job post?")) return;
     try {
-      const res = await fetch(`/api/admin/carpool?id=${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/jobs?id=${id}`, { method: "DELETE" });
       if (res.ok) {
         fetchPosts();
       } else {
@@ -77,21 +100,23 @@ export function AdminCarpoolTable() {
     setErrorMsg("");
 
     try {
-      const res = await fetch("/api/admin/carpool", {
-        method: "PATCH",
+      const isEditing = !!editId;
+      const method = isEditing ? "PATCH" : "POST";
+      const body = {
+        id: editId,
+        user_id: userId,
+        type,
+        role,
+        company,
+        experience_years: experience,
+        skills,
+        status
+      };
+
+      const res = await fetch("/api/admin/jobs", {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editId,
-          type,
-          seats,
-          start_name: startName,
-          dest_name: destName,
-          date,
-          time_start: timeStart,
-          time_end: timeEnd,
-          is_recurring: isRecurring,
-          status
-        }),
+        body: JSON.stringify(body),
       });
 
       if (res.ok) {
@@ -109,18 +134,21 @@ export function AdminCarpoolTable() {
     }
   };
 
-  if (loading) return <div className="p-6">Loading carpool posts...</div>;
+  if (loading) return <div className="p-6">Loading job posts...</div>;
 
   return (
     <div className="card p-6 mt-8 overflow-x-auto relative">
-      <h2 className="text-h2 mb-4">Manage Carpool Posts</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-h2">Manage Job Posts</h2>
+        <button onClick={openAddModal} className="btn btn-primary btn-sm">Add Job Post</button>
+      </div>
       
       <table className="w-full text-left border-collapse min-w-[800px]">
         <thead>
           <tr className="border-b border-[var(--color-border)]">
             <th className="p-3 text-sm font-semibold text-[var(--color-text-secondary)]">User</th>
-            <th className="p-3 text-sm font-semibold text-[var(--color-text-secondary)]">Route</th>
-            <th className="p-3 text-sm font-semibold text-[var(--color-text-secondary)]">Type / Seats</th>
+            <th className="p-3 text-sm font-semibold text-[var(--color-text-secondary)]">Role / Company</th>
+            <th className="p-3 text-sm font-semibold text-[var(--color-text-secondary)]">Type / Exp</th>
             <th className="p-3 text-sm font-semibold text-[var(--color-text-secondary)]">Status</th>
             <th className="p-3 text-sm font-semibold text-[var(--color-text-secondary)]">Actions</th>
           </tr>
@@ -133,16 +161,14 @@ export function AdminCarpoolTable() {
                 <div className="text-xs text-[var(--color-text-tertiary)]">{post.user?.email}</div>
               </td>
               <td className="p-3">
-                <div className="text-sm font-medium">{post.start_name || "N/A"} → {post.dest_name || "N/A"}</div>
-                <div className="text-xs text-[var(--color-text-tertiary)]">
-                  {post.is_recurring ? "Recurring" : new Date(post.date).toLocaleDateString()} @ {post.time_start.slice(0,5)}
-                </div>
+                <div className="font-medium">{post.role}</div>
+                <div className="text-xs text-[var(--color-text-tertiary)]">{post.company || "N/A"}</div>
               </td>
               <td className="p-3">
                 <span className={`badge ${post.type === 'giver' ? 'badge-accent' : 'badge-primary'} mr-2`}>
                   {post.type}
                 </span>
-                <span className="text-sm text-[var(--color-text-secondary)]">{post.seats} seats</span>
+                <span className="text-sm text-[var(--color-text-secondary)]">{post.experience_years} years</span>
               </td>
               <td className="p-3">
                 <span className={`badge ${post.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>
@@ -164,7 +190,7 @@ export function AdminCarpoolTable() {
           {posts.length === 0 && (
             <tr>
               <td colSpan={5} className="p-6 text-center text-[var(--color-text-tertiary)]">
-                No carpool posts found.
+                No job posts found.
               </td>
             </tr>
           )}
@@ -176,7 +202,7 @@ export function AdminCarpoolTable() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scaleIn">
             <div className="flex justify-between items-center p-6 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] shrink-0">
-              <h3 className="text-h2 m-0">Edit Carpool Post</h3>
+              <h3 className="text-h2 m-0">{editId ? "Edit Job Post" : "Add Job Post"}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </button>
@@ -185,7 +211,20 @@ export function AdminCarpoolTable() {
             <div className="p-6 overflow-y-auto flex-1">
               {errorMsg && <div className="alert alert-error mb-6">{errorMsg}</div>}
               
-              <form id="carpoolForm" onSubmit={handleSave} className="space-y-4">
+              <form id="jobForm" onSubmit={handleSave} className="space-y-4">
+                {!editId && (
+                  <div>
+                    <label className="label">Select User to Attribute to</label>
+                    <select className="input w-full" value={userId} onChange={e => setUserId(e.target.value)} required>
+                      {users.map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.full_name || "Anonymous"} ({u.email || "No email"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="label">Post Type</label>
@@ -206,41 +245,25 @@ export function AdminCarpoolTable() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="label">Source Name</label>
-                    <input required className="input w-full" value={startName} onChange={e => setStartName(e.target.value)} />
+                    <label className="label">{type === "giver" ? "Hiring Role" : "Target Role"}</label>
+                    <input required className="input w-full" placeholder="e.g. Frontend Engineer" value={role} onChange={e => setRole(e.target.value)} />
                   </div>
                   <div>
-                    <label className="label">Destination Name</label>
-                    <input required className="input w-full" value={destName} onChange={e => setDestName(e.target.value)} />
+                    <label className="label">Experience Years</label>
+                    <input required type="number" min="0" className="input w-full" placeholder="e.g. 3" value={experience} onChange={e => setExperience(e.target.value)} />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                {type === "giver" && (
                   <div>
-                    <label className="label">Seats</label>
-                    <input required type="number" min="1" className="input w-full" value={seats} onChange={e => setSeats(e.target.value)} />
+                    <label className="label">Company</label>
+                    <input required className="input w-full" placeholder="e.g. Google" value={company} onChange={e => setCompany(e.target.value)} />
                   </div>
-                  <div>
-                    <label className="label">Date</label>
-                    <input type="date" className="input w-full" value={date} onChange={e => setDate(e.target.value)} disabled={isRecurring} />
-                  </div>
-                  <div className="flex items-center pt-8">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} className="accent-[var(--color-primary)] w-4 h-4 rounded" />
-                      Recurring?
-                    </label>
-                  </div>
-                </div>
+                )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Start Time</label>
-                    <input required type="time" className="input w-full" value={timeStart} onChange={e => setTimeStart(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="label">End Time</label>
-                    <input required type="time" className="input w-full" value={timeEnd} onChange={e => setTimeEnd(e.target.value)} />
-                  </div>
+                <div>
+                  <label className="label">Skills (Comma separated)</label>
+                  <input required className="input w-full" placeholder="e.g. React, Node.js" value={skills} onChange={e => setSkills(e.target.value)} />
                 </div>
               </form>
             </div>
@@ -249,7 +272,7 @@ export function AdminCarpoolTable() {
               <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-secondary">
                 Cancel
               </button>
-              <button type="submit" form="carpoolForm" disabled={isSaving} className="btn btn-primary">
+              <button type="submit" form="jobForm" disabled={isSaving} className="btn btn-primary">
                 {isSaving ? "Saving..." : "Save Post"}
               </button>
             </div>

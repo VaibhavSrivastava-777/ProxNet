@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import type { User, UserVisibility } from "@/lib/types";
 
@@ -148,6 +149,7 @@ interface Props {
 }
 
 export function ProfileForm({ initialUser }: Props) {
+  const router = useRouter();
   const [user, setUser] = useState(initialUser);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -185,6 +187,7 @@ export function ProfileForm({ initialUser }: Props) {
       setUser(data);
       setMessage("Profile saved.");
       setEditing(false);
+      router.push("/");
     } else {
       setMessage("Failed to save profile.");
     }
@@ -197,7 +200,7 @@ export function ProfileForm({ initialUser }: Props) {
     });
   }
 
-  const needsCompletion = !user.company || !user.job_title;
+  const needsCompletion = !user.company || !user.job_title || (!user.home_lat && !user.office_lat);
 
   /* Initials helper */
   const initials = user.full_name
@@ -221,7 +224,7 @@ export function ProfileForm({ initialUser }: Props) {
               clipRule="evenodd"
             />
           </svg>
-          <span>Complete your company and job title to appear in proximity searches.</span>
+          <span>Complete your company, job title, and location. Unless location information is provided, you won't appear on the proximity map network!</span>
         </div>
       )}
 

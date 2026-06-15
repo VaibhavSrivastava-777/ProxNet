@@ -16,11 +16,13 @@ export function JobForm({ onPosted }: Props) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     const handleEdit = (e: any) => {
       const post = e.detail;
       setIsOpen(true);
+      setIsEditing(true);
       setType(post.type);
       setRole(post.role || "");
       setCompany(post.company || "");
@@ -51,8 +53,9 @@ export function JobForm({ onPosted }: Props) {
     setLoading(false);
     if (res.ok) {
       setIsSuccess(true);
-      setMessage(`Successfully posted as a ${type === "seeker" ? "Candidate" : "Referrer"}!`);
+      setMessage(`Successfully ${isEditing ? "updated" : "posted"} as a ${type === "seeker" ? "Candidate" : "Referrer"}!`);
       setIsOpen(false);
+      setIsEditing(false);
       onPosted();
     } else {
       setIsSuccess(false);
@@ -160,9 +163,20 @@ export function JobForm({ onPosted }: Props) {
               />
             </div>
 
-            <button type="submit" disabled={loading} className="btn btn-primary w-full mt-2">
-              {loading ? <span className="spinner-sm" /> : `Post as ${type === "seeker" ? "Seeker" : "Giver"}`}
-            </button>
+            {isEditing ? (
+              <div className="flex gap-3 mt-4">
+                <button type="submit" disabled={loading} className={`btn btn-primary flex-1 ${loading ? "opacity-50 cursor-not-allowed bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)] border-transparent hover:bg-[var(--color-surface-hover)]" : ""}`}>
+                  {loading ? <span className="spinner-sm" /> : "Update Post"}
+                </button>
+                <button type="button" onClick={() => { setIsOpen(false); setIsEditing(false); }} className="btn btn-secondary text-text-tertiary">
+                  Skip
+                </button>
+              </div>
+            ) : (
+              <button type="submit" disabled={loading} className="btn btn-primary w-full mt-2">
+                {loading ? <span className="spinner-sm" /> : `Post as ${type === "seeker" ? "Seeker" : "Giver"}`}
+              </button>
+            )}
           </form>
         </div>
       )}

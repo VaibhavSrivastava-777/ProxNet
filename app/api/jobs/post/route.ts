@@ -15,12 +15,11 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
 
-  // Expire existing active post of the same type
+  // Expire any existing active posts for this user to ensure only 1 active request exists
   await supabase
     .from("job_posts")
     .update({ status: "matched" })
     .eq("user_id", user.id)
-    .eq("type", type)
     .eq("status", "active");
 
   const { data, error } = await supabase

@@ -102,3 +102,36 @@ export async function upsertOAuthUser(params: {
   if (error) throw error;
   return data as User;
 }
+
+export async function ensureAdminUser() {
+  const supabase = createAdminClient();
+  const { data: existing } = await supabase
+    .from("users")
+    .select("*")
+    .eq("source", "admin")
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return existing as User;
+
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("users")
+    .insert({
+      linkedin_sub: "admin-system",
+      email: "admin@proxnet.in",
+      full_name: "ProxNet Admin",
+      job_title: "System Admin",
+      company: "ProxNet",
+      source: "admin",
+      active_location: "current",
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as User;
+}

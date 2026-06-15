@@ -17,7 +17,7 @@ export function CarpoolClient({ user }: { user: User }) {
         <button onClick={() => setShowForm(false)} className="btn btn-ghost btn-sm -ml-3">
           ← Back to Feed
         </button>
-        <CarpoolForm user={user} onPostCreated={() => setShowForm(false)} initialData={initialData} />
+        <CarpoolForm user={user} onPostCreated={() => setShowForm(false)} onCancel={() => setShowForm(false)} initialData={initialData} />
       </div>
     );
   }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { UserTable } from "@/components/admin/UserTable";
 import { AdminLogout } from "@/components/admin/AdminLogout";
 import { SupabaseSetupBanner } from "@/components/admin/SupabaseSetupBanner";
-import { AdminJobForm } from "@/components/admin/AdminJobForm";
+import { AdminJobTable } from "@/components/admin/AdminJobTable";
 import { AdminCarpoolForm } from "@/components/admin/AdminCarpoolForm";
 import { AdminCarpoolTable } from "@/components/admin/AdminCarpoolTable";
 
@@ -28,7 +28,7 @@ export default function AdminDashboardPage() {
       
       <UserTable />
 
-      <AdminJobForm />
+      <AdminJobTable />
 
       <AdminCarpoolForm />
 

@@ -7,6 +7,7 @@ import type { User } from "@/lib/types";
 
 interface Props {
   user?: User;
+  onSuccess?: () => void;
 }
 
 const emptyUser = {
@@ -24,7 +25,7 @@ const emptyUser = {
   is_active: true,
 };
 
-export function UserForm({ user }: Props) {
+export function UserForm({ user, onSuccess }: Props) {
   const router = useRouter();
   const [form, setForm] = useState(
     user
@@ -202,8 +203,12 @@ export function UserForm({ user }: Props) {
 
     setSaving(false);
     if (res.ok) {
-      router.push("/admin");
-      router.refresh();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        router.push("/admin");
+        router.refresh();
+      }
     } else {
       const data = await res.json();
       setError(data.error ?? "Failed to save user.");
@@ -467,15 +472,17 @@ export function UserForm({ user }: Props) {
         Active
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <div className="alert alert-error">{error}</div>}
 
-      <button
-        type="submit"
-        disabled={saving}
-        className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
-      >
-        {saving ? "Saving..." : user ? "Update user" : "Create user"}
-      </button>
+      <div className="flex justify-end gap-3 pt-4 border-t border-[var(--color-border-light)] mt-6">
+        <button
+          type="submit"
+          disabled={saving}
+          className="btn btn-primary"
+        >
+          {saving ? "Saving..." : user ? "Update user" : "Create user"}
+        </button>
+      </div>
     </form>
   );
 }

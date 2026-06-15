@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import { User } from "@/lib/types";
 import { getCurrentPosition } from "@/lib/geo/get-current-position";
@@ -8,15 +9,19 @@ import { getCurrentPosition } from "@/lib/geo/get-current-position";
 interface CarpoolFormProps {
   user: User;
   onPostCreated: () => void;
+  onCancel: () => void;
   initialData?: any;
 }
 
-export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormProps) {
+export function CarpoolForm({ user, onPostCreated, onCancel, initialData }: CarpoolFormProps) {
+  const router = useRouter();
   const [type, setType] = useState<"giver" | "seeker">(initialData?.type || "seeker");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   
-  // Default source to Home location if it exists, or initialData if provided
+  const [sourceType, setSourceType] = useState<"Home" | "Office" | "Others">("Home");
+  const [destType, setDestType] = useState<"Home" | "Office" | "Others">("Office");
+
   const [startName, setStartName] = useState(initialData?.start_name || user.home_name || "");
   const [startLat, setStartLat] = useState(initialData?.start_lat?.toString() || user.home_lat?.toString() || "");
   const [startLng, setStartLng] = useState(initialData?.start_lng?.toString() || user.home_lng?.toString() || "");
@@ -24,37 +29,139 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
   const [destName, setDestName] = useState(initialData?.dest_name || user.office_name || "");
   const [destLat, setDestLat] = useState(initialData?.dest_lat?.toString() || user.office_lat?.toString() || "");
   const [destLng, setDestLng] = useState(initialData?.dest_lng?.toString() || user.office_lng?.toString() || "");
-  
-  useEffect(() => {
-    if (!initialData && !startLat) {
-      getCurrentPosition()
-        .then((pos) => {
-          setStartLat(pos.lat.toString());
-          setStartLng(pos.lng.toString());
-          // If no office location is set, also set destination to current position
-          if (!destLat) {
-            setDestLat(pos.lat.toString());
-            setDestLng(pos.lng.toString());
-          }
-        })
-        .catch(() => {
-          // ignore error, just don't set default
-        });
-    }
-  }, [initialData, startLat, destLat]);
 
-  const [date, setDate] = useState(initialData?.date || "");
+  const [fetchingSource, setFetchingSource] = useState(false);
+  const [fetchingDest, setFetchingDest] = useState(false);
+  
+  const dateStr = initialData?.date || new Date().toISOString().split('T')[0];
+  const [date, setDate] = useState(dateStr);
   const [isRecurring, setIsRecurring] = useState(initialData?.is_recurring || false);
-  const [recurringDays, setRecurringDays] = useState<number[]>(initialData?.recurring_days || [1, 2, 3, 4, 5]); // Default Mon-Fri
-  const [timeStart, setTimeStart] = useState(initialData?.time_start?.slice(0,5) || "");
-  const [timeEnd, setTimeEnd] = useState(initialData?.time_end?.slice(0,5) || "");
+  const [recurringDays, setRecurringDays] = useState<number[]>(initialData?.recurring_days || [1, 2, 3, 4, 5]);
+  const [timeStart, setTimeStart] = useState(initialData?.time_start?.slice(0,5) || "08:00");
+  const [timeEnd, setTimeEnd] = useState(initialData?.time_end?.slice(0,5) || "08:30");
   const [seatsStr, setSeatsStr] = useState(initialData?.seats?.toString() || "1");
+
+  const [history, setHistory] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/carpool/history')
+      .then(res => res.json())
+      .then(data => {
+        if (data.posts) setHistory(data.posts);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (timeStart && !initialData) {
+      const [h, m] = timeStart.split(':').map(Number);
+      const dateObj = new Date();
+      dateObj.setHours(h, m + 30, 0);
+      const newH = dateObj.getHours().toString().padStart(2, '0');
+      const newM = dateObj.getMinutes().toString().padStart(2, '0');
+      setTimeEnd(`${newH}:${newM}`);
+    }
+  }, [timeStart]);
+
+  useEffect(() => {
+    if (sourceType === "Home") {
+      if (!user.home_lat || !user.home_lng) {
+        alert("Please update your Home location in your profile first.");
+        router.push("/profile");
+        return;
+      }
+      setStartName(user.home_name || "Home");
+      setStartLat(user.home_lat.toString());
+      setStartLng(user.home_lng.toString());
+    } else if (sourceType === "Office") {
+      if (!user.office_lat || !user.office_lng) {
+        alert("Please update your Office location in your profile first.");
+        router.push("/profile");
+        return;
+      }
+      setStartName(user.office_name || "Office");
+      setStartLat(user.office_lat.toString());
+      setStartLng(user.office_lng.toString());
+    }
+  }, [sourceType, user, router]);
+
+  useEffect(() => {
+    if (destType === "Home") {
+      if (!user.home_lat || !user.home_lng) {
+        alert("Please update your Home location in your profile first.");
+        router.push("/profile");
+        return;
+      }
+      setDestName(user.home_name || "Home");
+      setDestLat(user.home_lat.toString());
+      setDestLng(user.home_lng.toString());
+    } else if (destType === "Office") {
+      if (!user.office_lat || !user.office_lng) {
+        alert("Please update your Office location in your profile first.");
+        router.push("/profile");
+        return;
+      }
+      setDestName(user.office_name || "Office");
+      setDestLat(user.office_lat.toString());
+      setDestLng(user.office_lng.toString());
+    }
+  }, [destType, user, router]);
 
   const toggleDay = (dayIndex: number) => {
     if (recurringDays.includes(dayIndex)) {
       setRecurringDays(recurringDays.filter(d => d !== dayIndex));
     } else {
       setRecurringDays([...recurringDays, dayIndex].sort());
+    }
+  };
+
+  const fillHistory = (post: any) => {
+    setType(post.type);
+    setStartName(post.start_name);
+    setStartLat(post.start_lat.toString());
+    setStartLng(post.start_lng.toString());
+    setDestName(post.dest_name);
+    setDestLat(post.dest_lat.toString());
+    setDestLng(post.dest_lng.toString());
+    setSourceType("Others");
+    setDestType("Others");
+    setIsRecurring(post.is_recurring);
+    if (!post.is_recurring && post.date) {
+      // Don't fill history date if it is in the past
+      if (post.date >= new Date().toISOString().split('T')[0]) {
+        setDate(post.date);
+      }
+    }
+    else if (post.recurring_days) setRecurringDays(post.recurring_days);
+    setTimeStart(post.time_start.slice(0,5));
+    setTimeEnd(post.time_end.slice(0,5));
+    setSeatsStr(post.seats.toString());
+  };
+
+  const fetchGeocode = async (query: string, isSource: boolean) => {
+    if (!query) return;
+    if (isSource) setFetchingSource(true);
+    else setFetchingDest(true);
+
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
+      const data = await res.json();
+      if (data && data.length > 0) {
+        if (isSource) {
+          setStartLat(data[0].lat);
+          setStartLng(data[0].lon);
+        } else {
+          setDestLat(data[0].lat);
+          setDestLng(data[0].lon);
+        }
+      } else {
+        alert("Could not find coordinates for this location.");
+      }
+    } catch (e) {
+      alert("Error fetching location data.");
+    } finally {
+      if (isSource) setFetchingSource(false);
+      else setFetchingDest(false);
     }
   };
 
@@ -69,7 +176,7 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
         const data = await res.json();
         throw new Error(data.error || "Failed to cancel route");
       }
-      onPostCreated(); // trigger a refresh and return to feed
+      onPostCreated(); 
     } catch (err: any) {
       setError(err.message);
       setLoading(false);
@@ -91,7 +198,6 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
       return;
     }
 
-    // Distance check
     const { haversineDistanceMeters } = await import("@/lib/geo/haversine");
     const dist = haversineDistanceMeters(parseFloat(startLat), parseFloat(startLng), parseFloat(destLat), parseFloat(destLng));
     if (dist < 500) {
@@ -135,13 +241,43 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
   }
 
   return (
-    <div className="card max-w-2xl mx-auto p-6 md:p-8 animate-scaleIn">
+    <div className="card max-w-2xl mx-auto p-6 md:p-8 animate-scaleIn relative">
+      <button 
+        type="button"
+        onClick={onCancel}
+        className="btn btn-ghost btn-sm absolute top-4 right-4 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] z-10 sticky-back-btn"
+        style={{ position: 'sticky', float: 'right', top: '1rem' }}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        Back to Feed
+      </button>
+
       <h2 className="text-h2 mb-4">
         {initialData ? "Edit Carpool Route" : "Create a Carpool Route"}
       </h2>
-      <p className="text-body-sm text-[var(--color-text-secondary)] mb-8">
+      <p className="text-body-sm text-[var(--color-text-secondary)] mb-6">
         Set up your route to {type === "giver" ? "offer" : "request"} rides.
       </p>
+
+      {history.length > 0 && !initialData && (
+        <div className="mb-6">
+          <span className="text-caption text-[var(--color-text-tertiary)] block mb-2">Quick Fill from Recent:</span>
+          <div className="flex gap-2 flex-wrap">
+            {history.map((post) => (
+              <button 
+                type="button"
+                key={post.id} 
+                onClick={() => fillHistory(post)}
+                className="badge bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] hover:border-[var(--color-primary)] transition-colors cursor-pointer text-xs py-1"
+              >
+                {post.start_name} → {post.dest_name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       
       <div className="flex gap-2 mb-6">
         <button
@@ -176,39 +312,64 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
         )}
 
         <div className="space-y-6">
-          <div className="space-y-2 p-4 bg-[var(--color-surface-hover)] rounded-lg border border-[var(--color-border-light)]">
-            <label className="flex flex-col gap-1">
-              <span className="label">Source Name</span>
-              <input 
-                type="text" 
-                className="input" 
-                value={startName} 
-                onChange={e => setStartName(e.target.value)} 
-                placeholder="e.g. L&T South City" 
-                required 
-              />
-            </label>
-            <LocationPicker
-              legend="Source Map Pin"
-              lat={startLat}
-              lng={startLng}
-              onChange={(lat, lng) => {
-                setStartLat(lat);
-                setStartLng(lng);
-              }}
-            />
+          <div className="space-y-4 p-4 bg-[var(--color-surface-hover)] rounded-lg border border-[var(--color-border-light)]">
+            <div className="flex flex-col gap-1">
+              <span className="label">Source Location</span>
+              <select className="input" value={sourceType} onChange={e => setSourceType(e.target.value as any)}>
+                <option value="Home">Home</option>
+                <option value="Office">Office</option>
+                <option value="Others">Others</option>
+              </select>
+            </div>
+            {sourceType === "Others" && (
+              <>
+                <label className="flex flex-col gap-1">
+                  <span className="label">Source Name</span>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      className="input flex-1" 
+                      value={startName} 
+                      onChange={e => setStartName(e.target.value)} 
+                      placeholder="e.g. L&T South City" 
+                      required 
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => fetchGeocode(startName, true)}
+                      disabled={fetchingSource || !startName}
+                      className="btn btn-secondary whitespace-nowrap"
+                    >
+                      {fetchingSource ? "Fetching..." : "Fetch"}
+                    </button>
+                  </div>
+                </label>
+                <LocationPicker
+                  legend="Source Map Pin"
+                  lat={startLat}
+                  lng={startLng}
+                  onChange={(lat, lng) => {
+                    setStartLat(lat);
+                    setStartLng(lng);
+                  }}
+                />
+              </>
+            )}
           </div>
 
-          <div className="flex justify-center -my-3 relative z-10">
+          <div className="flex justify-center -my-3 relative z-20">
             <button
               type="button"
               onClick={() => {
+                const tempType = sourceType;
                 const tempName = startName;
                 const tempLat = startLat;
                 const tempLng = startLng;
+                setSourceType(destType);
                 setStartName(destName);
                 setStartLat(destLat);
                 setStartLng(destLng);
+                setDestType(tempType);
                 setDestName(tempName);
                 setDestLat(tempLat);
                 setDestLng(tempLng);
@@ -222,27 +383,49 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
             </button>
           </div>
 
-          <div className="space-y-2 p-4 bg-[var(--color-surface-hover)] rounded-lg border border-[var(--color-border-light)]">
-            <label className="flex flex-col gap-1">
-              <span className="label">Destination Name</span>
-              <input 
-                type="text" 
-                className="input" 
-                value={destName} 
-                onChange={e => setDestName(e.target.value)} 
-                placeholder="e.g. Manyata Tech Park" 
-                required 
-              />
-            </label>
-            <LocationPicker
-              legend="Destination Map Pin"
-              lat={destLat}
-              lng={destLng}
-              onChange={(lat, lng) => {
-                setDestLat(lat);
-                setDestLng(lng);
-              }}
-            />
+          <div className="space-y-4 p-4 bg-[var(--color-surface-hover)] rounded-lg border border-[var(--color-border-light)]">
+             <div className="flex flex-col gap-1">
+              <span className="label">Destination Location</span>
+              <select className="input" value={destType} onChange={e => setDestType(e.target.value as any)}>
+                <option value="Home">Home</option>
+                <option value="Office">Office</option>
+                <option value="Others">Others</option>
+              </select>
+            </div>
+            {destType === "Others" && (
+              <>
+                <label className="flex flex-col gap-1">
+                  <span className="label">Destination Name</span>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      className="input flex-1" 
+                      value={destName} 
+                      onChange={e => setDestName(e.target.value)} 
+                      placeholder="e.g. Manyata Tech Park" 
+                      required 
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => fetchGeocode(destName, false)}
+                      disabled={fetchingDest || !destName}
+                      className="btn btn-secondary whitespace-nowrap"
+                    >
+                      {fetchingDest ? "Fetching..." : "Fetch"}
+                    </button>
+                  </div>
+                </label>
+                <LocationPicker
+                  legend="Destination Map Pin"
+                  lat={destLat}
+                  lng={destLng}
+                  onChange={(lat, lng) => {
+                    setDestLat(lat);
+                    setDestLng(lng);
+                  }}
+                />
+              </>
+            )}
           </div>
         </div>
 
@@ -345,23 +528,28 @@ export function CarpoolForm({ user, onPostCreated, initialData }: CarpoolFormPro
           </label>
         </div>
 
+        <div className="p-4 bg-[var(--color-primary-light)]/10 border border-[var(--color-primary-light)] rounded-lg text-sm text-[var(--color-text-secondary)]">
+          <strong>Summary: </strong>
+          {type === "giver" ? "Offering" : "Seeking"} {seatsStr} seat{parseInt(seatsStr)>1?'s':''} for travel from <em>{sourceType === "Others" ? startName : sourceType}</em> to <em>{destType === "Others" ? destName : destType}</em>, on {isRecurring ? "recurring days" : date}. Will wait between {timeStart} and {timeEnd}.
+        </div>
+
         <div className="flex gap-4">
           {initialData && (
             <button 
               type="button" 
-              onClick={handleCancel}
+              onClick={() => onCancel()}
               disabled={loading}
-              className="btn w-full btn-lg btn-ghost border border-[var(--color-border)] text-[var(--color-error)]"
+              className="btn w-full btn-lg btn-ghost border border-[var(--color-border)] text-[var(--color-text-secondary)]"
             >
-              {loading ? "Canceling..." : "Cancel Route"}
+              Skip
             </button>
           )}
           <button 
             type="submit" 
             disabled={loading}
-            className={`btn w-full btn-lg ${type === "giver" ? "btn-accent" : "btn-primary"}`}
+            className={`btn w-full btn-lg ${type === "giver" ? "btn-accent" : "btn-primary"} disabled:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            {loading ? "Posting..." : (initialData ? "Update Route" : `Post as ${type === "giver" ? "Giver" : "Seeker"}`)}
+            {loading ? "Updating..." : (initialData ? "Update Route" : `Post as ${type === "giver" ? "Giver" : "Seeker"}`)}
           </button>
         </div>
       </form>

@@ -4,10 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "@/lib/types";
 
+import { UserForm } from "./UserForm";
+
 export function UserTable() {
   const [users, setUsers] = useState<User[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | undefined>(undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,6 +36,21 @@ export function UserTable() {
     load();
   }
 
+  const openAddModal = () => {
+    setEditingUser(undefined);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (user: User) => {
+    setEditingUser(user);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    load(); // Refresh list after close
+  };
+
   return (
     <div className="card" style={{ padding: "24px" }}>
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -45,15 +66,15 @@ export function UserTable() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <Link
-          href="/admin/users/new"
+        <button
+          onClick={openAddModal}
           className="btn btn-primary btn-sm shadow-sm"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 mr-1">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
           Add user
-        </Link>
+        </button>
       </div>
 
       {loading ? (
@@ -107,9 +128,9 @@ export function UserTable() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link href={`/admin/users/${u.id}`} className="btn btn-ghost btn-sm px-2 text-[var(--color-primary)]">
+                      <button onClick={() => openEditModal(u)} className="btn btn-ghost btn-sm px-2 text-[var(--color-primary)]">
                         Edit
-                      </Link>
+                      </button>
                       <button
                         type="button"
                         onClick={() => removeUser(u.id)}
@@ -123,6 +144,24 @@ export function UserTable() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scaleIn">
+            <div className="flex justify-between items-center p-6 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] shrink-0">
+              <h3 className="text-h2 m-0">{editingUser ? "Edit User" : "Add User"}</h3>
+              <button onClick={closeModal} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              <UserForm user={editingUser} onSuccess={closeModal} />
+            </div>
+          </div>
         </div>
       )}
     </div>

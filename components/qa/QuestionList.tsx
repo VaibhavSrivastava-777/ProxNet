@@ -106,12 +106,23 @@ export function QuestionList({ refreshKey }: Props) {
 
   if (unified.length === 0) {
     return (
-      <div style={{ textAlign: "center", padding: "3rem 1rem" }} className="animate-fadeIn card">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-text-tertiary)", margin: "0 auto 1rem" }}>
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-        <p className="text-body" style={{ color: "var(--color-text-secondary)" }}>No messages yet.</p>
-        <p className="text-caption" style={{ marginTop: "0.25rem" }}>Your questions and incoming requests will appear here.</p>
+      <div style={{ textAlign: "center", padding: "4rem 1rem" }} className="animate-fadeIn card flex flex-col items-center justify-center">
+        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4 text-primary">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path d="M8 10h.01M12 10h.01M16 10h.01" />
+          </svg>
+        </div>
+        <h3 className="text-h3 mb-2">No messages yet</h3>
+        <p className="text-body-sm text-text-secondary mb-6 max-w-sm">
+          Your questions and incoming requests will appear here once you start connecting.
+        </p>
+        <button 
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="btn btn-primary"
+        >
+          Ask your first question
+        </button>
       </div>
     );
   }
@@ -144,10 +155,13 @@ export function QuestionList({ refreshKey }: Props) {
                     {formatRelative(q.latest_activity_at)}
                   </span>
                 </div>
-                <div className="flex justify-between items-center gap-2">
-                  <p className="text-body-sm truncate text-[var(--color-text-secondary)]">
+                <div className="flex justify-between items-start gap-2 relative mt-1">
+                  <div 
+                    className="text-body-sm text-[var(--color-text-secondary)] line-clamp-2 pr-4 relative flex-1"
+                    style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)', maskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)' }}
+                  >
                     {previewText}
-                  </p>
+                  </div>
                   {isUnread && (
                     <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-primary)] flex-shrink-0" />
                   )}
@@ -181,10 +195,13 @@ export function QuestionList({ refreshKey }: Props) {
                     {formatRelative(q.latest_activity_at)}
                   </span>
                 </div>
-                <div className="flex justify-between items-center gap-2">
-                  <p className="text-body-sm truncate" style={{ color: isUnread && !hasResponse ? "var(--color-text)" : "var(--color-text-secondary)", fontWeight: isUnread && !hasResponse ? 600 : 400 }}>
+                <div className="flex justify-between items-start gap-2 mt-1">
+                  <div 
+                    className={`text-body-sm line-clamp-2 pr-4 relative flex-1 ${isUnread && !hasResponse ? "text-[var(--color-text)] font-semibold" : "text-[var(--color-text-secondary)] font-normal"}`}
+                    style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)', maskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)' }}
+                  >
                     {previewText}
-                  </p>
+                  </div>
                   {isUnread && !hasResponse && (
                     <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-error)] flex-shrink-0" />
                   )}
