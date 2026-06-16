@@ -24,7 +24,19 @@ export async function GET(request: Request) {
 
   if (activeError) return NextResponse.json({ error: activeError.message }, { status: 500 });
   
-  const myPost = activePosts && activePosts.length > 0 ? activePosts[0] : null;
+  let myPost = activePosts && activePosts.length > 0 ? activePosts[0] : null;
+
+  const nowMs = Date.now();
+  const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+
+  // Auto-expire myPost if it's older than 1 month
+  if (myPost) {
+    const createdTime = new Date(myPost.created_at).getTime();
+    if (nowMs - createdTime > ONE_MONTH_MS) {
+      await supabase.from("job_posts").update({ status: "expired" }).eq("id", myPost.id);
+      myPost = null;
+    }
+  }
 
   if (myPost) {
     await supabase.from("job_posts").update({ last_checked_matches_at: new Date().toISOString() }).eq("id", myPost.id);
@@ -49,8 +61,24 @@ export async function GET(request: Request) {
     query = query.eq("type", targetType);
   }
 
-  const { data: candidates, error: candError } = await query;
+  const { data: rawCandidates, error: candError } = await query;
   if (candError) return NextResponse.json({ error: candError.message }, { status: 500 });
+
+  let candidates = rawCandidates || [];
+  const expiredCandidateIds: string[] = [];
+
+  candidates = candidates.filter((cand: any) => {
+    const createdTime = new Date(cand.created_at).getTime();
+    if (nowMs - createdTime > ONE_MONTH_MS) {
+      expiredCandidateIds.push(cand.id);
+      return false;
+    }
+    return true;
+  });
+
+  if (expiredCandidateIds.length > 0) {
+    await supabase.from("job_posts").update({ status: "expired" }).in("id", expiredCandidateIds);
+  }
 
   // 3. Fetch current locations for these candidates to calculate distance
   const userIds = candidates ? Array.from(new Set(candidates.map((c: any) => c.user_id))) : [];

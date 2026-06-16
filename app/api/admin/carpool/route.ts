@@ -45,6 +45,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("carpool_posts")
     .select("*, user:users(full_name, email)")
+    .in("status", ["active", "matched"])
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

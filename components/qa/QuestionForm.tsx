@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { LocationPicker } from "@/components/map/LocationPicker";
 
 interface Props {
   defaultLat?: number;
@@ -206,21 +207,37 @@ export function QuestionForm({
           ))}
         </div>
         {locationType === "Others" && (
-          <div className="flex gap-2">
-            <input 
-              className="input flex-1" 
-              placeholder="Enter location e.g. Indiranagar, Bangalore" 
-              value={locationName} 
-              onChange={e => setLocationName(e.target.value)} 
-            />
-            <button 
-              type="button" 
-              className="btn btn-secondary shrink-0" 
-              onClick={fetchGeocode} 
-              disabled={fetchingLocation || !locationName}
-            >
-              {fetchingLocation ? "..." : "Fetch"}
-            </button>
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <input 
+                className="input flex-1" 
+                placeholder="Enter location e.g. Indiranagar, Bangalore" 
+                value={locationName} 
+                onChange={e => setLocationName(e.target.value)} 
+              />
+              <button 
+                type="button" 
+                className="btn btn-secondary shrink-0" 
+                onClick={fetchGeocode} 
+                disabled={fetchingLocation || !locationName}
+              >
+                {fetchingLocation ? "..." : "Fetch"}
+              </button>
+            </div>
+            {lat && lng && (
+              <LocationPicker
+                legend="Custom Location Pin"
+                lat={lat}
+                lng={lng}
+                onChange={(newLat, newLng) => {
+                  setLat(newLat);
+                  setLng(newLng);
+                }}
+                radius={radius}
+                clusters={clusters}
+                onCompanyClick={(company) => setCompanyFilter(company)}
+              />
+            )}
           </div>
         )}
       </div>
