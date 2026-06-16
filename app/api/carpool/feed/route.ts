@@ -51,8 +51,8 @@ export async function GET(request: Request) {
 
   // Auto-expire myPost if it's past time_end + 1 hour and not recurring
   if (myPost && !myPost.is_recurring) {
-    // Assuming local time for date parsing (YYYY-MM-DDTHH:MM:SS)
-    const endDateTime = new Date(`${myPost.date}T${myPost.time_end}`);
+    const timeEndStr = myPost.time_end.length === 5 ? myPost.time_end + ":00" : myPost.time_end;
+    const endDateTime = new Date(`${myPost.date}T${timeEndStr}+05:30`);
     if (nowMs > endDateTime.getTime() + ONE_HOUR_MS) {
       await supabase.from("carpool_posts").update({ status: "expired" }).eq("id", myPost.id);
       myPost = null;
@@ -89,7 +89,8 @@ export async function GET(request: Request) {
 
   candidates = candidates.filter((cand: any) => {
     if (cand.is_recurring) return true;
-    const endDateTime = new Date(`${cand.date}T${cand.time_end}`);
+    const timeEndStr = cand.time_end.length === 5 ? cand.time_end + ":00" : cand.time_end;
+    const endDateTime = new Date(`${cand.date}T${timeEndStr}+05:30`);
     if (nowMs > endDateTime.getTime() + ONE_HOUR_MS) {
       expiredCandidateIds.push(cand.id);
       return false;

@@ -28,7 +28,7 @@ export function ProximityMap() {
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [radius, setRadius] = useState(5000);
   const [localError, setLocalError] = useState("");
-  const [locationMode, setLocationMode] = useState<"home" | "office" | "current">("current");
+  const [locationMode, setLocationMode] = useState<"home" | "office" | "current">("home");
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { LocationPicker } from "@/components/map/LocationPicker";
+import { useRouter } from "next/navigation";
 
 interface Props {
   defaultLat?: number;
@@ -18,6 +18,7 @@ export function QuestionForm({
   fixedCompany,
   onPosted,
 }: Props) {
+  const router = useRouter();
   const [body, setBody] = useState("");
   const [companyFilter, setCompanyFilter] = useState(fixedCompany || "");
   const [titleFilter, setTitleFilter] = useState("");
@@ -32,6 +33,58 @@ export function QuestionForm({
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [clusters, setClusters] = useState<any[]>([]);
+
+  const [locationType, setLocationType] = useState<"Home" | "Office" | "Others">("Home");
+  const [locationName, setLocationName] = useState("");
+  const [fetchingLocation, setFetchingLocation] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    fetch("/api/profile")
+      .then(res => res.json())
+      .then(data => setUser(data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    if (locationType === "Home") {
+      if (!user.home_lat || !user.home_lng) {
+        alert("Please update your Home location in your profile first.");
+        router.push("/profile");
+        return;
+      }
+      setLat(user.home_lat.toString());
+      setLng(user.home_lng.toString());
+    } else if (locationType === "Office") {
+      if (!user.office_lat || !user.office_lng) {
+        alert("Please update your Office location in your profile first.");
+        router.push("/profile");
+        return;
+      }
+      setLat(user.office_lat.toString());
+      setLng(user.office_lng.toString());
+    }
+  }, [locationType, user, router]);
+
+  const fetchGeocode = async () => {
+    if (!locationName) return;
+    setFetchingLocation(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationName)}&limit=1`);
+      const data = await res.json();
+      if (data && data.length > 0) {
+        setLat(data[0].lat);
+        setLng(data[0].lon);
+      } else {
+        alert("Could not find coordinates for this location.");
+      }
+    } catch (e) {
+      alert("Error fetching location data.");
+    } finally {
+      setFetchingLocation(false);
+    }
+  };
 
   useEffect(() => {
     if (!fixedCompany) {
@@ -139,19 +192,37 @@ export function QuestionForm({
       />
 
       <div style={{ marginBottom: "1rem" }}>
-        <LocationPicker
-          legend="Question Center Location"
-          lat={lat}
-          lng={lng}
-          onChange={(newLat, newLng) => {
-            setLat(newLat);
-            setLng(newLng);
-          }}
-          autoCapture={true}
-          radius={radius}
-          clusters={clusters}
-          onCompanyClick={(company) => setCompanyFilter(company)}
-        />
+        <label className="label">Question Center Location</label>
+        <div className="flex gap-2 mb-2">
+          {["Home", "Office", "Others"].map(t => (
+            <button
+              key={t}
+              type="button"
+              className={`btn ${locationType === t ? 'btn-primary' : 'btn-ghost border border-[var(--color-border)]'} btn-sm`}
+              onClick={() => setLocationType(t as any)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        {locationType === "Others" && (
+          <div className="flex gap-2">
+            <input 
+              className="input flex-1" 
+              placeholder="Enter location e.g. Indiranagar, Bangalore" 
+              value={locationName} 
+              onChange={e => setLocationName(e.target.value)} 
+            />
+            <button 
+              type="button" 
+              className="btn btn-secondary shrink-0" 
+              onClick={fetchGeocode} 
+              disabled={fetchingLocation || !locationName}
+            >
+              {fetchingLocation ? "..." : "Fetch"}
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ marginBottom: "1.25rem" }}>

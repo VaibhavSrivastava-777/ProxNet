@@ -154,6 +154,8 @@ export function ProfileForm({ initialUser }: Props) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState(false);
+  const [fetchingHome, setFetchingHome] = useState(false);
+  const [fetchingOffice, setFetchingOffice] = useState(false);
 
   const visibility = user.visibility as UserVisibility;
 
@@ -201,6 +203,31 @@ export function ProfileForm({ initialUser }: Props) {
   }
 
   const needsCompletion = !user.company || !user.job_title || (!user.home_lat && !user.office_lat);
+
+  const fetchGeocode = async (query: string, isHome: boolean) => {
+    if (!query) return;
+    if (isHome) setFetchingHome(true);
+    else setFetchingOffice(true);
+
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`);
+      const data = await res.json();
+      if (data && data.length > 0) {
+        if (isHome) {
+          setUser({ ...user, home_lat: Number(data[0].lat), home_lng: Number(data[0].lon) });
+        } else {
+          setUser({ ...user, office_lat: Number(data[0].lat), office_lng: Number(data[0].lon) });
+        }
+      } else {
+        alert("Could not find coordinates for this location.");
+      }
+    } catch (e) {
+      alert("Error fetching location data.");
+    } finally {
+      if (isHome) setFetchingHome(false);
+      else setFetchingOffice(false);
+    }
+  };
 
   /* Initials helper */
   const initials = user.full_name
@@ -492,17 +519,28 @@ export function ProfileForm({ initialUser }: Props) {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
               <label className="label">Home Name</label>
-              <input
-                className="input"
-                value={user.home_name ?? ""}
-                placeholder="e.g. My Apartment, L&T South City"
-                onChange={(e) => setUser({ ...user, home_name: e.target.value })}
-              />
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  className="input flex-1"
+                  value={user.home_name ?? ""}
+                  placeholder="e.g. My Apartment, L&T South City"
+                  onChange={(e) => setUser({ ...user, home_name: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary shrink-0"
+                  disabled={!user.home_name || fetchingHome}
+                  onClick={() => fetchGeocode(user.home_name!, true)}
+                >
+                  {fetchingHome ? "..." : "Fetch"}
+                </button>
+              </div>
             </div>
             <LocationPicker
               legend="Home location Pin"
               lat={user.home_lat?.toString() ?? ""}
               lng={user.home_lng?.toString() ?? ""}
+              defaultShowMap={false}
               onChange={(home_lat, home_lng) =>
                 setUser({
                   ...user,
@@ -516,17 +554,28 @@ export function ProfileForm({ initialUser }: Props) {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
               <label className="label">Office Name</label>
-              <input
-                className="input"
-                value={user.office_name ?? ""}
-                placeholder="e.g. Manyata Tech Park"
-                onChange={(e) => setUser({ ...user, office_name: e.target.value })}
-              />
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  className="input flex-1"
+                  value={user.office_name ?? ""}
+                  placeholder="e.g. Manyata Tech Park"
+                  onChange={(e) => setUser({ ...user, office_name: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary shrink-0"
+                  disabled={!user.office_name || fetchingOffice}
+                  onClick={() => fetchGeocode(user.office_name!, false)}
+                >
+                  {fetchingOffice ? "..." : "Fetch"}
+                </button>
+              </div>
             </div>
             <LocationPicker
               legend="Office location Pin"
               lat={user.office_lat?.toString() ?? ""}
               lng={user.office_lng?.toString() ?? ""}
+              defaultShowMap={false}
               onChange={(office_lat, office_lng) =>
                 setUser({
                   ...user,

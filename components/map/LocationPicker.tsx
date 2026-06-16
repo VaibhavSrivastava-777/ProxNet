@@ -23,6 +23,7 @@ interface Props {
   onChange: (lat: string, lng: string) => void;
   /** Auto-request browser location on mount when coordinates are empty */
   autoCapture?: boolean;
+  defaultShowMap?: boolean;
   radius?: number;
   clusters?: any[];
   onCompanyClick?: (company: string) => void;
@@ -34,13 +35,14 @@ export function LocationPicker({
   lng,
   onChange,
   autoCapture = false,
+  defaultShowMap,
   radius,
   clusters,
   onCompanyClick,
 }: Props) {
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState("");
-  const [showMap, setShowMap] = useState(Boolean(lat && lng));
+  const [showMap, setShowMap] = useState(defaultShowMap !== undefined ? defaultShowMap : Boolean(lat && lng));
 
   const captureCurrent = useCallback(async () => {
     setGeoLoading(true);
