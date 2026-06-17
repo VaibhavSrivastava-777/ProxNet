@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { CarpoolForm } from "@/components/carpool/CarpoolForm";
 
 export function AdminCarpoolTable() {
   const [posts, setPosts] = useState<any[]>([]);
@@ -8,20 +9,7 @@ export function AdminCarpoolTable() {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-
-  // Form State
-  const [editId, setEditId] = useState<string | null>(null);
-  const [type, setType] = useState<"giver" | "seeker">("giver");
-  const [seats, setSeats] = useState("1");
-  const [startName, setStartName] = useState("");
-  const [destName, setDestName] = useState("");
-  const [date, setDate] = useState("");
-  const [timeStart, setTimeStart] = useState("");
-  const [timeEnd, setTimeEnd] = useState("");
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [status, setStatus] = useState("active");
+  const [editPost, setEditPost] = useState<any>(null);
 
   const fetchPosts = () => {
     setLoading(true);
@@ -42,17 +30,7 @@ export function AdminCarpoolTable() {
   }, []);
 
   const openEditModal = (post: any) => {
-    setEditId(post.id);
-    setType(post.type);
-    setSeats(post.seats?.toString() || "1");
-    setStartName(post.start_name || "");
-    setDestName(post.dest_name || "");
-    setDate(post.date ? new Date(post.date).toISOString().split('T')[0] : "");
-    setTimeStart(post.time_start || "");
-    setTimeEnd(post.time_end || "");
-    setIsRecurring(!!post.is_recurring);
-    setStatus(post.status || "active");
-    setErrorMsg("");
+    setEditPost(post);
     setIsModalOpen(true);
   };
 
@@ -68,44 +46,6 @@ export function AdminCarpoolTable() {
     } catch (e) {
       console.error(e);
       alert("Error deleting post");
-    }
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
-    setErrorMsg("");
-
-    try {
-      const res = await fetch("/api/admin/carpool", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editId,
-          type,
-          seats,
-          start_name: startName,
-          dest_name: destName,
-          date,
-          time_start: timeStart,
-          time_end: timeEnd,
-          is_recurring: isRecurring,
-          status
-        }),
-      });
-
-      if (res.ok) {
-        setIsModalOpen(false);
-        fetchPosts();
-      } else {
-        const data = await res.json();
-        setErrorMsg(data.error || "Failed to save post");
-      }
-    } catch (e) {
-      console.error(e);
-      setErrorMsg("Error saving post");
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -172,87 +112,29 @@ export function AdminCarpoolTable() {
       </table>
 
       {/* Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scaleIn">
-            <div className="flex justify-between items-center p-6 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] shrink-0">
-              <h3 className="text-h2 m-0">Edit Carpool Post</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto flex-1">
-              {errorMsg && <div className="alert alert-error mb-6">{errorMsg}</div>}
-              
-              <form id="carpoolForm" onSubmit={handleSave} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Post Type</label>
-                    <select className="input w-full" value={type} onChange={(e) => setType(e.target.value as "giver" | "seeker")}>
-                      <option value="giver">Giver (Referrer)</option>
-                      <option value="seeker">Seeker (Candidate)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Status</label>
-                    <select className="input w-full" value={status} onChange={e => setStatus(e.target.value)}>
-                      <option value="active">Active</option>
-                      <option value="matched">Matched (Inactive)</option>
-                      <option value="completed">Completed</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Source Name</label>
-                    <input required className="input w-full" value={startName} onChange={e => setStartName(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="label">Destination Name</label>
-                    <input required className="input w-full" value={destName} onChange={e => setDestName(e.target.value)} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="label">Seats</label>
-                    <input required type="number" min="1" className="input w-full" value={seats} onChange={e => setSeats(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="label">Date</label>
-                    <input type="date" className="input w-full" value={date} onChange={e => setDate(e.target.value)} disabled={isRecurring} />
-                  </div>
-                  <div className="flex items-center pt-8">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} className="accent-[var(--color-primary)] w-4 h-4 rounded" />
-                      Recurring?
-                    </label>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Start Time</label>
-                    <input required type="time" className="input w-full" value={timeStart} onChange={e => setTimeStart(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="label">End Time</label>
-                    <input required type="time" className="input w-full" value={timeEnd} onChange={e => setTimeEnd(e.target.value)} />
-                  </div>
-                </div>
-              </form>
-            </div>
-            
-            <div className="p-6 border-t border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] shrink-0 flex justify-end gap-3">
-              <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-secondary">
-                Cancel
-              </button>
-              <button type="submit" form="carpoolForm" disabled={isSaving} className="btn btn-primary">
-                {isSaving ? "Saving..." : "Save Post"}
-              </button>
-            </div>
+      {isModalOpen && editPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl bg-transparent my-8">
+            <CarpoolForm
+              user={editPost.user}
+              initialData={editPost}
+              isAdmin={true}
+              onSubmitOverride={async (data) => {
+                const res = await fetch("/api/admin/carpool", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ id: editPost.id, ...data }),
+                });
+                if (!res.ok) {
+                  const errData = await res.json();
+                  throw new Error(errData.error || "Failed to save post");
+                }
+                setIsModalOpen(false);
+                fetchPosts();
+              }}
+              onCancel={() => setIsModalOpen(false)}
+              onPostCreated={() => { setIsModalOpen(false); fetchPosts(); }}
+            />
           </div>
         </div>
       )}

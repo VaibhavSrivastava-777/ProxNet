@@ -44,7 +44,7 @@ export async function GET() {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("carpool_posts")
-    .select("*, user:users(full_name, email)")
+    .select("*, user:users(id, full_name, email, home_lat, home_lng, home_name, office_lat, office_lng, office_name)")
     .in("status", ["active", "matched"])
     .order("created_at", { ascending: false });
 
@@ -57,7 +57,7 @@ export async function PATCH(request: Request) {
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { id, type, seats, start_name, dest_name, date, time_start, time_end, is_recurring, status } = body;
+  const { id, type, seats, start_name, start_lat, start_lng, dest_name, dest_lat, dest_lng, date, time_start, time_end, is_recurring, recurring_days, status } = body;
 
   if (!id) return NextResponse.json({ error: "Missing ID" }, { status: 400 });
 
@@ -68,11 +68,16 @@ export async function PATCH(request: Request) {
       type,
       seats: parseInt(seats) || 1,
       start_name,
+      start_lat,
+      start_lng,
       dest_name,
+      dest_lat,
+      dest_lng,
       date,
       time_start,
       time_end,
       is_recurring: !!is_recurring,
+      recurring_days,
       status: status || "active"
     })
     .eq("id", id);

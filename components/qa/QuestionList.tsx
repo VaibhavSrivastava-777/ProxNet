@@ -133,8 +133,8 @@ export function QuestionList({ refreshKey }: Props) {
         if (item.type === "asked") {
           const q = item.data;
           const hasResponse = q.question_targets?.some((t: any) => t.status === "responded");
-          const avatarText = q.company_filter ? q.company_filter.slice(0, 2).toUpperCase() : "PR";
-          const title = q.company_filter ? `Professional @ ${q.company_filter}` : "Nearby Professional";
+          const avatarText = "PR";
+          const title = "Nearby Professional";
           const previewText = q.latest_message_body || "You: " + q.body;
           const isUnread = q.latest_message_body && q.latest_message_sender !== "asker"; // naive unread check
 

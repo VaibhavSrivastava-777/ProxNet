@@ -11,11 +11,14 @@ interface CarpoolFormProps {
   onPostCreated: () => void;
   onCancel: () => void;
   initialData?: any;
+  isAdmin?: boolean;
+  onSubmitOverride?: (data: any) => Promise<void>;
 }
 
-export function CarpoolForm({ user, onPostCreated, onCancel, initialData }: CarpoolFormProps) {
+export function CarpoolForm({ user, onPostCreated, onCancel, initialData, isAdmin, onSubmitOverride }: CarpoolFormProps) {
   const router = useRouter();
   const [type, setType] = useState<"giver" | "seeker">(initialData?.type || "seeker");
+  const [status, setStatus] = useState(initialData?.status || "active");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   
@@ -209,24 +212,32 @@ export function CarpoolForm({ user, onPostCreated, onCancel, initialData }: Carp
     setError("");
 
     try {
+      const payload = {
+        type,
+        start_name: startName,
+        start_lat: parseFloat(startLat),
+        start_lng: parseFloat(startLng),
+        dest_name: destName,
+        dest_lat: parseFloat(destLat),
+        dest_lng: parseFloat(destLng),
+        date: isRecurring ? null : date,
+        is_recurring: isRecurring,
+        recurring_days: isRecurring ? recurringDays : null,
+        time_start: timeStart,
+        time_end: timeEnd,
+        seats: parseInt(seatsStr, 10),
+        status,
+      };
+
+      if (onSubmitOverride) {
+        await onSubmitOverride(payload);
+        return;
+      }
+
       const res = await fetch("/api/carpool/post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type,
-          start_name: startName,
-          start_lat: parseFloat(startLat),
-          start_lng: parseFloat(startLng),
-          dest_name: destName,
-          dest_lat: parseFloat(destLat),
-          dest_lng: parseFloat(destLng),
-          date: isRecurring ? null : date,
-          is_recurring: isRecurring,
-          recurring_days: isRecurring ? recurringDays : null,
-          time_start: timeStart,
-          time_end: timeEnd,
-          seats: parseInt(seatsStr, 10),
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -303,6 +314,17 @@ export function CarpoolForm({ user, onPostCreated, onCancel, initialData }: Carp
           Giver (Offering a ride)
         </button>
       </div>
+
+      {isAdmin && (
+        <div className="flex flex-col gap-1 mb-6 p-4 bg-[var(--color-surface-hover)] rounded-lg border border-[var(--color-border-light)]">
+          <span className="label">Status (Admin Only)</span>
+          <select className="input" value={status} onChange={e => setStatus(e.target.value)}>
+            <option value="active">Active</option>
+            <option value="matched">Matched (Inactive)</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (

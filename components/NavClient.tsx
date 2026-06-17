@@ -62,6 +62,9 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   const desktopDropdownRef = useRef<HTMLDivElement>(null);
   const mobileDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Profile completion state
+  const [showProfileReminder, setShowProfileReminder] = useState(false);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -251,6 +254,59 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       fetchJobsNotifications();
     }, 30000);
     return () => clearInterval(interval);
+  }, [session]);
+
+  // Profile Completion & Geolocation
+  useEffect(() => {
+    if (!session) return;
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then(async (user) => {
+        if (!user || user.error) return;
+        
+        let hasHomeLocation = !!user.home_lat;
+        let isProfileComplete = !!(user.company && user.job_title && user.full_name && hasHomeLocation);
+
+        const dismissed = sessionStorage.getItem("dismissed_profile_reminder");
+
+        if (!hasHomeLocation) {
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+              const lat = pos.coords.latitude;
+              const lng = pos.coords.longitude;
+              try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                const data = await res.json();
+                let name = "Current Location";
+                if (data && data.address) {
+                  name = data.address.suburb || data.address.neighbourhood || data.address.city || data.address.town || data.address.village || data.address.county || "Current Location";
+                }
+                await fetch("/api/profile", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ home_lat: lat, home_lng: lng, home_name: name })
+                });
+                
+                if (user.company && user.job_title && user.full_name) {
+                  isProfileComplete = true;
+                }
+                if (!isProfileComplete && !dismissed) setShowProfileReminder(true);
+              } catch (e) {
+                console.error("Failed to reverse geocode and save location", e);
+                if (!isProfileComplete && !dismissed) setShowProfileReminder(true);
+              }
+            }, (err) => {
+              console.warn("Geolocation denied or failed", err);
+              if (!isProfileComplete && !dismissed) setShowProfileReminder(true);
+            });
+          } else {
+             if (!isProfileComplete && !dismissed) setShowProfileReminder(true);
+          }
+        } else {
+          if (!isProfileComplete && !dismissed) setShowProfileReminder(true);
+        }
+      })
+      .catch(() => {});
   }, [session]);
 
   // Realtime In-App Toasts Subscription
@@ -596,6 +652,26 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
           )}
         </div>
       </header>
+
+      {/* Profile Completion Reminder Banner */}
+      {showProfileReminder && (
+        <div className="bg-[var(--color-accent)] text-white px-4 py-3 text-sm flex items-center justify-between z-[1000] relative shadow-md">
+          <span className="font-medium">Complete your profile to unlock better proximity matches!</span>
+          <div className="flex gap-4 items-center shrink-0">
+            <Link href="/profile" className="font-bold underline hover:text-white/80 transition-colors">Complete Now</Link>
+            <button 
+              onClick={() => {
+                sessionStorage.setItem("dismissed_profile_reminder", "true");
+                setShowProfileReminder(false);
+              }}
+              className="text-white hover:text-white/80 transition-colors"
+              title="Dismiss for this session"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Bottom Tab Bar */}
       {session && (

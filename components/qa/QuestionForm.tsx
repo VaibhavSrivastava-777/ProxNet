@@ -291,6 +291,11 @@ export function QuestionForm({
               ))}
             </select>
           )}
+          {!companyFilter && !fixedCompany && (
+            <p className="text-caption text-[var(--color-text-secondary)] mt-1">
+              Select a company to target your question to relevant professionals.
+            </p>
+          )}
         </div>
         <div>
           <label className="label">Job Title Filter</label>
