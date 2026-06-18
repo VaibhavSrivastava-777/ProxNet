@@ -163,7 +163,11 @@ export function QuestionForm({
       const data = await res.json();
       setBody("");
       setIsSuccess(true);
-      setMessage(`Question sent to ${data.targetCount} professional(s).`);
+      if (data.targetCount > 0) {
+        setMessage(`Question sent to ${data.targetCount} targeted professional(s).`);
+      } else {
+        setMessage(`Question posted to the public Local Forum!`);
+      }
       onPosted?.();
     } else {
       setIsSuccess(false);
@@ -293,7 +297,7 @@ export function QuestionForm({
           )}
           {!companyFilter && !fixedCompany && (
             <p className="text-caption text-[var(--color-text-secondary)] mt-1">
-              Select a company to target your question to relevant professionals.
+              Leave blank to post to the public Local Forum, or select a company for targeted 1:1 routing.
             </p>
           )}
         </div>

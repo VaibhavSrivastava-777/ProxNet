@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "./ThemeProvider";
 import { signOutAction } from "@/app/actions";
 import { useEffect, useRef, useState } from "react";
@@ -26,6 +26,7 @@ function urlBase64ToUint8Array(base64String: string) {
 
 export function NavClient({ session, userName, userId }: NavClientProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { theme, resolved, setTheme } = useTheme();
 
   const isDark = resolved === "dark";
@@ -65,6 +66,12 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   // Profile completion state
   const [showProfileReminder, setShowProfileReminder] = useState(false);
 
+  // In-App Notification Center
+  const [inAppNotifications, setInAppNotifications] = useState<any[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [expandedNotifs, setExpandedNotifs] = useState<Record<string, boolean>>({});
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -79,18 +86,56 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       ) {
         setMobileMenuOpen(false);
       }
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(event.target as Node)
+      ) {
+        setNotificationsOpen(false);
+      }
     }
-    if (desktopMenuOpen || mobileMenuOpen) {
+    if (desktopMenuOpen || mobileMenuOpen || notificationsOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [desktopMenuOpen, mobileMenuOpen]);
+  }, [desktopMenuOpen, mobileMenuOpen, notificationsOpen]);
+
+  const fetchInAppNotifications = () => {
+    fetch("/api/notifications")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.notifications) setInAppNotifications(data.notifications);
+      })
+      .catch(() => {});
+  };
+
+  const handleNotificationClick = (id: string) => {
+    setNotificationsOpen(false);
+    // Optimistic update - set is_read to true
+    setInAppNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    
+    // Fire and forget the database update
+    fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id })
+    }).catch(e => console.error("Failed to mark notification as read", e));
+  };
 
   const triggerToast = (toast: { title: string; body: string; url: string }) => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, ...toast }]);
+
+    fetchInAppNotifications();
+
+    try {
+      const audio = document.getElementById('honk-audio') as HTMLAudioElement;
+      if (audio) {
+        audio.currentTime = 0;
+        audio.play().catch((e) => console.log('Audio play failed:', e));
+      }
+    } catch (e) {}
 
     // Auto-remove toast after 5 seconds
     setTimeout(() => {
@@ -214,6 +259,19 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     setShowPushPrompt(false);
   };
 
+  const handleMarkAllRead = async () => {
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}), // Empty body updates all for the user
+      });
+      setInAppNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    } catch (e) {
+      console.error("Failed to mark all as read", e);
+    }
+  };
+
   // Fetch initial incoming open count
   useEffect(() => {
     if (!session) return;
@@ -247,11 +305,13 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     
     fetchCarpoolNotifications();
     fetchJobsNotifications();
+    fetchInAppNotifications();
     
     // Poll every 30s as a fallback
     const interval = setInterval(() => {
       fetchCarpoolNotifications();
       fetchJobsNotifications();
+      fetchInAppNotifications();
     }, 30000);
     return () => clearInterval(interval);
   }, [session]);
@@ -427,15 +487,60 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       )
       .subscribe();
 
+    // Listen for new in-app notifications
+    const inAppChannel = supabase
+      .channel("in-app-notifications")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "in_app_notifications", filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const newNotif = payload.new as any;
+          triggerToast({
+            title: newNotif.title,
+            body: newNotif.body,
+            url: newNotif.url || "/",
+          });
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(targetChannel);
       supabase.removeChannel(messageChannel);
       supabase.removeChannel(carpoolMessageChannel);
+      supabase.removeChannel(inAppChannel);
     };
   }, [session, userId]);
 
+  // Unlock audio on first interaction for Android/iOS
+  useEffect(() => {
+    const unlockAudio = () => {
+      const audio = document.getElementById('honk-audio') as HTMLAudioElement;
+      if (audio) {
+        // Silently play and immediately pause to unlock the audio context
+        audio.volume = 0;
+        audio.play().then(() => {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.volume = 1; // Restore volume for actual plays
+        }).catch(() => {});
+      }
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+    };
+
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio);
+
+    return () => {
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+    };
+  }, []);
+
   return (
     <>
+      <audio id="honk-audio" src="/car-honk.mp3" preload="auto" />
       {/* Desktop Top Nav */}
       <header
         className="hidden md:block sticky top-0 z-[1010] bg-[var(--color-surface)] border-b border-[var(--color-border-light)] shadow-[var(--shadow-sm)]"
@@ -515,7 +620,74 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             </button>
             
             {session ? (
-              <div className="relative" ref={desktopDropdownRef}>
+              <>
+                <div className="relative" ref={notificationsRef}>
+                  <button
+                    type="button"
+                    onClick={() => setNotificationsOpen(!notificationsOpen)}
+                    className="btn-icon btn-ghost flex items-center justify-center text-[var(--color-text-secondary)] relative"
+                    aria-label="Notifications"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                    </svg>
+                    {inAppNotifications.filter((n: any) => !n.is_read).length > 0 && (
+                      <span className="absolute top-1 right-1.5 w-4 h-4 bg-[var(--color-error)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                        {inAppNotifications.filter((n: any) => !n.is_read).length}
+                      </span>
+                    )}
+                  </button>
+                  {notificationsOpen && (                    <div className="absolute right-0 mt-2 py-2 w-80 max-h-96 overflow-y-auto bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-[var(--radius-md)] shadow-[var(--shadow-lg)] animate-fadeInDown z-[1020]">
+                      <div className="px-4 py-2 border-b border-[var(--color-border-light)] flex justify-between items-center">
+                        <h3 className="font-semibold text-sm">Notifications</h3>
+                        {inAppNotifications.some(n => !n.is_read) && (
+                          <button 
+                            onClick={handleMarkAllRead}
+                            className="text-xs text-[var(--color-primary)] hover:underline"
+                          >
+                            Mark all read
+                          </button>
+                        )}
+                      </div>
+                      
+                      {inAppNotifications.filter(n => !n.is_read).length === 0 ? (
+                        <div className="px-4 py-6 text-center text-[var(--color-text-secondary)] text-sm">
+                          No new notifications
+                        </div>
+                      ) : (
+                        <div className="flex flex-col">
+                          {inAppNotifications.filter(n => !n.is_read).map((n) => (
+                            <Link
+                              href={n.url}
+                              key={n.id}
+                              onClick={() => handleNotificationClick(n.id)}
+                              className={`block w-full text-left px-4 py-3 border-b border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] active:bg-[var(--color-surface-active)] transition-colors flex flex-col gap-1 ${!n.is_read ? 'bg-[var(--color-primary-subtle)]' : ''}`}
+                            >
+                              <span className="text-sm font-semibold text-[var(--color-text)]">{n.title}</span>
+                              <div className="flex flex-col">
+                                <span className={`text-xs text-[var(--color-text-secondary)] ${expandedNotifs[n.id] ? '' : 'line-clamp-2'}`}>{n.body}</span>
+                                {n.body.length > 80 && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setExpandedNotifs(prev => ({ ...prev, [n.id]: !prev[n.id] }));
+                                    }}
+                                    className="text-left text-xs font-medium text-[var(--color-primary)] mt-0.5 hover:underline w-max"
+                                  >
+                                    {expandedNotifs[n.id] ? "Show less" : "Read more"}
+                                  </button>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1">{new Date(n.created_at).toLocaleDateString()} {new Date(n.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="relative" ref={desktopDropdownRef}>
                 <button
                   type="button"
                   onClick={() => setDesktopMenuOpen(!desktopMenuOpen)}
@@ -555,6 +727,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                   </div>
                 )}
               </div>
+              </>
             ) : (
               <Link href="/login" className="btn btn-primary btn-sm">
                 Login
@@ -605,7 +778,65 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             {isDark ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
           </button>
           {session ? (
-            <div className="relative" ref={mobileDropdownRef}>
+            <>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setNotificationsOpen(!notificationsOpen)}
+                  className="btn-icon btn-ghost flex items-center justify-center text-[var(--color-text-secondary)] relative"
+                  aria-label="Notifications"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                  </svg>
+                  {inAppNotifications.filter((n: any) => !n.is_read).length > 0 && (
+                    <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-[var(--color-error)] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                      {inAppNotifications.filter((n: any) => !n.is_read).length}
+                    </span>
+                  )}
+                </button>
+                {/* Mobile dropdown uses the same state but fixed position might be better. We'll use absolute. */}
+                {notificationsOpen && (
+                  <div className="fixed top-[var(--nav-height)] right-2 w-80 bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-[var(--radius-md)] shadow-[var(--shadow-lg)] animate-fadeInDown z-[1020] max-h-96 overflow-y-auto">
+                    <div className="px-4 py-2 border-b border-[var(--color-border-light)] flex justify-between items-center">
+                      <p className="text-sm font-bold text-[var(--color-text)]">Notifications</p>
+                    </div>
+                    {inAppNotifications.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-sm text-[var(--color-text-tertiary)]">No notifications yet.</p>
+                    ) : (
+                      <div className="flex flex-col">
+                        {inAppNotifications.map((n: any) => (
+                          <Link
+                            key={n.id}
+                            href={n.url}
+                            onClick={() => handleNotificationClick(n.id)}
+                            className={`w-full text-left px-4 py-3 border-b border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] transition-colors flex flex-col gap-1 ${!n.is_read ? 'bg-[var(--color-primary-subtle)]' : ''}`}
+                          >
+                            <span className="text-sm font-semibold text-[var(--color-text)]">{n.title}</span>
+                            <div className="flex flex-col">
+                              <span className={`text-xs text-[var(--color-text-secondary)] ${expandedNotifs[n.id] ? '' : 'line-clamp-2'}`}>{n.body}</span>
+                              {n.body.length > 80 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setExpandedNotifs(prev => ({ ...prev, [n.id]: !prev[n.id] }));
+                                  }}
+                                  className="text-left text-xs font-medium text-[var(--color-primary)] mt-0.5 hover:underline w-max"
+                                >
+                                  {expandedNotifs[n.id] ? "Show less" : "Read more"}
+                                </button>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1">{new Date(n.created_at).toLocaleDateString()}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="relative" ref={mobileDropdownRef}>
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -642,14 +873,15 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                       <LogoutIcon className="h-4 w-4" /> Sign out
                     </button>
                   </form>
-                </div>
-              )}
-            </div>
-          ) : (
-            <Link href="/login" className="btn btn-primary btn-sm px-3 py-1">
-              Login
-            </Link>
-          )}
+                  </div>
+                )}
+              </div>
+              </>
+            ) : (
+              <Link href="/login" className="btn btn-primary btn-sm px-3 py-1">
+                Login
+              </Link>
+            )}
         </div>
       </header>
 

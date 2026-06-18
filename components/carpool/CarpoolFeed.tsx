@@ -327,6 +327,17 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
                 <span className={`badge text-xs px-2 ${post.type === "giver" ? "bg-primary/10 text-primary border border-primary/20" : "bg-accent/10 text-accent border border-accent/20"}`}>
                   {post.type === "giver" ? "Offering" : "Needs"} {post.seats} seat{post.seats > 1 ? "s" : ""}
                 </span>
+                {post.sameTypeMatch && (
+                  <span className="badge bg-green-100 text-green-800 text-xs px-2 border border-green-200">
+                    {post.type === "seeker" ? "Cab Share Match" : "Convoy Match"}
+                  </span>
+                )}
+                {post.match_type === "on_the_way" && post.detour_meters !== undefined && (
+                  <span className="badge bg-purple-100 text-purple-800 text-xs px-2 border border-purple-200 flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" /></svg>
+                    On Your Route (+{post.detour_meters < 1000 ? post.detour_meters + "m" : (post.detour_meters/1000).toFixed(1) + "km"})
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2 mb-1">
@@ -367,7 +378,11 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
               disabled={initiating === post.id}
               className={`btn w-full sm:w-auto ${post.type === "giver" ? "btn-accent" : "btn-primary"}`}
             >
-              {initiating === post.id ? "Opening..." : "Message Anonymously"}
+              {initiating === post.id 
+                ? "Opening..." 
+                : post.sameTypeMatch 
+                  ? (post.type === "seeker" ? "Propose Cab Share" : "Propose Convoy") 
+                  : "Message Anonymously"}
             </button>
           </div>
         </div>

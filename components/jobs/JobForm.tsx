@@ -13,21 +13,27 @@ export function JobForm({ onPosted }: Props) {
   const [company, setCompany] = useState("");
   const [experience, setExperience] = useState("");
   const [skills, setSkills] = useState("");
+  const [isOnBehalf, setIsOnBehalf] = useState(false);
+  const [contactNumber, setContactNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
 
   useEffect(() => {
     const handleEdit = (e: any) => {
       const post = e.detail;
       setIsOpen(true);
       setIsEditing(true);
+      setEditId(post.id);
       setType(post.type);
       setRole(post.role || "");
       setCompany(post.company || "");
       setExperience(post.experience_years?.toString() || "");
       setSkills(post.skills || "");
+      setIsOnBehalf(post.is_on_behalf || false);
+      setContactNumber(post.contact_number || "");
     };
     window.addEventListener("editJobPost", handleEdit);
     return () => window.removeEventListener("editJobPost", handleEdit);
@@ -38,16 +44,24 @@ export function JobForm({ onPosted }: Props) {
     setLoading(true);
     setMessage("");
 
+    const method = isEditing ? "PATCH" : "POST";
+    const bodyPayload: any = {
+      type,
+      role,
+      company,
+      experience_years: experience,
+      skills,
+      is_on_behalf: isOnBehalf,
+      contact_number: contactNumber
+    };
+    if (isEditing && editId) {
+      bodyPayload.id = editId;
+    }
+
     const res = await fetch("/api/jobs/post", {
-      method: "POST",
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type,
-        role,
-        company,
-        experience_years: experience,
-        skills
-      }),
+      body: JSON.stringify(bodyPayload),
     });
 
     setLoading(false);
@@ -56,6 +70,7 @@ export function JobForm({ onPosted }: Props) {
       setMessage(`Successfully ${isEditing ? "updated" : "posted"} as a ${type === "seeker" ? "Candidate" : "Referrer"}!`);
       setIsOpen(false);
       setIsEditing(false);
+      setEditId(null);
       onPosted();
     } else {
       setIsSuccess(false);
@@ -163,12 +178,39 @@ export function JobForm({ onPosted }: Props) {
               />
             </div>
 
+            <div className="flex items-center gap-2 mt-4">
+              <input 
+                type="checkbox" 
+                id="isOnBehalf"
+                checked={isOnBehalf}
+                onChange={e => setIsOnBehalf(e.target.checked)}
+                className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary"
+              />
+              <label htmlFor="isOnBehalf" className="text-sm font-medium text-[var(--color-text)]">
+                Posting on behalf of someone else?
+              </label>
+            </div>
+
+            {isOnBehalf && (
+              <div className="animate-fadeIn">
+                <label className="label">Their Contact Number (for WhatsApp)</label>
+                <input
+                  required
+                  type="tel"
+                  className="input"
+                  placeholder="e.g. +919876543210"
+                  value={contactNumber}
+                  onChange={(e) => setContactNumber(e.target.value)}
+                />
+              </div>
+            )}
+
             {isEditing ? (
               <div className="flex gap-3 mt-4">
                 <button type="submit" disabled={loading} className={`btn btn-primary flex-1 ${loading ? "opacity-50 cursor-not-allowed bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)] border-transparent hover:bg-[var(--color-surface-hover)]" : ""}`}>
                   {loading ? <span className="spinner-sm" /> : "Update Post"}
                 </button>
-                <button type="button" onClick={() => { setIsOpen(false); setIsEditing(false); }} className="btn btn-secondary text-text-tertiary">
+                <button type="button" onClick={() => { setIsOpen(false); setIsEditing(false); setEditId(null); }} className="btn btn-secondary text-text-tertiary">
                   Skip
                 </button>
               </div>

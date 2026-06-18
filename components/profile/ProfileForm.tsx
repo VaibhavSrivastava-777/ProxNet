@@ -642,6 +642,70 @@ export function ProfileForm({ initialUser }: Props) {
         </div>
       </CollapsibleSection>
 
+      {/* ---- Notification Settings ---- */}
+      <CollapsibleSection
+        title="Notification Settings"
+        icon={
+          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405C18.21 14.79 18 13.42 18 12V8a6 6 0 10-12 0v4c0 1.42-.21 2.79-.595 3.595L4 17h5m6 0a3 3 0 11-6 0m6 0H9" />
+          </svg>
+        }
+        defaultOpen={false}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span className="text-body-sm font-semibold">Web Push Notifications</span>
+              <span className="text-caption text-[var(--color-text-secondary)]">
+                Receive notifications for local matches and Q&A answers on this device.
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={async () => {
+                try {
+                  const permission = await Notification.requestPermission();
+                  if (permission !== "granted") {
+                    alert("Notification permission denied. Please enable them in your device settings.");
+                    return;
+                  }
+                  const registration = await navigator.serviceWorker.ready;
+                  const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+                  if (!vapidKey) return;
+                  
+                  // Base64 to Uint8Array converter
+                  const padding = "=".repeat((4 - vapidKey.length % 4) % 4);
+                  const base64 = (vapidKey + padding).replace(/\-/g, "+").replace(/_/g, "/");
+                  const rawData = window.atob(base64);
+                  const outputArray = new Uint8Array(rawData.length);
+                  for (let i = 0; i < rawData.length; ++i) {
+                    outputArray[i] = rawData.charCodeAt(i);
+                  }
+
+                  const subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: outputArray,
+                  });
+
+                  await fetch("/api/profile/push", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ subscription }),
+                  });
+                  alert("Successfully subscribed to notifications on this device!");
+                } catch (error) {
+                  console.error("Subscription failed:", error);
+                  alert("Failed to subscribe. Are you in a supported browser?");
+                }
+              }}
+            >
+              Enable on this device
+            </button>
+          </div>
+        </div>
+      </CollapsibleSection>
+
       {/* ---- Save Button ---- */}
       <button
         type="submit"

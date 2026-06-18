@@ -132,14 +132,55 @@ export async function GET(request: Request) {
     const myEndMins = timeToMinutes(myPost.time_end);
 
     filtered = dateFilteredCandidates.map(candidate => {
+      // 1. Same-Type Matching (Splitting a cab / Two Drivers)
       if (candidate.type === myPost.type) {
+         // How much extra does MY post drive to accommodate candidate's route?
+         const myRoute = haversineDistance(myPost.start_lat, myPost.start_lng, myPost.dest_lat, myPost.dest_lng);
+         const distToCandStart = haversineDistance(myPost.start_lat, myPost.start_lng, candidate.start_lat, candidate.start_lng);
+         const candRoute = haversineDistance(candidate.start_lat, candidate.start_lng, candidate.dest_lat, candidate.dest_lng);
+         const distFromCandEnd = haversineDistance(candidate.dest_lat, candidate.dest_lng, myPost.dest_lat, myPost.dest_lng);
+         const detourMyTakesCand = distToCandStart + candRoute + distFromCandEnd - myRoute;
+
+         // How much extra does CANDIDATE drive to accommodate my route?
+         const detourCandTakesMy = distToCandStart + myRoute + distFromCandEnd - candRoute;
+
+         const minDetour = Math.min(detourMyTakesCand, detourCandTakesMy);
+
+         if (distToCandStart <= 2500 && minDetour <= 3000) {
+            const candStartMins = timeToMinutes(candidate.time_start);
+            const candEndMins = timeToMinutes(candidate.time_end);
+            const timeOverlap = Math.max(0, Math.min(myEndMins, candEndMins) - Math.max(myStartMins, candStartMins));
+            
+            let score = 90; 
+            
+            const distancePenalty = Math.floor(minDetour / 50);
+            score -= distancePenalty;
+
+            if (timeOverlap <= 0) {
+              const timeGap = Math.max(myStartMins, candStartMins) - Math.min(myEndMins, candEndMins);
+              score -= timeGap;
+            }
+
+            score = Math.max(0, Math.min(100, score));
+
+            return {
+               ...candidate,
+               score,
+               distance: distFromCandEnd, // distance between destinations
+               detour_meters: Math.round(minDetour),
+               match_type: "on_the_way",
+               sameTypeMatch: true
+            };
+         }
+
          return {
             ...candidate,
             score: -1,
-            distance: haversineDistance(myPost.dest_lat, myPost.dest_lng, candidate.dest_lat, candidate.dest_lng)
+            distance: distFromCandEnd
          };
       }
 
+      // 2. Opposite-Type Matching (Giver vs Seeker)
       const giver = myPost.type === "giver" ? myPost : candidate;
       const seeker = myPost.type === "seeker" ? myPost : candidate;
 
@@ -154,6 +195,15 @@ export async function GET(request: Request) {
       const candEndMins = timeToMinutes(candidate.time_end);
       const timeOverlap = Math.max(0, Math.min(myEndMins, candEndMins) - Math.max(myStartMins, candStartMins));
 
+      // Filter out if detour is too large or starting points are too far
+      if (dStart > 2500 || detour > 3000) {
+        return {
+           ...candidate,
+           score: -1,
+           distance: dEnd
+        };
+      }
+
       let score = 100;
       
       // Distance Penalty (1% per 50m of detour)
@@ -163,7 +213,6 @@ export async function GET(request: Request) {
       // Time Penalty
       if (timeOverlap <= 0) {
         const timeGap = Math.max(myStartMins, candStartMins) - Math.min(myEndMins, candEndMins);
-        // Deduct 1% per minute of gap
         score -= timeGap;
       }
 
@@ -172,9 +221,11 @@ export async function GET(request: Request) {
       return {
         ...candidate,
         score,
-        distance: haversineDistance(myPost.dest_lat, myPost.dest_lng, candidate.dest_lat, candidate.dest_lng)
+        distance: dEnd,
+        detour_meters: Math.round(detour),
+        match_type: "on_the_way"
       };
-    }).sort((a, b) => b.score - a.score);
+    }).filter(cand => cand.score >= 0).sort((a, b) => b.score - a.score);
   }
 
   // 4. Get count of others of the same type
@@ -232,8 +283,8 @@ export async function GET(request: Request) {
       suggestions = allUsers.map((u: any) => {
          const homeDist = haversineDistance(user.home_lat!, user.home_lng!, u.home_lat, u.home_lng);
          const officeDist = haversineDistance(user.office_lat!, user.office_lng!, u.office_lat, u.office_lng);
-         const scoreHome = Math.max(0, 100 - (homeDist / 5000) * 100);
-         const scoreOffice = Math.max(0, 100 - (officeDist / 5000) * 100);
+         const scoreHome = Math.max(0, 100 - (homeDist / 1000) * 100);
+         const scoreOffice = Math.max(0, 100 - (officeDist / 1000) * 100);
          const score = Math.round((scoreHome + scoreOffice) / 2);
          return {
             user: {
@@ -247,7 +298,7 @@ export async function GET(request: Request) {
             homeDist,
             officeDist
          };
-      }).filter(s => s.score > 50).sort((a, b) => b.score - a.score).slice(0, 3);
+      }).filter(s => s.homeDist <= 1000 && s.officeDist <= 1000).sort((a, b) => b.score - a.score).slice(0, 3);
     }
   }
 

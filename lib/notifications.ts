@@ -18,6 +18,20 @@ export async function sendNotification(
 ) {
   const supabase = createAdminClient();
 
+  // 0. Persist to in_app_notifications table
+  const { error: insertError } = await supabase
+    .from("in_app_notifications")
+    .insert({
+      user_id: userId,
+      title,
+      body,
+      url
+    });
+
+  if (insertError) {
+    console.error("Failed to insert in-app notification:", insertError);
+  }
+
   // 1. Fetch user's push subscriptions
   const { data: subscriptions, error: sError } = await supabase
     .from("push_subscriptions")

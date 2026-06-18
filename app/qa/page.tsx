@@ -2,6 +2,7 @@
 
 import { QuestionForm } from "@/components/qa/QuestionForm";
 import { QuestionList } from "@/components/qa/QuestionList";
+import { HowItWorksModal } from "@/components/HowItWorksModal";
 import { useState } from "react";
 
 export default function QAPage() {
@@ -11,7 +12,10 @@ export default function QAPage() {
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-8 animate-fadeIn" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", paddingBottom: "3rem" }}>
       <div>
-        <h1 className="text-h1">Messages &amp; Q&amp;A</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-h1">Messages &amp; Q&amp;A</h1>
+          <HowItWorksModal type="qa" />
+        </div>
         <p className="text-body-sm" style={{ marginTop: "0.25rem" }}>
           Ask questions anonymously to relevant professionals in your area.
         </p>

@@ -13,33 +13,38 @@ export async function GET(request: Request) {
 
   const supabase = createAdminClient();
 
-  // 1. Get user's active post
+  // 1. Get user's active posts
   const { data: activePosts, error: activeError } = await supabase
     .from("job_posts")
     .select("*")
     .eq("user_id", user.id)
     .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(1);
+    .order("created_at", { ascending: false });
 
   if (activeError) return NextResponse.json({ error: activeError.message }, { status: 500 });
   
-  let myPost = activePosts && activePosts.length > 0 ? activePosts[0] : null;
+  let myPosts = activePosts || [];
 
   const nowMs = Date.now();
   const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
-  // Auto-expire myPost if it's older than 1 month
-  if (myPost) {
-    const createdTime = new Date(myPost.created_at).getTime();
+  // Auto-expire posts older than 1 month
+  const expiredMyPostIds: string[] = [];
+  myPosts = myPosts.filter((post: any) => {
+    const createdTime = new Date(post.created_at).getTime();
     if (nowMs - createdTime > ONE_MONTH_MS) {
-      await supabase.from("job_posts").update({ status: "expired" }).eq("id", myPost.id);
-      myPost = null;
+      expiredMyPostIds.push(post.id);
+      return false;
     }
+    return true;
+  });
+
+  if (expiredMyPostIds.length > 0) {
+    await supabase.from("job_posts").update({ status: "expired" }).in("id", expiredMyPostIds);
   }
 
-  if (myPost) {
-    await supabase.from("job_posts").update({ last_checked_matches_at: new Date().toISOString() }).eq("id", myPost.id);
+  if (myPosts.length > 0) {
+    await supabase.from("job_posts").update({ last_checked_matches_at: new Date().toISOString() }).in("id", myPosts.map(p => p.id));
   }
 
   // 2. Fetch active candidates
@@ -56,9 +61,14 @@ export async function GET(request: Request) {
     .eq("status", "active")
     .neq("user_id", user.id);
 
-  if (myPost) {
-    const targetType = myPost.type === "giver" ? "seeker" : "giver";
-    query = query.eq("type", targetType);
+  if (myPosts.length > 0) {
+    // Determine target types based on my posts
+    // If I have a giver post, I want to see seekers. If I have a seeker post, I want to see givers.
+    const myTypes = new Set(myPosts.map(p => p.type));
+    const targetTypes = [];
+    if (myTypes.has("giver")) targetTypes.push("seeker");
+    if (myTypes.has("seeker")) targetTypes.push("giver");
+    query = query.in("type", targetTypes);
   }
 
   const { data: rawCandidates, error: candError } = await query;
@@ -121,27 +131,35 @@ export async function GET(request: Request) {
       distance = haversineDistance(lat, lng, candLoc.lat, candLoc.lng);
     }
 
-    let score = 0;
-    if (myPost) {
-      const myRoleWords = (myPost.role || "").toLowerCase().split(/\W+/);
+    let maxScore = 0;
+    if (myPosts.length > 0) {
+      // Find the best match score among all my valid opposite posts
       const candRoleWords = (cand.role || "").toLowerCase().split(/\W+/);
-
-      // Intersection of role words
-      const roleOverlap = myRoleWords.filter((w: string) => candRoleWords.includes(w)).length;
-      if (roleOverlap > 0) score += 50;
-
-      // Intersection of skills words
-      const mySkillsWords = (myPost.skills || "").toLowerCase().split(/\W+/);
       const candSkillsWords = (cand.skills || "").toLowerCase().split(/\W+/);
-      const skillsOverlap = mySkillsWords.filter((w: string) => candSkillsWords.includes(w)).length;
-      if (skillsOverlap > 0) score += (skillsOverlap * 10);
-      
-      score = Math.min(100, score);
+
+      for (const myPost of myPosts) {
+        // Only score against posts of the opposite type
+        if ((myPost.type === "giver" && cand.type === "seeker") || (myPost.type === "seeker" && cand.type === "giver")) {
+          let score = 0;
+          const myRoleWords = (myPost.role || "").toLowerCase().split(/\W+/);
+          // Intersection of role words
+          const roleOverlap = myRoleWords.filter((w: string) => candRoleWords.includes(w)).length;
+          if (roleOverlap > 0) score += 50;
+
+          // Intersection of skills words
+          const mySkillsWords = (myPost.skills || "").toLowerCase().split(/\W+/);
+          const skillsOverlap = mySkillsWords.filter((w: string) => candSkillsWords.includes(w)).length;
+          if (skillsOverlap > 0) score += (skillsOverlap * 10);
+          
+          score = Math.min(100, score);
+          if (score > maxScore) maxScore = score;
+        }
+      }
     }
 
     return {
       ...cand,
-      score,
+      score: maxScore,
       distance
     };
   });
@@ -149,32 +167,17 @@ export async function GET(request: Request) {
   // Filter by radius (exclude if distance > radius, unless distance is unknown or radius is -1)
   let filtered = scoredCandidates.filter((c: any) => radius === -1 || c.distance === -1 || c.distance <= radius);
 
-  // Sort: if myPost exists, sort by match % descending. Else sort by created_at descending.
-  if (myPost) {
+  // Sort: if myPosts exist, sort by match % descending. Else sort by created_at descending.
+  if (myPosts.length > 0) {
     filtered = filtered.sort((a, b) => b.score - a.score);
   } else {
     filtered = filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
-  // 4. Get count of others of the same type
-  let othersCount = 0;
-  if (myPost) {
-    const { count, error: countError } = await supabase
-      .from("job_posts")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "active")
-      .eq("type", myPost.type)
-      .neq("user_id", user.id);
-      
-    if (!countError && count) {
-      othersCount = count;
-    }
-  }
-
   return NextResponse.json({ 
     posts: filtered, 
-    myPost: myPost,
-    othersCount,
+    myPosts: myPosts,
+    othersCount: candidates.length, // Just return total candidate count since there could be multiple types
     requiresPost: false,
     currentUserId: user.id
   });
