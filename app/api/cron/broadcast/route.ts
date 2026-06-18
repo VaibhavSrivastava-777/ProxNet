@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
@@ -30,6 +31,8 @@ function calculateVectorSimilarity(lat1: number, lon1: number, lat2: number, lon
   return dotProduct / (mag1 * mag2);
 }
 
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   // Validate CRON secret (Vercel specific)
   const authHeader = request.headers.get('authorization');
@@ -50,6 +53,31 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
   }
 
+  // Pre-fetch all global data to avoid N+1 queries in the loop
+  let globalCarpoolPosts: any[] = [];
+  let globalJobPosts: any[] = [];
+  let globalForums: any[] = [];
+  let globalTargets: any[] = [];
+
+  if (broadcastType === "AM") {
+    const [carpoolsRes, jobsRes] = await Promise.all([
+      supabase.from("carpool_posts").select("*").eq("status", "active"),
+      supabase.from("job_posts").select("*, users(home_lat, home_lng)").eq("status", "active")
+    ]);
+    globalCarpoolPosts = carpoolsRes.data || [];
+    globalJobPosts = jobsRes.data || [];
+  } else {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const [forumsRes, targetsRes] = await Promise.all([
+      supabase.from("questions").select("*").eq("type", "forum").eq("status", "open").gte("created_at", yesterday.toISOString()),
+      supabase.from("question_targets").select("id, professional_id").eq("status", "pending")
+    ]);
+    globalForums = forumsRes.data || [];
+    globalTargets = targetsRes.data || [];
+  }
+
   let notificationsSent = 0;
   const notificationPromises = [];
 
@@ -59,11 +87,7 @@ export async function GET(request: Request) {
     if (broadcastType === "AM") {
       // 1. Priority 1: Carpool Match
       if (user.home_lat && user.home_lng && user.office_lat && user.office_lng) {
-        const { data: carpoolPosts } = await supabase
-          .from("carpool_posts")
-          .select("*")
-          .eq("status", "active")
-          .neq("user_id", user.id);
+        const carpoolPosts = globalCarpoolPosts.filter((p: any) => p.user_id !== user.id);
 
         if (carpoolPosts && carpoolPosts.length > 0) {
           let exactMatches = 0;
@@ -101,11 +125,7 @@ export async function GET(request: Request) {
 
       // 2. Priority 2: Jobs
       if (!message && user.home_lat && user.home_lng) {
-        const { data: jobs } = await supabase
-          .from("job_posts")
-          .select("*, users(home_lat, home_lng)")
-          .eq("status", "active")
-          .neq("user_id", user.id);
+        const jobs = globalJobPosts.filter((j: any) => j.user_id !== user.id);
 
         if (jobs && jobs.length > 0) {
           const localJobs = jobs.filter(job => {
@@ -131,15 +151,7 @@ export async function GET(request: Request) {
       // PM Broadcast
       // 1. Priority 1: Local Forum
       if (user.home_lat && user.home_lng) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-
-        const { data: forums } = await supabase
-          .from("questions")
-          .select("*")
-          .eq("type", "forum")
-          .eq("status", "open")
-          .gte("created_at", yesterday.toISOString());
+        const forums = globalForums;
 
         if (forums && forums.length > 0) {
           const localForums = forums.filter(f => {
@@ -157,12 +169,7 @@ export async function GET(request: Request) {
 
       // 2. Priority 2: Direct Q&A Targets
       if (!message) {
-        const { data: targets } = await supabase
-          .from("question_targets")
-          .select("id")
-          .eq("professional_id", user.id)
-          .eq("status", "pending")
-          .limit(1);
+        const targets = globalTargets.filter((t: any) => t.professional_id === user.id);
 
         if (targets && targets.length > 0) {
           message = "❓ A neighbor specifically asked for your expertise today. Can you help them out?";
