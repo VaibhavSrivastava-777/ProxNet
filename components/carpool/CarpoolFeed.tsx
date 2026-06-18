@@ -332,10 +332,10 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
                     {post.type === "seeker" ? "Cab Share Match" : "Convoy Match"}
                   </span>
                 )}
-                {post.match_type === "on_the_way" && post.detour_meters !== undefined && (
+                {post.match_type === "vector_match" && post.vector_sim !== undefined && (
                   <span className="badge bg-purple-100 text-purple-800 text-xs px-2 border border-purple-200 flex items-center gap-1">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" /></svg>
-                    On Your Route (+{post.detour_meters < 1000 ? post.detour_meters + "m" : (post.detour_meters/1000).toFixed(1) + "km"})
+                    Same Route ({(post.vector_sim * 100).toFixed(0)}% aligned)
                   </span>
                 )}
               </div>

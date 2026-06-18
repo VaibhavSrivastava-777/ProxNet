@@ -17,6 +17,26 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c; // in metres
 }
 
+function calculateVectorSimilarity(lat1: number, lon1: number, lat2: number, lon2: number, cLat1: number, cLon1: number, cLat2: number, cLon2: number) {
+  // Convert lat/lng to approximate Cartesian vectors
+  // Use average latitude to scale longitude difference
+  const avgLat = ((lat1 + lat2 + cLat1 + cLat2) / 4) * Math.PI / 180;
+  
+  const v1x = (lon2 - lon1) * Math.cos(avgLat);
+  const v1y = (lat2 - lat1);
+  
+  const v2x = (cLon2 - cLon1) * Math.cos(avgLat);
+  const v2y = (cLat2 - cLat1);
+  
+  const dotProduct = (v1x * v2x) + (v1y * v2y);
+  const mag1 = Math.sqrt(v1x * v1x + v1y * v1y);
+  const mag2 = Math.sqrt(v2x * v2x + v2y * v2y);
+  
+  if (mag1 === 0 || mag2 === 0) return 0;
+  return dotProduct / (mag1 * mag2);
+}
+
+
 function timeToMinutes(timeStr: string) {
   const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;
@@ -132,29 +152,26 @@ export async function GET(request: Request) {
     const myEndMins = timeToMinutes(myPost.time_end);
 
     filtered = dateFilteredCandidates.map(candidate => {
+      // Vector Cosine Similarity
+      const vectorSim = calculateVectorSimilarity(
+         myPost.start_lat, myPost.start_lng, myPost.dest_lat, myPost.dest_lng,
+         candidate.start_lat, candidate.start_lng, candidate.dest_lat, candidate.dest_lng
+      );
+      
+      const distToCandStart = haversineDistance(myPost.start_lat, myPost.start_lng, candidate.start_lat, candidate.start_lng);
+      const distFromCandEnd = haversineDistance(myPost.dest_lat, myPost.dest_lng, candidate.dest_lat, candidate.dest_lng);
+      
+      const candStartMins = timeToMinutes(candidate.time_start);
+      const candEndMins = timeToMinutes(candidate.time_end);
+      const timeOverlap = Math.max(0, Math.min(myEndMins, candEndMins) - Math.max(myStartMins, candStartMins));
+
       // 1. Same-Type Matching (Splitting a cab / Two Drivers)
       if (candidate.type === myPost.type) {
-         // How much extra does MY post drive to accommodate candidate's route?
-         const myRoute = haversineDistance(myPost.start_lat, myPost.start_lng, myPost.dest_lat, myPost.dest_lng);
-         const distToCandStart = haversineDistance(myPost.start_lat, myPost.start_lng, candidate.start_lat, candidate.start_lng);
-         const candRoute = haversineDistance(candidate.start_lat, candidate.start_lng, candidate.dest_lat, candidate.dest_lng);
-         const distFromCandEnd = haversineDistance(candidate.dest_lat, candidate.dest_lng, myPost.dest_lat, myPost.dest_lng);
-         const detourMyTakesCand = distToCandStart + candRoute + distFromCandEnd - myRoute;
-
-         // How much extra does CANDIDATE drive to accommodate my route?
-         const detourCandTakesMy = distToCandStart + myRoute + distFromCandEnd - candRoute;
-
-         const minDetour = Math.min(detourMyTakesCand, detourCandTakesMy);
-
-         if (distToCandStart <= 2500 && minDetour <= 3000) {
-            const candStartMins = timeToMinutes(candidate.time_start);
-            const candEndMins = timeToMinutes(candidate.time_end);
-            const timeOverlap = Math.max(0, Math.min(myEndMins, candEndMins) - Math.max(myStartMins, candStartMins));
-            
+         if (distToCandStart <= 3000 && vectorSim >= 0.85) {
             let score = 90; 
             
-            const distancePenalty = Math.floor(minDetour / 50);
-            score -= distancePenalty;
+            // Vector Sim penalty
+            score -= (1.0 - vectorSim) * 100;
 
             if (timeOverlap <= 0) {
               const timeGap = Math.max(myStartMins, candStartMins) - Math.min(myEndMins, candEndMins);
@@ -166,9 +183,9 @@ export async function GET(request: Request) {
             return {
                ...candidate,
                score,
-               distance: distFromCandEnd, // distance between destinations
-               detour_meters: Math.round(minDetour),
-               match_type: "on_the_way",
+               distance: distFromCandEnd,
+               vector_sim: vectorSim,
+               match_type: "vector_match",
                sameTypeMatch: true
             };
          }
@@ -184,19 +201,11 @@ export async function GET(request: Request) {
       const giver = myPost.type === "giver" ? myPost : candidate;
       const seeker = myPost.type === "seeker" ? myPost : candidate;
 
-      const dGiverRoute = haversineDistance(giver.start_lat, giver.start_lng, giver.dest_lat, giver.dest_lng);
       const dStart = haversineDistance(giver.start_lat, giver.start_lng, seeker.start_lat, seeker.start_lng);
-      const dSeekerRoute = haversineDistance(seeker.start_lat, seeker.start_lng, seeker.dest_lat, seeker.dest_lng);
-      const dEnd = haversineDistance(seeker.dest_lat, seeker.dest_lng, giver.dest_lat, giver.dest_lng);
+      const dEnd = haversineDistance(giver.dest_lat, giver.dest_lng, seeker.dest_lat, seeker.dest_lng);
 
-      const detour = dStart + dSeekerRoute + dEnd - dGiverRoute;
-      
-      const candStartMins = timeToMinutes(candidate.time_start);
-      const candEndMins = timeToMinutes(candidate.time_end);
-      const timeOverlap = Math.max(0, Math.min(myEndMins, candEndMins) - Math.max(myStartMins, candStartMins));
-
-      // Filter out if detour is too large or starting points are too far
-      if (dStart > 2500 || detour > 3000) {
+      // Filter out if starting points are too far or vector similarity is too low
+      if (dStart > 4000 || vectorSim < 0.85) {
         return {
            ...candidate,
            score: -1,
@@ -206,9 +215,8 @@ export async function GET(request: Request) {
 
       let score = 100;
       
-      // Distance Penalty (1% per 50m of detour)
-      const distancePenalty = Math.floor(detour / 50);
-      score -= distancePenalty;
+      // Vector Sim penalty
+      score -= (1.0 - vectorSim) * 100;
 
       // Time Penalty
       if (timeOverlap <= 0) {
@@ -222,8 +230,8 @@ export async function GET(request: Request) {
         ...candidate,
         score,
         distance: dEnd,
-        detour_meters: Math.round(detour),
-        match_type: "on_the_way"
+        vector_sim: vectorSim,
+        match_type: "vector_match"
       };
     }).filter(cand => cand.score >= 0).sort((a, b) => b.score - a.score);
   }

@@ -13,6 +13,23 @@ function getBroadcastType(): "AM" | "PM" {
   return utcHour < 10 ? "AM" : "PM";
 }
 
+function calculateVectorSimilarity(lat1: number, lon1: number, lat2: number, lon2: number, cLat1: number, cLon1: number, cLat2: number, cLon2: number) {
+  const avgLat = ((lat1 + lat2 + cLat1 + cLat2) / 4) * Math.PI / 180;
+  
+  const v1x = (lon2 - lon1) * Math.cos(avgLat);
+  const v1y = (lat2 - lat1);
+  
+  const v2x = (cLon2 - cLon1) * Math.cos(avgLat);
+  const v2y = (cLat2 - cLat1);
+  
+  const dotProduct = (v1x * v2x) + (v1y * v2y);
+  const mag1 = Math.sqrt(v1x * v1x + v1y * v1y);
+  const mag2 = Math.sqrt(v2x * v2x + v2y * v2y);
+  
+  if (mag1 === 0 || mag2 === 0) return 0;
+  return dotProduct / (mag1 * mag2);
+}
+
 export async function GET(request: Request) {
   // Validate CRON secret (Vercel specific)
   const authHeader = request.headers.get('authorization');
@@ -53,8 +70,6 @@ export async function GET(request: Request) {
           let onTheWayMatches = 0;
 
           const validMatches = carpoolPosts.filter(post => {
-            const myRoute = haversineDistanceMeters(user.home_lat!, user.home_lng!, user.office_lat!, user.office_lng!);
-            const postRoute = haversineDistanceMeters(post.start_lat, post.start_lng, post.dest_lat, post.dest_lng);
             const startDist = haversineDistanceMeters(user.home_lat!, user.home_lng!, post.start_lat, post.start_lng);
             const endDist = haversineDistanceMeters(user.office_lat!, user.office_lng!, post.dest_lat, post.dest_lng);
             
@@ -63,23 +78,12 @@ export async function GET(request: Request) {
                 return true;
             }
 
-            if (startDist > 2500) return false;
+            const vectorSim = calculateVectorSimilarity(
+              user.home_lat!, user.home_lng!, user.office_lat!, user.office_lng!,
+              post.start_lat, post.start_lng, post.dest_lat, post.dest_lng
+            );
 
-            let detour = 0;
-            if (post.type === "giver") {
-                // Post is Giver, User is Seeker. Detour is on the Post
-                detour = startDist + myRoute + endDist - postRoute;
-            } else if (post.type === "seeker") {
-                // User is Giver, Post is Seeker. Detour is on the User
-                detour = startDist + postRoute + endDist - myRoute;
-            } else {
-                // Safe fallback
-                const detourPost = startDist + myRoute + endDist - postRoute;
-                const detourUser = startDist + postRoute + endDist - myRoute;
-                detour = Math.min(detourPost, detourUser);
-            }
-
-            if (detour <= 3000) {
+            if (startDist <= 4000 && vectorSim >= 0.85) {
                 onTheWayMatches++;
                 return true;
             }
