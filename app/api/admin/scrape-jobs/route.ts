@@ -49,9 +49,8 @@ export async function POST(request: Request) {
     "remote only (legacy)": false,
     "removeAgency": false,
     "timeRange": "7d",
-    "limit": 100, // Limit capped for safety
-    "descriptionType": "text",
-    "keywords": keywords
+    "limit": 1000, // Fetch a large batch to increase chances of matching local companies
+    "descriptionType": "text"
   };
 
   let datasetItems: any[] = [];
