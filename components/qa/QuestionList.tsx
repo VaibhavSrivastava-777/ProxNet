@@ -73,9 +73,6 @@ const fetcher = (url: string) => fetch(url).then((res) => {
 
 export function QuestionList({ refreshKey }: Props) {
   const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[] }>(`/api/questions?_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000 });
-  
-  const [activeTab, setActiveTab] = useState<"direct" | "forum">("direct");
-  const [activeForumThread, setActiveForumThread] = useState<string | null>(null);
 
   async function respond(questionId: string, targetId: string) {
     const res = await fetch("/api/questions/respond", {
@@ -180,53 +177,9 @@ export function QuestionList({ refreshKey }: Props) {
         </div>
       )}
 
-      <div className="flex gap-2 border-b border-[var(--color-border-light)] pb-2">
-        <button 
-          className={`px-4 py-2 text-sm font-semibold transition-colors ${activeTab === 'direct' ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]' : 'text-[var(--color-text-secondary)]'}`}
-          onClick={() => setActiveTab('direct')}
-        >
-          Direct Messages
-        </button>
-        <button 
-          className={`px-4 py-2 text-sm font-semibold transition-colors ${activeTab === 'forum' ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]' : 'text-[var(--color-text-secondary)]'}`}
-          onClick={() => setActiveTab('forum')}
-        >
-          Local Forum
-        </button>
-      </div>
-
-      {activeTab === 'forum' ? (
-        <div className="stagger-children flex flex-col gap-2">
-          {(data?.forum || []).length === 0 ? (
-            <div className="text-center py-8 text-[var(--color-text-secondary)] text-sm">No local discussions yet. Be the first!</div>
-          ) : (
-            (data?.forum || []).map((q) => (
-              <div 
-                key={q.id} 
-                className="card flex flex-col gap-2 p-4 cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors"
-                onClick={() => window.location.href = `/qa/forum/${q.id}`}
-              >
-                <div className="flex justify-between items-start">
-                  <span className="text-xs font-semibold text-[var(--color-primary)]">{q.asker_alias}</span>
-                  <span className="text-caption text-[var(--color-text-tertiary)]">{formatRelative(q.created_at)}</span>
-                </div>
-                <p className="text-body text-[var(--color-text)]">{q.body}</p>
-                <div className="flex gap-4 mt-2">
-                  <span className="text-xs flex items-center gap-1 text-[var(--color-text-secondary)]">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
-                    {q.likes_count}
-                  </span>
-                  <span className="text-xs flex items-center gap-1 text-[var(--color-text-secondary)]">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                    {q.comments_count}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      ) : (
-        <div className="stagger-children flex flex-col gap-2">
+      {/* Only Suggested Connections and Direct Messages */}
+      <div className="stagger-children flex flex-col gap-2">
+        <h4 className="text-body-sm font-semibold mb-1 mt-2 text-[var(--color-text-secondary)]">Direct Messages</h4>
           {unified.length === 0 ? (
              <div className="text-center py-8 text-[var(--color-text-secondary)] text-sm">No direct messages yet.</div>
           ) : unified.map((item) => {
@@ -315,7 +268,6 @@ export function QuestionList({ refreshKey }: Props) {
         }
       })}
         </div>
-      )}
     </div>
   );
 }

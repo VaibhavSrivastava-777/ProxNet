@@ -39,6 +39,7 @@ export function QuestionForm({
   const [locationName, setLocationName] = useState("");
   const [fetchingLocation, setFetchingLocation] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
 
   useEffect(() => {
     fetch("/api/profile")
@@ -176,42 +177,77 @@ export function QuestionForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card animate-fadeInUp" style={{ padding: "1.5rem" }}>
-      <h3 className="text-h3" style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-accent)" }}>
-          <circle cx="12" cy="12" r="10" />
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-          <line x1="12" y1="17" x2="12.01" y2="17" />
-        </svg>
-        Ask a Question
-      </h3>
+    <form onSubmit={handleSubmit} className="flex flex-col h-full bg-[var(--color-surface)] p-6">
 
-      <textarea
-        className="input"
-        rows={4}
-        placeholder="What would you like to ask nearby professionals?"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        required
-        style={{ width: "100%", marginBottom: "1rem", resize: "vertical" }}
-      />
-
-      <div style={{ marginBottom: "1rem" }}>
-        <label className="label">Question Center Location</label>
-        <div className="flex gap-2 mb-2">
-          {["Home", "Office", "Others"].map(t => (
-            <button
-              key={t}
-              type="button"
-              className={`btn ${locationType === t ? 'btn-primary' : 'btn-ghost border border-[var(--color-border)]'} btn-sm`}
-              onClick={() => setLocationType(t as any)}
+      <div className="flex flex-col gap-4 mb-4 shrink-0">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="label">Location</label>
+            <select
+              className="input w-full"
+              value={locationType}
+              onChange={(e) => setLocationType(e.target.value as any)}
             >
-              {t}
-            </button>
-          ))}
+              <option value="Home">Home</option>
+              <option value="Office">Office</option>
+              <option value="Others">Custom</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Company Filter</label>
+            {fixedCompany ? (
+              <input
+                className="input w-full bg-[var(--color-surface-secondary)] cursor-not-allowed"
+                value={fixedCompany}
+                readOnly
+              />
+            ) : (
+              <select
+                className="input w-full"
+                value={companyFilter}
+                onChange={(e) => setCompanyFilter(e.target.value)}
+                disabled={fetchingCompanies}
+                style={{ color: companyFilter ? "var(--color-text)" : "var(--color-text-tertiary)" }}
+              >
+                <option value="">Any Company</option>
+                {availableCompanies.map((c) => (
+                  <option key={c} value={c} style={{ color: "var(--color-text)" }}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <div>
+            <label className="label">Job Title Filter</label>
+            {companyFilter ? (
+              <select
+                className="input w-full"
+                value={titleFilter}
+                onChange={(e) => setTitleFilter(e.target.value)}
+                disabled={fetchingTitles}
+                style={{ color: titleFilter ? "var(--color-text)" : "var(--color-text-tertiary)" }}
+              >
+                <option value="">Any Designation</option>
+                {availableTitles.map((t) => (
+                  <option key={t} value={t} style={{ color: "var(--color-text)" }}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="input w-full bg-[var(--color-surface-secondary)] cursor-not-allowed"
+                placeholder="Select a company first"
+                value={titleFilter}
+                disabled
+              />
+            )}
+          </div>
         </div>
+
         {locationType === "Others" && (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 p-3 bg-[var(--color-surface-secondary)] rounded-lg border border-[var(--color-border-light)]">
             <div className="flex gap-2">
               <input 
                 className="input flex-1" 
@@ -246,104 +282,47 @@ export function QuestionForm({
         )}
       </div>
 
-      <div style={{ marginBottom: "1.25rem" }}>
-        <label className="label">
-          Radius: {radius >= 1000 ? `${(radius / 1000).toFixed(1)}km` : `${radius}m`}
-        </label>
-        <input
-          type="range"
-          min={100}
-          max={100000}
-          step={100}
-          value={radius}
-          onChange={(e) => setRadius(Number(e.target.value))}
-          style={{
-            width: "100%",
-            marginTop: "0.375rem",
-            accentColor: "var(--color-accent)",
-          }}
+      <div className="flex-1 flex flex-col min-h-[200px] mb-4">
+        <textarea
+          className="input flex-1 w-full resize-none p-4"
+          placeholder="What would you like to ask nearby professionals?"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          required
         />
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span className="text-caption">100m</span>
-          <span className="text-caption">100km</span>
-        </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1rem", marginBottom: "1rem" }} className="sm:grid-cols-2">
-        <div>
-          <label className="label">Company Filter</label>
-          {fixedCompany ? (
-            <input
-              className="input"
-              value={fixedCompany}
-              readOnly
-              style={{ width: "100%", backgroundColor: "var(--color-surface-secondary)", cursor: "not-allowed" }}
-            />
-          ) : (
-            <select
-              className="input"
-              value={companyFilter}
-              onChange={(e) => setCompanyFilter(e.target.value)}
-              disabled={fetchingCompanies}
-              style={{ width: "100%", color: companyFilter ? "var(--color-text)" : "var(--color-text-tertiary)" }}
-            >
-              <option value="">Any Company (Optional)</option>
-              {availableCompanies.map((c) => (
-                <option key={c} value={c} style={{ color: "var(--color-text)" }}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          )}
-          {!companyFilter && !fixedCompany && (
-            <p className="text-caption text-[var(--color-text-secondary)] mt-1">
-              Leave blank to post to the public Local Forum, or select a company for targeted 1:1 routing.
-            </p>
-          )}
+      <div className="shrink-0 flex items-center justify-between">
+        <div style={{ flex: 1, marginRight: "1rem" }}>
+          <label className="label flex items-center gap-2">
+            Radius: {radius >= 1000 ? `${(radius / 1000).toFixed(1)}km` : `${radius}m`}
+          </label>
+          <input
+            type="range"
+            min={100}
+            max={100000}
+            step={100}
+            value={radius}
+            onChange={(e) => setRadius(Number(e.target.value))}
+            className="w-full h-1.5 bg-[var(--color-surface-secondary)] rounded-lg appearance-none cursor-pointer"
+            style={{ accentColor: "var(--color-accent)" }}
+          />
         </div>
-        <div>
-          <label className="label">Job Title Filter</label>
-          {companyFilter ? (
-            <select
-              className="input"
-              value={titleFilter}
-              onChange={(e) => setTitleFilter(e.target.value)}
-              disabled={fetchingTitles}
-              style={{ width: "100%", color: titleFilter ? "var(--color-text)" : "var(--color-text-tertiary)" }}
-            >
-              <option value="">Any Designation (Optional)</option>
-              {availableTitles.map((t) => (
-                <option key={t} value={t} style={{ color: "var(--color-text)" }}>
-                  {t}
-                </option>
-              ))}
-            </select>
+        <button
+          type="submit"
+          disabled={loading}
+          className="btn btn-primary"
+        >
+          {loading ? (
+            <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span className="spinner-sm" />
+              Posting...
+            </span>
           ) : (
-            <input
-              className="input"
-              placeholder="Select a company first"
-              value={titleFilter}
-              disabled
-              style={{ width: "100%", backgroundColor: "var(--color-surface-secondary)", cursor: "not-allowed" }}
-            />
+            "Post Question"
           )}
-        </div>
+        </button>
       </div>
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="btn btn-primary"
-      >
-        {loading ? (
-          <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span className="spinner-sm" />
-            Posting...
-          </span>
-        ) : (
-          "Post Question"
-        )}
-      </button>
 
       {message && (
         <div

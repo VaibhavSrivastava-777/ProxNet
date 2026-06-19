@@ -10,6 +10,8 @@ export function UserTable() {
   const [users, setUsers] = useState<User[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -17,13 +19,14 @@ export function UserTable() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/admin/users?q=${encodeURIComponent(query)}`);
+    const res = await fetch(`/api/admin/users?page=${page}&q=${encodeURIComponent(query)}`);
     if (res.ok) {
       const data = await res.json();
       setUsers(data.users ?? []);
+      setTotal(data.total ?? 0);
     }
     setLoading(false);
-  }, [query]);
+  }, [page, query]);
 
   useEffect(() => {
     const t = setTimeout(load, 300);
@@ -84,67 +87,103 @@ export function UserTable() {
           ))}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-[var(--color-border-light)]">
-          <table className="min-w-full text-left text-sm" style={{ borderCollapse: "collapse" }}>
-            <thead className="bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border-b border-[var(--color-border-light)]">
-              <tr>
-                <th className="px-4 py-3 text-overline font-semibold">User</th>
-                <th className="px-4 py-3 text-overline font-semibold">Company</th>
-                <th className="px-4 py-3 text-overline font-semibold">Source</th>
-                <th className="px-4 py-3 text-overline font-semibold">Status</th>
-                <th className="px-4 py-3 text-overline font-semibold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.length === 0 ? (
+        <>
+          <div className="overflow-x-auto rounded-lg border border-[var(--color-border-light)]">
+            <table className="min-w-full text-left text-sm" style={{ borderCollapse: "collapse" }}>
+              <thead className="bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border-b border-[var(--color-border-light)]">
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-[var(--color-text-tertiary)]">
-                    No users found matching "{query}"
-                  </td>
+                  <th className="px-4 py-3 text-overline font-semibold">User</th>
+                  <th className="px-4 py-3 text-overline font-semibold">Company &amp; Role</th>
+                  <th className="px-4 py-3 text-overline font-semibold">Contact</th>
+                  <th className="px-4 py-3 text-overline font-semibold">Locations</th>
+                  <th className="px-4 py-3 text-overline font-semibold">Status</th>
+                  <th className="px-4 py-3 text-overline font-semibold text-right">Actions</th>
                 </tr>
-              ) : (
-                users.map((u) => (
-                  <tr key={u.id} className="border-b border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="avatar avatar-sm bg-[var(--color-primary-subtle)] text-[var(--color-primary)]">
-                          {u.full_name ? u.full_name.charAt(0).toUpperCase() : "U"}
-                        </div>
-                        <div className="font-medium text-[var(--color-text)]">{u.full_name || "Unknown"}</div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-[var(--color-text-secondary)]">
-                      {u.company || "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`badge ${u.source === "oauth" ? "badge-primary" : "badge-accent"}`}>
-                        {u.source}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${u.is_active ? "bg-[var(--color-success)]" : "bg-[var(--color-error)]"}`} />
-                        <span className="text-[var(--color-text-secondary)]">{u.is_active ? "Active" : "Inactive"}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={() => openEditModal(u)} className="btn btn-ghost btn-sm px-2 text-[var(--color-primary)]">
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeUser(u.id)}
-                        className="btn btn-ghost btn-sm px-2 text-[var(--color-error)]"
-                      >
-                        Delete
-                      </button>
+              </thead>
+              <tbody>
+                {users.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-[var(--color-text-tertiary)]">
+                      No users found matching "{query}"
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  users.map((u) => (
+                    <tr key={u.id} className="border-b border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="avatar avatar-sm bg-[var(--color-primary-subtle)] text-[var(--color-primary)]">
+                            {u.full_name ? u.full_name.charAt(0).toUpperCase() : "U"}
+                          </div>
+                          <div>
+                            <div className="font-medium text-[var(--color-text)]">{u.full_name || "Unknown"}</div>
+                            <div className="text-caption text-[var(--color-text-tertiary)]">{u.source}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-[var(--color-text-secondary)]">
+                        <div className="font-medium text-[var(--color-text)]">{u.company || "—"}</div>
+                        <div className="text-caption">{u.job_title || "—"}</div>
+                      </td>
+                      <td className="px-4 py-3 text-[var(--color-text-secondary)]">
+                        <div className="truncate max-w-[150px]" title={u.email || undefined}>{u.email || "—"}</div>
+                        {u.linkedin_profile_url && (
+                          <a href={u.linkedin_profile_url} target="_blank" rel="noreferrer" className="text-caption text-[var(--color-primary)] hover:underline">
+                            LinkedIn ↗
+                          </a>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-[var(--color-text-secondary)] text-caption">
+                        <div>Home: {u.home_lat ? "✅" : "❌"}</div>
+                        <div>Office: {u.office_lat ? "✅" : "❌"}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${u.is_active ? "bg-[var(--color-success)]" : "bg-[var(--color-error)]"}`} />
+                          <span className="text-[var(--color-text-secondary)]">{u.is_active ? "Active" : "Inactive"}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={() => openEditModal(u)} className="btn btn-ghost btn-sm px-2 text-[var(--color-primary)]">
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeUser(u.id)}
+                          className="btn btn-ghost btn-sm px-2 text-[var(--color-error)]"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="flex items-center justify-between mt-4">
+            <span className="text-sm text-[var(--color-text-secondary)]">
+              Showing {(page - 1) * 20 + 1} to {Math.min(page * 20, total)} of {total} entries
+            </span>
+            <div className="flex gap-2">
+              <button 
+                className="btn btn-ghost btn-sm" 
+                disabled={page <= 1} 
+                onClick={() => setPage(p => p - 1)}
+              >
+                Previous
+              </button>
+              <button 
+                className="btn btn-ghost btn-sm" 
+                disabled={page * 20 >= total} 
+                onClick={() => setPage(p => p + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Edit Modal */}

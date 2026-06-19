@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/broadcast",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/admin/scrape-jobs",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

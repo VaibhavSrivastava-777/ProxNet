@@ -17,8 +17,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim();
 
+  const page = parseInt(searchParams.get("page") || "1");
+  const limit = 20;
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
+
   const supabase = createAdminClient();
-  let query = supabase.from("users").select("*").order("created_at", { ascending: false });
+  let query = supabase.from("users").select("*", { count: "exact" }).order("created_at", { ascending: false }).range(start, end);
 
   if (q) {
     query = query.or(
@@ -26,9 +31,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const { data, error } = await query;
+  const { data, count, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ users: data ?? [] });
+  return NextResponse.json({ users: data ?? [], total: count ?? 0, page, limit });
 }
 
 export async function POST(request: Request) {

@@ -30,6 +30,7 @@ export function ProximityMap() {
   const [localError, setLocalError] = useState("");
   const [locationMode, setLocationMode] = useState<"home" | "office" | "current">("home");
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
 
   useEffect(() => {
     if (locationMode !== "current") {
@@ -78,87 +79,37 @@ export function ProximityMap() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Controls Panel */}
-      <div className="card" style={{ padding: 16 }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 16 }}>
-          {/* Location Mode */}
-          <div style={{ minWidth: 160 }}>
-            <label
-              className="label"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                marginBottom: 6,
-              }}
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                <circle cx="12" cy="10" r="3" />
-              </svg>
-              Location mode
-            </label>
-            <select
-              className="input"
-              value={locationMode}
-              onChange={(e) => setLocationMode(e.target.value as typeof locationMode)}
-              style={{ width: "100%", color: "var(--color-text)", backgroundColor: "var(--color-surface)" }}
-            >
-              <option value="current" style={{ color: "var(--color-text)", backgroundColor: "var(--color-surface)" }}>Current location</option>
-              <option value="home" style={{ color: "var(--color-text)", backgroundColor: "var(--color-surface)" }}>Home address</option>
-              <option value="office" style={{ color: "var(--color-text)", backgroundColor: "var(--color-surface)" }}>Office address</option>
-            </select>
+      {!filtersExpanded ? (
+        <div 
+          onClick={() => setFiltersExpanded(true)}
+          className="flex items-center gap-2 p-3 rounded-lg border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] cursor-pointer hover:border-[var(--color-primary)] transition-colors"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-text-secondary)] shrink-0"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span className="text-sm text-[var(--color-text-secondary)] font-medium truncate">
+            {radiusLabel} radius to {locationMode === "current" ? "Current" : locationMode === "home" ? "Home" : "Office"} Location &bull; All Companies &bull; All Titles
+          </span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-auto text-[var(--color-text-secondary)] shrink-0"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 16 }}>
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="text-body font-semibold m-0">Map Filters</h4>
+            <button type="button" onClick={() => setFiltersExpanded(false)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+            </button>
           </div>
-
-          {/* Radius Slider */}
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <label className="label" style={{ marginBottom: 6 }}>
-              Search radius:{" "}
-              <span
-                className="badge badge-primary"
-                style={{ marginLeft: 6, fontSize: 11 }}
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 16 }}>
+            {/* Location Mode */}
+            <div style={{ minWidth: 160 }}>
+              <label
+                className="label"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 6,
+                }}
               >
-                {radiusLabel}
-              </span>
-            </label>
-            <input
-              type="range"
-              min={100}
-              max={100000}
-              step={100}
-              value={radius}
-              onChange={(e) => setRadius(Number(e.target.value))}
-              style={{
-                width: "100%",
-                accentColor: "var(--color-primary)",
-                height: 6,
-                cursor: "pointer",
-              }}
-            />
-          </div>
-
-          {/* Refresh Button */}
-          <button
-            type="button"
-            onClick={fetchClusters}
-            className="btn btn-primary btn-sm"
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <span className="spinner-sm" style={{ marginRight: 6 }} />
-                Loading…
-              </>
-            ) : (
-              <>
                 <svg
                   width="14"
                   height="14"
@@ -168,34 +119,103 @@ export function ProximityMap() {
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  style={{ marginRight: 4 }}
                 >
-                  <polyline points="23 4 23 10 17 10" />
-                  <polyline points="1 20 1 14 7 14" />
-                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                  <circle cx="12" cy="10" r="3" />
                 </svg>
-                Refresh
-              </>
-            )}
-          </button>
-        </div>
+                Location mode
+              </label>
+              <select
+                className="input"
+                value={locationMode}
+                onChange={(e) => setLocationMode(e.target.value as typeof locationMode)}
+                style={{ width: "100%", color: "var(--color-text)", backgroundColor: "var(--color-surface)" }}
+              >
+                <option value="current" style={{ color: "var(--color-text)", backgroundColor: "var(--color-surface)" }}>Current location</option>
+                <option value="home" style={{ color: "var(--color-text)", backgroundColor: "var(--color-surface)" }}>Home address</option>
+                <option value="office" style={{ color: "var(--color-text)", backgroundColor: "var(--color-surface)" }}>Office address</option>
+              </select>
+            </div>
 
-        {/* Results Summary */}
-        <div
-          className="text-body-sm"
-          style={{
-            marginTop: 12,
-            paddingTop: 12,
-            borderTop: "1px solid var(--color-border-light)",
-          }}
-        >
-          {clusters.length > 0
-            ? `Showing ${clusters.length} ${clusters.length === 1 ? "company" : "companies"} within ${radiusLabel}`
-            : center
-              ? "No companies found in this area"
-              : "Waiting for location…"}
+            {/* Radius Slider */}
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label className="label" style={{ marginBottom: 6 }}>
+                Search radius:{" "}
+                <span
+                  className="badge badge-primary"
+                  style={{ marginLeft: 6, fontSize: 11 }}
+                >
+                  {radiusLabel}
+                </span>
+              </label>
+              <input
+                type="range"
+                min={100}
+                max={100000}
+                step={100}
+                value={radius}
+                onChange={(e) => setRadius(Number(e.target.value))}
+                style={{
+                  width: "100%",
+                  accentColor: "var(--color-primary)",
+                  height: 6,
+                  cursor: "pointer",
+                }}
+              />
+            </div>
+
+            {/* Refresh Button */}
+            <button
+              type="button"
+              onClick={fetchClusters}
+              className="btn btn-primary btn-sm"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <span className="spinner-sm" style={{ marginRight: 6 }} />
+                  Loading…
+                </>
+              ) : (
+                <>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ marginRight: 4 }}
+                  >
+                    <polyline points="23 4 23 10 17 10" />
+                    <polyline points="1 20 1 14 7 14" />
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                  </svg>
+                  Refresh
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Results Summary */}
+          <div
+            className="text-body-sm"
+            style={{
+              marginTop: 12,
+              paddingTop: 12,
+              borderTop: "1px solid var(--color-border-light)",
+            }}
+          >
+            {clusters.length > 0
+              ? `Showing ${clusters.length} ${clusters.length === 1 ? "company" : "companies"} within ${radiusLabel}`
+              : center
+                ? "No companies found in this area"
+                : "Waiting for location…"}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Error State */}
       {error && (
@@ -231,8 +251,8 @@ export function ProximityMap() {
           padding: 0,
           overflow: "hidden",
           borderRadius: "var(--radius-lg)",
-          height: "calc(100vh - 380px)",
-          minHeight: 300,
+          height: "calc(100vh - 200px)",
+          minHeight: 400,
         }}
       >
         {center ? (

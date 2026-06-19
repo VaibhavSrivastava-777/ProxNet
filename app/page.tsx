@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/session";
 import { AnimatedStats, TypewriterText } from "@/components/home/AnimatedStats";
 import { LoginButton } from "@/components/auth/LoginButton";
+import { LocalForumFeed } from "@/components/home/LocalForumFeed";
 
 export default async function HomePage() {
   const session = await auth();
@@ -86,6 +87,8 @@ export default async function HomePage() {
             <p className="text-xs sm:text-body-sm text-[var(--color-text-secondary)] m-0">Discover referrals and roles in your area.</p>
           </Link>
         </div>
+
+        <LocalForumFeed />
       </div>
     );
   }

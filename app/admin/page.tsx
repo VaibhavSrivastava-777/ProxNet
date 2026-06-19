@@ -5,6 +5,7 @@ import { SupabaseSetupBanner } from "@/components/admin/SupabaseSetupBanner";
 import { AdminJobTable } from "@/components/admin/AdminJobTable";
 import { AdminCarpoolForm } from "@/components/admin/AdminCarpoolForm";
 import { AdminCarpoolTable } from "@/components/admin/AdminCarpoolTable";
+import { AdminActions } from "@/components/admin/AdminActions";
 
 export default function AdminDashboardPage() {
   return (
@@ -25,6 +26,8 @@ export default function AdminDashboardPage() {
       <div className="mb-6">
         <SupabaseSetupBanner />
       </div>
+
+      <AdminActions />
       
       <UserTable />
 
