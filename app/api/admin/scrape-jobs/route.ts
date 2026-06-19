@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     "populateAiRemoteLocationDerived": false,
     "remote only (legacy)": false,
     "removeAgency": false,
-    "timeRange": "7d",
+    "timeRange": "14d",
     "limit": 1000, // Fetch a large batch to increase chances of matching local companies
     "descriptionType": "text"
   };
