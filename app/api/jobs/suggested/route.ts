@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -16,7 +15,7 @@ export async function GET() {
     const { data: userProfile, error: profileError } = await supabase
       .from("users")
       .select("job_title, bio")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .single();
 
     if (profileError || !userProfile) {
@@ -84,7 +83,7 @@ export async function GET() {
       }
 
       // Avoid suggesting the current user as their own referral contact
-      if (row.contact_id !== session.user.id) {
+      if (row.contact_id !== user.id) {
         // Add unique contacts
         const jobEntry = jobMap.get(row.id);
         if (!jobEntry.referralContacts.find((c: any) => c.id === row.contact_id)) {
