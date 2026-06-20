@@ -167,24 +167,8 @@ export function ProfileForm({ initialUser }: Props) {
 
     setUploadingResume(true);
     try {
-      // 1. Extract text client side using dynamic import
-      const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      let extractedText = "";
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item: any) => item.str).join(" ");
-        extractedText += pageText + "\n";
-      }
-
-      // 2. Send to API to generate "About" and upload to DB via Admin Client
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("text", extractedText);
 
       const res = await fetch("/api/profile/parse-resume", {
         method: "POST",
@@ -204,9 +188,9 @@ export function ProfileForm({ initialUser }: Props) {
         about: data.about || user.about
       });
       alert("Resume parsed successfully! We've also auto-generated your About section based on your resume. Don't forget to save your profile below.");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Resume upload failed", error);
-      alert("Failed to upload and parse resume.");
+      alert(`Failed to upload and parse resume: ${error?.message || String(error)}`);
     }
     setUploadingResume(false);
   }
