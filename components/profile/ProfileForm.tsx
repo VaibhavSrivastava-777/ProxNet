@@ -431,14 +431,17 @@ export function ProfileForm({ initialUser }: Props) {
           </div>
 
           <div style={{ gridColumn: "1 / -1" }}>
-            <label className="label">Resume (PDF)</label>
+            <label htmlFor="resume-upload" className="label">Resume (PDF)</label>
             <div className="flex items-center gap-4">
               <input
+                id="resume-upload"
                 type="file"
                 accept="application/pdf"
                 onChange={handleResumeUpload}
                 disabled={uploadingResume}
                 className="file-input file-input-bordered w-full max-w-xs"
+                title="Upload Resume (PDF)"
+                aria-label="Upload Resume (PDF)"
               />
               {uploadingResume && <span className="text-sm text-text-tertiary">Extracting text...</span>}
               {user.resume_url && !uploadingResume && (
