@@ -146,12 +146,15 @@ export function SuggestedJobs() {
 
               <div className="flex items-center gap-2">
                 <span className="text-xs text-text-tertiary">
-                  {job.referralContacts.length} Contact{job.referralContacts.length > 1 ? "s" : ""} Available
+                  {job.referralContacts.length === 0 
+                    ? "No internal referrals available yet" 
+                    : `${job.referralContacts.length} Contact${job.referralContacts.length > 1 ? "s" : ""} Available`}
                 </span>
                 <button
-                  className="btn btn-accent btn-sm flex items-center gap-2"
-                  onClick={() => handleStartReferral(job, job.referralContacts[0].id)}
-                  disabled={startingChat === job.id}
+                  className={`btn btn-sm flex items-center gap-2 ${job.referralContacts.length === 0 ? "bg-surface-elevated text-text-muted cursor-not-allowed border border-border" : "btn-accent"}`}
+                  onClick={() => job.referralContacts.length > 0 && handleStartReferral(job, job.referralContacts[0].id)}
+                  disabled={startingChat === job.id || job.referralContacts.length === 0}
+                  title={job.referralContacts.length === 0 ? "You need a ProxNet professional at this company to request a referral" : ""}
                 >
                   {startingChat === job.id ? (
                     <><span className="spinner-sm" /> Connecting...</>

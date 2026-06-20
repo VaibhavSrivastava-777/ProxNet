@@ -99,8 +99,8 @@ export async function GET() {
       }
     }
 
-    // Filter out jobs that don't have any valid referral contacts (e.g. if the user was the only employee)
-    const finalJobs = Array.from(jobMap.values()).filter(j => j.referralContacts.length > 0);
+    // We allow jobs to be returned even if they have 0 referral contacts
+    const finalJobs = Array.from(jobMap.values());
 
     return NextResponse.json({ jobs: finalJobs });
 
