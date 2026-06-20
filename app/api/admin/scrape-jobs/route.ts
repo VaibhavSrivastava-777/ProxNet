@@ -38,8 +38,24 @@ export async function POST(request: Request) {
   const oneMonthAgo = new Date();
   oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
 
-  // Helper to strip HTML for Greenhouse
-  const stripHtml = (html: string) => html ? html.replace(/<[^>]*>?/gm, ' ').trim() : '';
+  // Helper to strip HTML and decode entities
+  const stripHtml = (html: string) => {
+    if (!html) return '';
+    let text = html.replace(/<[^>]*>?/gm, ' ');
+    text = text.replace(/&nbsp;/g, ' ');
+    text = text.replace(/&amp;/g, '&');
+    text = text.replace(/&lt;/g, '<');
+    text = text.replace(/&gt;/g, '>');
+    text = text.replace(/&quot;/g, '"');
+    text = text.replace(/&#39;/g, "'");
+    text = text.replace(/&rsquo;/g, "'");
+    text = text.replace(/&lsquo;/g, "'");
+    text = text.replace(/&rdquo;/g, '"');
+    text = text.replace(/&ldquo;/g, '"');
+    text = text.replace(/&ndash;/g, '-');
+    text = text.replace(/&mdash;/g, '-');
+    return text.replace(/\s+/g, ' ').trim();
+  };
 
   // 2. Fetch jobs from each ATS
   for (const config of atsConfigs) {
@@ -257,10 +273,38 @@ ${plainText}`;
 
       totalProcessed++;
 
-      // Generate Embedding
+      // Generate Keywords and Embedding
       let embedding = null;
+      let keywords: string[] = [];
       try {
         const textToEmbed = `Title: ${job.title}\nCompany: ${config.company_name}\nDescription: ${job.description}`.slice(0, 8000); 
+        
+        // 1. Extract Keywords
+        const keywordPrompt = `Extract 3 to 5 highly relevant technical skills, tools, or buzzwords (e.g., "React", "Python", "B2B Sales") from the following job posting. Return a JSON object with a single key 'keywords' containing an array of strings.\n\nJob:\n${textToEmbed}`;
+        const kwRes = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${OPENAI_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [{ role: "user", content: keywordPrompt }],
+            response_format: { type: "json_object" } // Let's not use json_object for simple array if not object, wait we must use object if json_object
+          })
+        });
+        
+        if (kwRes.ok) {
+          const kwData = await kwRes.json();
+          try {
+             // Handle if GPT returns just array or an object with a key
+             const parsed = JSON.parse(kwData.choices[0].message.content);
+             keywords = Array.isArray(parsed) ? parsed : Object.values(parsed)[0] as string[];
+             if (!Array.isArray(keywords)) keywords = [];
+          } catch(e) {}
+        }
+
+        // 2. Generate Embedding
         const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
           method: "POST",
           headers: {
@@ -280,7 +324,7 @@ ${plainText}`;
           }
         }
       } catch(e) {
-        console.error("OpenAI embedding failed", e);
+        console.error("OpenAI processing failed", e);
       }
 
       // Upsert
@@ -292,7 +336,8 @@ ${plainText}`;
         description: job.description.substring(0, 5000), // Keep description manageable
         ats_source: job.source,
         posted_at: job.posted_at,
-        embedding: embedding
+        embedding: embedding,
+        keywords: keywords.slice(0, 5)
       }, { onConflict: "url" });
       
       if (!insertError) {

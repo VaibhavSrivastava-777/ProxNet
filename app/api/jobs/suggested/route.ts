@@ -81,6 +81,7 @@ export async function GET() {
           url: row.url,
           description: row.description,
           posted_at: row.posted_at,
+          keywords: row.keywords || [],
           similarity: row.similarity,
           referralContacts: []
         });

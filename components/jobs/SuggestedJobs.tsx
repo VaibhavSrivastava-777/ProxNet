@@ -11,6 +11,7 @@ interface SuggestedJob {
   url: string;
   description: string;
   posted_at: string;
+  keywords: string[];
   similarity: number;
   referralContacts: Array<{ id: string; alias: string }>;
 }
@@ -20,7 +21,27 @@ export function SuggestedJobs() {
   const [loading, setLoading] = useState(true);
   const [startingChat, setStartingChat] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [requireReferral, setRequireReferral] = useState(false);
   const router = useRouter();
+
+  // Helper to dynamically clean old messy DB descriptions
+  const decodeHtml = (html: string) => {
+    if (!html) return "";
+    let text = html.replace(/<[^>]*>?/gm, ' ');
+    text = text.replace(/&nbsp;/g, ' ');
+    text = text.replace(/&amp;/g, '&');
+    text = text.replace(/&lt;/g, '<');
+    text = text.replace(/&gt;/g, '>');
+    text = text.replace(/&quot;/g, '"');
+    text = text.replace(/&#39;/g, "'");
+    text = text.replace(/&rsquo;/g, "'");
+    text = text.replace(/&lsquo;/g, "'");
+    text = text.replace(/&rdquo;/g, '"');
+    text = text.replace(/&ldquo;/g, '"');
+    text = text.replace(/&ndash;/g, '-');
+    text = text.replace(/&mdash;/g, '-');
+    return text.replace(/\s+/g, ' ').trim();
+  };
 
   useEffect(() => {
     async function fetchSuggested() {
@@ -92,13 +113,31 @@ export function SuggestedJobs() {
         </p>
       </div>
 
-      {jobs.length === 0 ? (
-        <div className="card p-8 text-center border border-dashed border-border flex flex-col items-center animate-fadeIn min-h-[250px]">
-          <p className="text-body text-text-secondary font-medium">No highly matched jobs found.</p>
-          <p className="text-caption mt-1">Try updating your Bio on your profile to get better AI matches, or check back later!</p>
-        </div>
-      ) : (
-        jobs.map((job) => (
+      <div className="flex justify-end items-center mb-4">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input 
+            type="checkbox" 
+            className="toggle toggle-primary"
+            checked={requireReferral}
+            onChange={(e) => setRequireReferral(e.target.checked)}
+          />
+          <span className="text-sm font-medium text-text">ProxNet Refer Available</span>
+        </label>
+      </div>
+
+      {(() => {
+        const filteredJobs = requireReferral ? jobs.filter(j => j.referralContacts.length > 0) : jobs;
+        
+        if (filteredJobs.length === 0) {
+          return (
+            <div className="card p-8 text-center border border-dashed border-border flex flex-col items-center animate-fadeIn min-h-[250px]">
+              <p className="text-body text-text-secondary font-medium">No highly matched jobs found.</p>
+              <p className="text-caption mt-1">Try updating your Bio on your profile to get better AI matches, or check back later!</p>
+            </div>
+          );
+        }
+
+        return filteredJobs.map((job) => (
           <div key={job.id} className="card p-5 animate-fadeInUp flex flex-col gap-4 border border-primary/20 bg-surface">
             <div>
               <div className="flex justify-between items-start">
@@ -126,9 +165,20 @@ export function SuggestedJobs() {
                   </span>
                 )}
               </div>
+              
+              {job.keywords && job.keywords.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {job.keywords.map((kw, i) => (
+                    <span key={i} className="badge bg-surface-elevated text-text-secondary border border-border text-[10px] uppercase font-semibold">
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {job.description && (
                 <div className="text-caption text-text-secondary mt-3 line-clamp-2">
-                  {job.description.substring(0, 200)}...
+                  {decodeHtml(job.description).substring(0, 200)}...
                 </div>
               )}
             </div>
@@ -168,8 +218,8 @@ export function SuggestedJobs() {
               </div>
             </div>
           </div>
-        ))
-      )}
+        ));
+      })()}
     </div>
   );
 }
