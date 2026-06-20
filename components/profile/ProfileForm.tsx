@@ -169,7 +169,7 @@ export function ProfileForm({ initialUser }: Props) {
 
     setUploadingResume(true);
     try {
-      // 1. Extract text
+      // 1. Extract text client side
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let extractedText = "";
@@ -180,16 +180,29 @@ export function ProfileForm({ initialUser }: Props) {
         extractedText += pageText + "\n";
       }
 
-      // 2. Upload to Supabase
-      const supabase = createBrowserClient();
-      const fileName = `${user.id}-${Date.now()}.pdf`;
-      const { data, error } = await supabase.storage.from("resumes").upload(fileName, file);
-      if (error) throw error;
+      // 2. Send to API to generate "About" and upload to DB via Admin Client
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("text", extractedText);
 
-      const { data: publicUrlData } = supabase.storage.from("resumes").getPublicUrl(fileName);
+      const res = await fetch("/api/profile/parse-resume", {
+        method: "POST",
+        body: formData,
+      });
 
-      setUser({ ...user, resume_url: publicUrlData.publicUrl, resume_text: extractedText });
-      alert("Resume parsed successfully! Don't forget to save your profile below.");
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      const data = await res.json();
+      
+      setUser({ 
+        ...user, 
+        resume_url: data.resume_url, 
+        resume_text: data.resume_text,
+        about: data.about || user.about
+      });
+      alert("Resume parsed successfully! We've also auto-generated your About section based on your resume. Don't forget to save your profile below.");
     } catch (error) {
       console.error("Resume upload failed", error);
       alert("Failed to upload and parse resume.");
@@ -454,16 +467,7 @@ export function ProfileForm({ initialUser }: Props) {
             </p>
           </div>
 
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label className="label">About</label>
-            <textarea
-              className="input"
-              style={{ minHeight: "80px", resize: "vertical" }}
-              value={user.about ?? ""}
-              placeholder="A brief summary of your skills, interests, and professional background. This helps our AI match you with the best job opportunities!"
-              onChange={(e) => setUser({ ...user, about: e.target.value })}
-            />
-          </div>
+
 
           <div>
             <label className="label">Phone number</label>
