@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:admin": "npx tsx --env-file=.env.local scripts/seed-admin.ts"
+    "seed:admin": "npx tsx --env-file=.env.local scripts/seed-admin.ts",
+    "seed:ats": "npx tsx --env-file=.env.local scripts/seed-ats.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",
