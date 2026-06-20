@@ -12,6 +12,7 @@ interface AtsConfig {
 
 export function AdminAtsConfig() {
   const [configs, setConfigs] = useState<AtsConfig[]>([]);
+  const [availableCompanies, setAvailableCompanies] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [companyName, setCompanyName] = useState("");
   const [provider, setProvider] = useState("greenhouse");
@@ -27,6 +28,12 @@ export function AdminAtsConfig() {
       const res = await fetch("/api/admin/ats");
       const data = await res.json();
       if (data.configs) setConfigs(data.configs);
+      if (data.availableCompanies) {
+        setAvailableCompanies(data.availableCompanies);
+        if (data.availableCompanies.length > 0 && !companyName) {
+          setCompanyName(data.availableCompanies[0]);
+        }
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -36,6 +43,10 @@ export function AdminAtsConfig() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
+    if (!companyName) {
+      alert("Please select a company");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/admin/ats", {
@@ -46,7 +57,14 @@ export function AdminAtsConfig() {
       const data = await res.json();
       if (data.config) {
         setConfigs([data.config, ...configs]);
-        setCompanyName("");
+        // Remove the added company from available list
+        const updatedAvailable = availableCompanies.filter(c => c !== companyName);
+        setAvailableCompanies(updatedAvailable);
+        if (updatedAvailable.length > 0) {
+          setCompanyName(updatedAvailable[0]);
+        } else {
+          setCompanyName("");
+        }
         setBoardToken("");
       } else {
         alert(data.error || "Failed to add ATS config");
@@ -63,7 +81,16 @@ export function AdminAtsConfig() {
     if (!confirm("Are you sure you want to delete this config?")) return;
     try {
       await fetch(`/api/admin/ats?id=${id}`, { method: "DELETE" });
+      const deletedConfig = configs.find(c => c.id === id);
       setConfigs(configs.filter((c) => c.id !== id));
+      if (deletedConfig) {
+        // Add back to available companies
+        const newAvailable = [...availableCompanies, deletedConfig.company_name].sort();
+        setAvailableCompanies(newAvailable);
+        if (!companyName) {
+          setCompanyName(deletedConfig.company_name);
+        }
+      }
     } catch (e) {
       console.error(e);
       alert("Failed to delete");
@@ -80,18 +107,27 @@ export function AdminAtsConfig() {
           Map your ProxNet companies to their exact Greenhouse or Lever board tokens. This bypasses the Apify firehose and lets our scraper pull jobs directly from their ATS for free!
         </p>
 
-        <form onSubmit={handleAdd} className="flex flex-col md:flex-row gap-4 mb-8 bg-background p-4 rounded-lg border border-border">
-          <div className="flex-1">
-            <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1 block">ProxNet Company Name</label>
-            <input
-              type="text"
-              placeholder="e.g. Netflix"
-              className="input w-full"
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              required
-            />
+        {availableCompanies.length === 0 && configs.length > 0 ? (
+          <div className="mb-8 p-4 bg-green-50 border border-green-200 text-green-800 rounded-lg">
+            All ProxNet companies have been mapped! 
           </div>
+        ) : (
+          <form onSubmit={handleAdd} className="flex flex-col md:flex-row gap-4 mb-8 bg-background p-4 rounded-lg border border-border">
+            <div className="flex-1">
+              <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1 block">ProxNet Company Name</label>
+              <select
+                className="input w-full"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                required
+                disabled={availableCompanies.length === 0}
+              >
+                {availableCompanies.length === 0 && <option value="">No companies available</option>}
+                {availableCompanies.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
           <div className="flex-1">
             <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1 block">ATS Provider</label>
             <select className="input w-full" value={provider} onChange={(e) => setProvider(e.target.value)}>
@@ -116,6 +152,7 @@ export function AdminAtsConfig() {
             </button>
           </div>
         </form>
+        )}
 
         {configs.length === 0 ? (
           <div className="text-center p-8 border border-dashed border-border rounded-lg text-text-secondary">
