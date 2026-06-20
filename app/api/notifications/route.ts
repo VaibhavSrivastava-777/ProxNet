@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export const dynamic = "force-dynamic";
+
 // Fetch the user's latest 20 notifications
 export async function GET(request: Request) {
   const session = await auth();

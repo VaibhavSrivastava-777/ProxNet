@@ -110,8 +110,9 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       .catch(() => {});
   };
 
-  const handleNotificationClick = (id: string) => {
+  const handleNotificationClick = (id: string, url: string) => {
     setNotificationsOpen(false);
+    
     // Optimistic update - set is_read to true
     setInAppNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     
@@ -121,6 +122,10 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id })
     }).catch(e => console.error("Failed to mark notification as read", e));
+
+    if (url) {
+      router.push(url);
+    }
   };
 
   const triggerToast = (toast: { title: string; body: string; url: string }) => {
@@ -657,17 +662,16 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                       ) : (
                         <div className="flex flex-col">
                           {inAppNotifications.filter(n => !n.is_read).map((n) => (
-                            <Link
-                              href={n.url}
+                            <button
                               key={n.id}
-                              onClick={() => handleNotificationClick(n.id)}
+                              onClick={() => handleNotificationClick(n.id, n.url || "/")}
                               className={`block w-full text-left px-4 py-3 border-b border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] active:bg-[var(--color-surface-active)] transition-colors flex flex-col gap-1 ${!n.is_read ? 'bg-[var(--color-primary-subtle)]' : ''}`}
                             >
                               <span className="text-sm font-semibold text-[var(--color-text)]">{n.title}</span>
                               <div className="flex flex-col">
                                 <span className={`text-xs text-[var(--color-text-secondary)] ${expandedNotifs[n.id] ? '' : 'line-clamp-2'}`}>{n.body}</span>
                                 {n.body.length > 80 && (
-                                  <button
+                                  <div
                                     onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
@@ -676,11 +680,11 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                                     className="text-left text-xs font-medium text-[var(--color-primary)] mt-0.5 hover:underline w-max"
                                   >
                                     {expandedNotifs[n.id] ? "Show less" : "Read more"}
-                                  </button>
+                                  </div>
                                 )}
                               </div>
                               <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1">{new Date(n.created_at).toLocaleDateString()} {new Date(n.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                            </Link>
+                            </button>
                           ))}
                         </div>
                       )}
@@ -806,17 +810,16 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                     ) : (
                       <div className="flex flex-col">
                         {inAppNotifications.map((n: any) => (
-                          <Link
+                          <button
                             key={n.id}
-                            href={n.url}
-                            onClick={() => handleNotificationClick(n.id)}
+                            onClick={() => handleNotificationClick(n.id, n.url || "/")}
                             className={`w-full text-left px-4 py-3 border-b border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] transition-colors flex flex-col gap-1 ${!n.is_read ? 'bg-[var(--color-primary-subtle)]' : ''}`}
                           >
                             <span className="text-sm font-semibold text-[var(--color-text)]">{n.title}</span>
                             <div className="flex flex-col">
                               <span className={`text-xs text-[var(--color-text-secondary)] ${expandedNotifs[n.id] ? '' : 'line-clamp-2'}`}>{n.body}</span>
                               {n.body.length > 80 && (
-                                <button
+                                <div
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
@@ -825,11 +828,11 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                                   className="text-left text-xs font-medium text-[var(--color-primary)] mt-0.5 hover:underline w-max"
                                 >
                                   {expandedNotifs[n.id] ? "Show less" : "Read more"}
-                                </button>
+                                </div>
                               )}
                             </div>
                             <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1">{new Date(n.created_at).toLocaleDateString()}</span>
-                          </Link>
+                          </button>
                         ))}
                       </div>
                     )}
