@@ -42,9 +42,39 @@ export async function POST(request: Request) {
   const isAdmin = await getAdminSession();
   if (!isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { company_name, provider, board_token_or_url } = await request.json();
+  let { company_name, provider, board_token_or_url } = await request.json();
   if (!company_name || !provider || !board_token_or_url) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  // Auto-Detect logic from sample URL
+  if (provider === "custom") {
+    try {
+      const urlObj = new URL(board_token_or_url);
+      const hostname = urlObj.hostname.toLowerCase();
+      
+      if (hostname.includes("greenhouse.io")) {
+        provider = "greenhouse";
+        // e.g. https://boards.greenhouse.io/figma/jobs/123 -> figma
+        const parts = urlObj.pathname.split("/").filter(Boolean);
+        board_token_or_url = parts[0] || "";
+      } else if (hostname.includes("lever.co")) {
+        provider = "lever";
+        // e.g. https://jobs.lever.co/netflix/123 -> netflix
+        const parts = urlObj.pathname.split("/").filter(Boolean);
+        board_token_or_url = parts[0] || "";
+      } else {
+        return NextResponse.json({ 
+          error: "Unsupported custom URL. Currently we only auto-detect Greenhouse and Lever URLs." 
+        }, { status: 400 });
+      }
+      
+      if (!board_token_or_url) {
+        return NextResponse.json({ error: "Could not extract board token from the provided URL." }, { status: 400 });
+      }
+    } catch (e) {
+      return NextResponse.json({ error: "Invalid URL provided for custom detection." }, { status: 400 });
+    }
   }
 
   const supabase = createAdminClient();

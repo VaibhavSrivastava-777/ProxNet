@@ -15,7 +15,7 @@ export function AdminAtsConfig() {
   const [availableCompanies, setAvailableCompanies] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [companyName, setCompanyName] = useState("");
-  const [provider, setProvider] = useState("greenhouse");
+  const [provider, setProvider] = useState("custom");
   const [boardToken, setBoardToken] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -130,16 +130,22 @@ export function AdminAtsConfig() {
             </div>
           <div className="flex-1">
             <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1 block">ATS Provider</label>
-            <select className="input w-full" value={provider} onChange={(e) => setProvider(e.target.value)}>
+            <select className="input w-full" value={provider} onChange={(e) => {
+              setProvider(e.target.value);
+              setBoardToken("");
+            }}>
+              <option value="custom">Custom (Auto-Detect from URL)</option>
               <option value="greenhouse">Greenhouse</option>
               <option value="lever">Lever</option>
             </select>
           </div>
           <div className="flex-1">
-            <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1 block">Board Token</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1 block">
+              {provider === "custom" ? "Sample Job URL" : "Board Token"}
+            </label>
             <input
               type="text"
-              placeholder="e.g. netflix (from api.lever.co/v0/postings/netflix)"
+              placeholder={provider === "custom" ? "e.g. https://jobs.lever.co/netflix/123" : "e.g. netflix"}
               className="input w-full"
               value={boardToken}
               onChange={(e) => setBoardToken(e.target.value)}
