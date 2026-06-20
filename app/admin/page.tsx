@@ -6,6 +6,7 @@ import { AdminJobTable } from "@/components/admin/AdminJobTable";
 import { AdminCarpoolForm } from "@/components/admin/AdminCarpoolForm";
 import { AdminCarpoolTable } from "@/components/admin/AdminCarpoolTable";
 import { AdminActions } from "@/components/admin/AdminActions";
+import { AdminAtsConfig } from "@/components/admin/AdminAtsConfig";
 
 export default function AdminDashboardPage() {
   return (
@@ -28,6 +29,8 @@ export default function AdminDashboardPage() {
       </div>
 
       <AdminActions />
+      
+      <AdminAtsConfig />
       
       <UserTable />
 
