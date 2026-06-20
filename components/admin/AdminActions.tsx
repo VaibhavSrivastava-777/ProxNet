@@ -84,7 +84,30 @@ export function AdminActions() {
           disabled={loadingScrape}
           className="btn btn-secondary"
         >
-          {loadingScrape ? "Scraping..." : "Scrape ATS Jobs"}
+          {loadingScrape ? "Scraping..." : "Scrape ATS Jobs (All)"}
+        </button>
+        <button
+          onClick={async () => {
+            if (!confirm("Start ATS Job Crawl for ProxNet companies ONLY?")) return;
+            setLoadingScrape(true);
+            try {
+              const res = await fetch("/api/admin/scrape-jobs", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ onlyProxNet: true })
+              });
+              const data = await res.json();
+              if (res.ok) alert(`Scraping complete! Added ${data.totalAdded} new jobs.`);
+              else alert(`Error: ${data.error}`);
+            } catch (e) {
+              alert("Failed to run job scrape");
+            }
+            setLoadingScrape(false);
+          }}
+          disabled={loadingScrape}
+          className="btn btn-primary bg-primary/20 text-primary border border-primary/50"
+        >
+          {loadingScrape ? "Scraping..." : "Scrape Jobs (ProxNet Only)"}
         </button>
       </div>
     </div>

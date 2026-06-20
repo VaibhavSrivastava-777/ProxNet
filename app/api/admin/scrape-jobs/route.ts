@@ -13,10 +13,33 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
   
+  let requestBody: any = {};
+  try {
+    requestBody = await request.json();
+  } catch (e) {}
+
+  let query = supabase.from("company_ats_config").select("*");
+
+  if (requestBody.onlyProxNet) {
+    const { data: users } = await supabase.from("users").select("company");
+    if (users && users.length > 0) {
+      // Create a case-insensitive set of ProxNet companies
+      const proxNetCompanies = Array.from(new Set(users.map((u: any) => {
+        if (!u.company) return "";
+        const clean = u.company.trim();
+        return clean.charAt(0).toUpperCase() + clean.slice(1); // Standardize capitalization like seed-ats does
+      }).filter(Boolean)));
+      
+      if (proxNetCompanies.length > 0) {
+        query = query.in("company_name", proxNetCompanies);
+      }
+    }
+  } else if (requestBody.companies && Array.isArray(requestBody.companies)) {
+    query = query.in("company_name", requestBody.companies);
+  }
+
   // 1. Get ATS configs
-  const { data: atsConfigs, error: atsError } = await supabase
-    .from("company_ats_config")
-    .select("*");
+  const { data: atsConfigs, error: atsError } = await query;
     
   if (atsError) {
     return NextResponse.json({ error: "Failed to fetch ATS configs" }, { status: 500 });
