@@ -34,9 +34,9 @@ export async function POST(request: Request) {
   let totalProcessed = 0;
   let totalAdded = 0;
 
-  // 14 days ago for filtering
-  const fourteenDaysAgo = new Date();
-  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+  // 1 month ago for filtering
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
 
   // Helper to strip HTML for Greenhouse
   const stripHtml = (html: string) => html ? html.replace(/<[^>]*>?/gm, ' ').trim() : '';
@@ -129,7 +129,12 @@ ${plainText}`;
     for (const job of jobs) {
       // Date filter
       const jobDate = job.posted_at ? new Date(job.posted_at) : new Date();
-      if (jobDate < fourteenDaysAgo) {
+      if (jobDate < oneMonthAgo) {
+        continue;
+      }
+
+      // Location filter (India only)
+      if (!job.location || !job.location.toLowerCase().includes("india")) {
         continue;
       }
 
