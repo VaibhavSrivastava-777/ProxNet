@@ -76,6 +76,114 @@ export async function POST(request: Request) {
             });
           }
         }
+      } else if (config.provider === 'ashby') {
+        const res = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${config.board_token_or_url}`);
+        if (res.ok) {
+          const data = await res.json();
+          for (const j of data.jobs || []) {
+            jobs.push({
+              title: j.title,
+              location: j.location?.name || 'Remote',
+              url: j.jobUrl,
+              posted_at: j.publishedAt,
+              description: stripHtml(j.descriptionHtml || j.descriptionPlain || ''),
+              source: 'ashby'
+            });
+          }
+        }
+      } else if (config.provider === 'workable') {
+        const res = await fetch(`https://www.workable.com/api/accounts/${config.board_token_or_url}?details=true`);
+        if (res.ok) {
+          const data = await res.json();
+          for (const j of data.jobs || []) {
+            jobs.push({
+              title: j.title,
+              location: j.city || j.country || 'Remote',
+              url: j.url,
+              posted_at: j.created_at,
+              description: stripHtml(j.description || ''),
+              source: 'workable'
+            });
+          }
+        }
+      } else if (config.provider === 'breezy') {
+        const res = await fetch(`https://${config.board_token_or_url}.breezy.hr/json`);
+        if (res.ok) {
+          const data = await res.json();
+          for (const j of (Array.isArray(data) ? data : [])) {
+            jobs.push({
+              title: j.name,
+              location: j.location?.name || j.location?.city || 'Remote',
+              url: j.url,
+              posted_at: j.creation_date,
+              description: stripHtml(j.description || ''),
+              source: 'breezy'
+            });
+          }
+        }
+      } else if (config.provider === 'recruitee') {
+        const res = await fetch(`https://${config.board_token_or_url}.recruitee.com/api/offers`);
+        if (res.ok) {
+          const data = await res.json();
+          for (const j of data.offers || []) {
+            jobs.push({
+              title: j.title,
+              location: j.location || 'Remote',
+              url: j.careers_url,
+              posted_at: j.published_at,
+              description: stripHtml(j.description || ''),
+              source: 'recruitee'
+            });
+          }
+        }
+      } else if (config.provider === 'smartrecruiters') {
+        const res = await fetch(`https://api.smartrecruiters.com/v1/companies/${config.board_token_or_url}/postings`);
+        if (res.ok) {
+          const data = await res.json();
+          for (const j of data.content || []) {
+            // SmartRecruiters postings endpoint lacks description.
+            // We just set a placeholder and let the loop handle it if we want, or do individual fetch
+            // Let's do a fast individual fetch if date is recent
+            const postedDate = new Date(j.releasedDate);
+            if (postedDate >= oneMonthAgo) {
+              try {
+                const detailRes = await fetch(`https://api.smartrecruiters.com/v1/companies/${config.board_token_or_url}/postings/${j.id}`);
+                if (detailRes.ok) {
+                  const detailData = await detailRes.json();
+                  jobs.push({
+                    title: j.name,
+                    location: j.location?.city || 'Remote',
+                    url: `https://jobs.smartrecruiters.com/${config.board_token_or_url}/${j.id}`,
+                    posted_at: j.releasedDate,
+                    description: stripHtml(detailData.jobAd?.sections?.jobDescription?.text || ''),
+                    source: 'smartrecruiters'
+                  });
+                }
+              } catch (e) {
+                // Ignore detail fetch errors
+              }
+            }
+          }
+        }
+      } else if (config.provider === 'apify') {
+        // board_token_or_url contains the Dataset ID or Task ID where data was saved
+        const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
+        if (APIFY_TOKEN) {
+          const res = await fetch(`https://api.apify.com/v2/datasets/${config.board_token_or_url}/items?token=${APIFY_TOKEN}`);
+          if (res.ok) {
+            const data = await res.json();
+            for (const j of data || []) {
+              jobs.push({
+                title: j.title || j.position,
+                location: j.location || 'Remote',
+                url: j.url || j.jobUrl,
+                posted_at: j.postedAt || j.date || new Date().toISOString(),
+                description: stripHtml(j.description || j.text || ''),
+                source: 'apify'
+              });
+            }
+          }
+        }
       } else if (config.provider === 'custom') {
         // Option B: AI scrapes the single custom job URL
         const res = await fetch(config.board_token_or_url);

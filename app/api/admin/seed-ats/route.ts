@@ -2,44 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { companyMappings } from "@/lib/anonymize";
 import { getAdminSession } from "@/lib/admin-session";
-
-async function fetchWithTimeout(url: string, timeoutMs = 5000) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(id);
-    return response;
-  } catch (err) {
-    clearTimeout(id);
-    throw err;
-  }
-}
-
-async function discoverAts(companyName: string): Promise<{ provider: string; board: string } | null> {
-  let guess = companyName.toLowerCase().replace(/[^a-z0-9]/g, "");
-  
-  if (guess === "notion") guess = "notionhq";
-  if (guess === "ola") guess = "olacabs";
-
-  try {
-    const leverRes = await fetchWithTimeout(`https://api.lever.co/v0/postings/${guess}?mode=json`);
-    if (leverRes.ok) {
-      const data = await leverRes.json();
-      if (Array.isArray(data)) return { provider: "lever", board: guess };
-    }
-  } catch (e) {}
-
-  try {
-    const ghRes = await fetchWithTimeout(`https://boards-api.greenhouse.io/v1/boards/${guess}/jobs?content=true`);
-    if (ghRes.ok) {
-      const data = await ghRes.json();
-      if (data && data.jobs) return { provider: "greenhouse", board: guess };
-    }
-  } catch (e) {}
-
-  return null;
-}
+import { discoverAts } from "@/lib/ats-discovery";
 
 export async function GET(request: Request) {
   return handleRequest(request);
