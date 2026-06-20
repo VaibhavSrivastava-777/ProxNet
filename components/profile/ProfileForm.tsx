@@ -432,16 +432,16 @@ export function ProfileForm({ initialUser }: Props) {
             />
           </div>
 
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label htmlFor="resume-upload" className="label">Resume (PDF)</label>
-            <div className="flex items-center gap-4">
+          <div style={{ gridColumn: "1 / -1" }} className="bg-[var(--color-surface-hover)] p-4 rounded-lg border border-[var(--color-primary-subtle)]">
+            <label htmlFor="resume-upload" className="label font-bold text-[var(--color-primary)]">Upload Resume (PDF) for AI Matching</label>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-2">
               <input
                 id="resume-upload"
                 type="file"
                 accept="application/pdf"
                 onChange={handleResumeUpload}
                 disabled={uploadingResume}
-                className="file-input file-input-bordered w-full max-w-xs"
+                className="file-input file-input-primary file-input-bordered w-full max-w-xs shadow-sm"
                 title="Upload Resume (PDF)"
                 aria-label="Upload Resume (PDF)"
               />

@@ -133,6 +133,13 @@ ${plainText}`;
         continue;
       }
 
+      // Check BOTH title and description
+      const hasTitle = job.title && job.title.trim() !== "" && job.title !== "Unknown Title";
+      const hasDesc = job.description && job.description.trim() !== "" && job.description !== "No description provided";
+      if (!hasTitle || !hasDesc) {
+        continue; // Skip if we don't have BOTH title and description
+      }
+
       totalProcessed++;
 
       // Generate Embedding
