@@ -207,6 +207,8 @@ export function ProfileForm({ initialUser }: Props) {
         company: user.company,
         job_title: user.job_title,
         about: user.about,
+        resume_url: user.resume_url,
+        resume_text: user.resume_text,
         phone_number: user.phone_number,
         profile_photo_url: user.profile_photo_url,
         linkedin_profile_url: user.linkedin_profile_url,
