@@ -141,8 +141,8 @@ ${plainText}`;
       }
 
       // Check BOTH title and description
-      const hasTitle = job.title && job.title.trim() !== "" && job.title !== "Unknown Title";
-      const hasDesc = job.description && job.description.trim() !== "" && job.description !== "No description provided";
+      const hasTitle = job.title && job.title.trim() !== "" && job.title !== "Unknown Title" && job.title !== "Job Title";
+      const hasDesc = job.description && job.description.trim() !== "" && job.description !== "No description provided" && job.description !== "Full text of the job description";
       if (!hasTitle || !hasDesc) {
         continue; // Skip if we don't have BOTH title and description
       }
