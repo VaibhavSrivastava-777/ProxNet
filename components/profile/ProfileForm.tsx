@@ -4,6 +4,9 @@ import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import type { User, UserVisibility } from "@/lib/types";
+import { createBrowserClient } from "@/lib/supabase/client";
+import * as pdfjsLib from "pdfjs-dist";
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 /* ----------------------------------------------------------------
    Collapsible Section
@@ -156,8 +159,43 @@ export function ProfileForm({ initialUser }: Props) {
   const [editing, setEditing] = useState(false);
   const [fetchingHome, setFetchingHome] = useState(false);
   const [fetchingOffice, setFetchingOffice] = useState(false);
+  const [uploadingResume, setUploadingResume] = useState(false);
 
   const visibility = user.visibility as UserVisibility;
+
+  async function handleResumeUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingResume(true);
+    try {
+      // 1. Extract text
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let extractedText = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item: any) => item.str).join(" ");
+        extractedText += pageText + "\n";
+      }
+
+      // 2. Upload to Supabase
+      const supabase = createBrowserClient();
+      const fileName = `${user.id}-${Date.now()}.pdf`;
+      const { data, error } = await supabase.storage.from("resumes").upload(fileName, file);
+      if (error) throw error;
+
+      const { data: publicUrlData } = supabase.storage.from("resumes").getPublicUrl(fileName);
+
+      setUser({ ...user, resume_url: publicUrlData.publicUrl, resume_text: extractedText });
+      alert("Resume parsed successfully! Don't forget to save your profile below.");
+    } catch (error) {
+      console.error("Resume upload failed", error);
+      alert("Failed to upload and parse resume.");
+    }
+    setUploadingResume(false);
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -392,6 +430,28 @@ export function ProfileForm({ initialUser }: Props) {
               placeholder="Your current role"
               onChange={(e) => setUser({ ...user, job_title: e.target.value })}
             />
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="label">Resume (PDF)</label>
+            <div className="flex items-center gap-4">
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={handleResumeUpload}
+                disabled={uploadingResume}
+                className="file-input file-input-bordered w-full max-w-xs"
+              />
+              {uploadingResume && <span className="text-sm text-text-tertiary">Extracting text...</span>}
+              {user.resume_url && !uploadingResume && (
+                <a href={user.resume_url} target="_blank" rel="noreferrer" className="text-primary hover:underline text-sm font-medium">
+                  View Resume
+                </a>
+              )}
+            </div>
+            <p className="text-xs text-text-tertiary mt-2">
+              Upload your resume to automatically extract your experience and dramatically improve your AI job matches.
+            </p>
           </div>
 
           <div style={{ gridColumn: "1 / -1" }}>

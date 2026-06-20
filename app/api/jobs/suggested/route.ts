@@ -11,10 +11,10 @@ export async function GET() {
 
     const supabase = createAdminClient();
 
-    // 1. Fetch current user's profile to get role, company, and about
+    // 1. Fetch current user's profile to get role, company, resume, and saved embedding
     const { data: userProfile, error: profileError } = await supabase
       .from("users")
-      .select("job_title, company, about")
+      .select("job_title, company, about, resume_text, embedding")
       .eq("id", user.id)
       .single();
 
@@ -22,33 +22,37 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to fetch user profile" }, { status: 500 });
     }
 
-    // 2. Generate embedding for the user's profile
-    const OPENAI_KEY = process.env.OPENAI_API_KEY;
-    if (!OPENAI_KEY) {
-      return NextResponse.json({ error: "OpenAI API Key not configured" }, { status: 500 });
+    let userEmbedding = userProfile.embedding;
+
+    // 2. Generate embedding on-the-fly if not saved yet
+    if (!userEmbedding) {
+      const OPENAI_KEY = process.env.OPENAI_API_KEY;
+      if (!OPENAI_KEY) {
+        return NextResponse.json({ error: "OpenAI API Key not configured" }, { status: 500 });
+      }
+
+      const denseContext = userProfile.resume_text ? `Resume: ${userProfile.resume_text}` : `About: ${userProfile.about || "None"}`;
+      const textToEmbed = `Company: ${userProfile.company || "None"}\nRole: ${userProfile.job_title || "None"}\n${denseContext}`.slice(0, 8000);
+
+      const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENAI_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          input: textToEmbed,
+          model: "text-embedding-3-small"
+        })
+      });
+
+      if (!oaiRes.ok) {
+        return NextResponse.json({ error: "Failed to generate embedding" }, { status: 500 });
+      }
+
+      const oaiData = await oaiRes.json();
+      userEmbedding = oaiData.data[0].embedding;
     }
-
-    // Embed the designation (job_title), company, and about
-    const textToEmbed = `Company: ${userProfile.company || "None"}\nRole: ${userProfile.job_title || "None"}\nAbout: ${userProfile.about || "None"}`.slice(0, 8000);
-
-    const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENAI_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        input: textToEmbed,
-        model: "text-embedding-3-small"
-      })
-    });
-
-    if (!oaiRes.ok) {
-      return NextResponse.json({ error: "Failed to generate embedding" }, { status: 500 });
-    }
-
-    const oaiData = await oaiRes.json();
-    const userEmbedding = oaiData.data[0].embedding;
 
     // 3. Match against jobs using the Supabase RPC function
     // This RPC handles the 7-day filter and ProxNet company inner join
