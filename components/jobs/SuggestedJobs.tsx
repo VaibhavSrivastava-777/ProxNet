@@ -200,21 +200,22 @@ export function SuggestedJobs() {
                     ? "No internal referrals available yet" 
                     : `${job.referralContacts.length} Contact${job.referralContacts.length > 1 ? "s" : ""} Available`}
                 </span>
-                <button
-                  className={`btn btn-sm flex items-center gap-2 ${job.referralContacts.length === 0 ? "bg-surface-elevated text-text-muted cursor-not-allowed border border-border" : "btn-accent"}`}
-                  onClick={() => job.referralContacts.length > 0 && handleStartReferral(job, job.referralContacts[0].id)}
-                  disabled={startingChat === job.id || job.referralContacts.length === 0}
-                  title={job.referralContacts.length === 0 ? "You need a ProxNet professional at this company to request a referral" : ""}
-                >
-                  {startingChat === job.id ? (
-                    <><span className="spinner-sm" /> Connecting...</>
-                  ) : (
-                    <>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                      Message Professional
-                    </>
-                  )}
-                </button>
+                {job.referralContacts.length > 0 && (
+                  <button
+                    className="btn btn-sm btn-accent flex items-center gap-2"
+                    onClick={() => handleStartReferral(job, job.referralContacts[0].id)}
+                    disabled={startingChat === job.id}
+                  >
+                    {startingChat === job.id ? (
+                      <><span className="spinner-sm" /> Connecting...</>
+                    ) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        Message Professional
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           </div>
