@@ -23,6 +23,7 @@ export async function PATCH(request: Request) {
   if (body.full_name !== undefined) updates.full_name = body.full_name;
   if (body.company !== undefined) updates.company = body.company;
   if (body.job_title !== undefined) updates.job_title = body.job_title;
+  if (body.about !== undefined) updates.about = body.about;
   if (body.profile_photo_url !== undefined) updates.profile_photo_url = body.profile_photo_url;
   if (body.linkedin_profile_url !== undefined) {
     updates.linkedin_profile_url = normalizeLinkedInUrl(body.linkedin_profile_url);

@@ -11,10 +11,10 @@ export async function GET() {
 
     const supabase = createAdminClient();
 
-    // 1. Fetch current user's profile to get role and bio
+    // 1. Fetch current user's profile to get role, company, and about
     const { data: userProfile, error: profileError } = await supabase
       .from("users")
-      .select("job_title, bio")
+      .select("job_title, company, about")
       .eq("id", user.id)
       .single();
 
@@ -28,8 +28,8 @@ export async function GET() {
       return NextResponse.json({ error: "OpenAI API Key not configured" }, { status: 500 });
     }
 
-    // Default to searching just by their job title if bio is empty
-    const textToEmbed = `Role: ${userProfile.job_title}\nBio: ${userProfile.bio || "None"}`.slice(0, 8000);
+    // Embed the designation (job_title), company, and about
+    const textToEmbed = `Company: ${userProfile.company || "None"}\nRole: ${userProfile.job_title || "None"}\nAbout: ${userProfile.about || "None"}`.slice(0, 8000);
 
     const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",

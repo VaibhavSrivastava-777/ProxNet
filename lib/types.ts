@@ -17,6 +17,7 @@ export interface User {
   full_name: string;
   company: string | null;
   job_title: string | null;
+  about: string | null;
   profile_photo_url: string | null;
   source: UserSource;
   visibility: UserVisibility;

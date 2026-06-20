@@ -170,6 +170,7 @@ export function ProfileForm({ initialUser }: Props) {
         full_name: user.full_name,
         company: user.company,
         job_title: user.job_title,
+        about: user.about,
         phone_number: user.phone_number,
         profile_photo_url: user.profile_photo_url,
         linkedin_profile_url: user.linkedin_profile_url,
@@ -390,6 +391,17 @@ export function ProfileForm({ initialUser }: Props) {
               value={user.job_title ?? ""}
               placeholder="Your current role"
               onChange={(e) => setUser({ ...user, job_title: e.target.value })}
+            />
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="label">About</label>
+            <textarea
+              className="input"
+              style={{ minHeight: "80px", resize: "vertical" }}
+              value={user.about ?? ""}
+              placeholder="A brief summary of your skills, interests, and professional background. This helps our AI match you with the best job opportunities!"
+              onChange={(e) => setUser({ ...user, about: e.target.value })}
             />
           </div>
 
