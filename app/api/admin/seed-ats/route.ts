@@ -41,7 +41,15 @@ async function discoverAts(companyName: string): Promise<{ provider: string; boa
   return null;
 }
 
+export async function GET(request: Request) {
+  return handleRequest(request);
+}
+
 export async function POST(request: Request) {
+  return handleRequest(request);
+}
+
+async function handleRequest(request: Request) {
   const authHeader = request.headers.get("authorization");
   const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
   const isAdmin = await getAdminSession();
