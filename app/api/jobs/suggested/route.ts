@@ -87,8 +87,8 @@ export async function GET() {
         });
       }
 
-      // Avoid suggesting the current user as their own referral contact
-      if (row.contact_id !== user.id) {
+      // Avoid suggesting the current user as their own referral contact, and ignore null contacts
+      if (row.contact_id && row.contact_id !== user.id) {
         // Add unique contacts
         const jobEntry = jobMap.get(row.id);
         if (!jobEntry.referralContacts.find((c: any) => c.id === row.contact_id)) {
