@@ -183,8 +183,8 @@ export async function POST(request: Request) {
             // SmartRecruiters postings endpoint lacks description.
             // We just set a placeholder and let the loop handle it if we want, or do individual fetch
             // Let's do a fast individual fetch if date is recent
-            const postedDate = new Date(j.releasedDate);
-            if (postedDate >= oneMonthAgo) {
+            const postedDate = j.releasedDate ? new Date(j.releasedDate) : null;
+            if (!postedDate || isNaN(postedDate.getTime()) || postedDate >= oneMonthAgo) {
               try {
                 const detailRes = await fetch(`https://api.smartrecruiters.com/v1/companies/${config.board_token_or_url}/postings/${j.id}`);
                 if (detailRes.ok) {
@@ -274,10 +274,12 @@ ${plainText}`;
 
     // 3. Process jobs and generate embeddings
     for (const job of jobs) {
-      // Date filter
-      const jobDate = job.posted_at ? new Date(job.posted_at) : new Date();
-      if (jobDate < oneMonthAgo) {
-        continue;
+      // Date filter (If missing or invalid, consider it within 30 days)
+      if (job.posted_at) {
+        const jobDate = new Date(job.posted_at);
+        if (!isNaN(jobDate.getTime()) && jobDate < oneMonthAgo) {
+          continue;
+        }
       }
 
       // Location filter (India only)
