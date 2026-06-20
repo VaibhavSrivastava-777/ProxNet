@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import type { User, UserVisibility } from "@/lib/types";
 import { createBrowserClient } from "@/lib/supabase/client";
-import * as pdfjsLib from "pdfjs-dist";
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 /* ----------------------------------------------------------------
    Collapsible Section
@@ -169,7 +167,10 @@ export function ProfileForm({ initialUser }: Props) {
 
     setUploadingResume(true);
     try {
-      // 1. Extract text client side
+      // 1. Extract text client side using dynamic import
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let extractedText = "";
