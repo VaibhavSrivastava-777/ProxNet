@@ -76,6 +76,50 @@ export async function POST(request: Request) {
             });
           }
         }
+      } else if (config.provider === 'custom') {
+        // Option B: AI scrapes the single custom job URL
+        const res = await fetch(config.board_token_or_url);
+        if (res.ok) {
+          const html = await res.text();
+          const plainText = stripHtml(html).substring(0, 15000); // Limit to ~3-4k tokens
+
+          const prompt = `Extract the core job details from the following webpage text. Return ONLY valid JSON.
+Schema:
+{
+  "title": "Job Title",
+  "location": "Job Location (or Remote)",
+  "description": "Full text of the job description"
+}
+
+Webpage Text:
+${plainText}`;
+
+          const oaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${OPENAI_KEY}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              model: "gpt-4o-mini", // Cost effective model
+              messages: [{ role: "user", content: prompt }],
+              response_format: { type: "json_object" }
+            })
+          });
+
+          if (oaiRes.ok) {
+            const oaiData = await oaiRes.json();
+            const extracted = JSON.parse(oaiData.choices[0].message.content);
+            jobs.push({
+              title: extracted.title || "Unknown Title",
+              location: extracted.location || "Remote",
+              url: config.board_token_or_url, // Save the single URL
+              posted_at: new Date().toISOString(),
+              description: extracted.description || "No description provided",
+              source: 'custom_ai'
+            });
+          }
+        }
       }
     } catch (e) {
       console.error(`Failed to fetch ATS for ${config.company_name}`, e);

@@ -64,9 +64,8 @@ export async function POST(request: Request) {
         const parts = urlObj.pathname.split("/").filter(Boolean);
         board_token_or_url = parts[0] || "";
       } else {
-        return NextResponse.json({ 
-          error: "Unsupported custom URL. Currently we only auto-detect Greenhouse and Lever URLs." 
-        }, { status: 400 });
+        // Leave provider as "custom" and board_token_or_url as the full URL
+        // We will parse this single URL via AI during the scraping phase.
       }
       
       if (!board_token_or_url) {
