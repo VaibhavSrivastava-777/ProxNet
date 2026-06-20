@@ -134,7 +134,9 @@ ${plainText}`;
       }
 
       // Location filter (India only)
-      if (!job.location || !job.location.toLowerCase().includes("india")) {
+      const loc = job.location ? job.location.toLowerCase() : "";
+      const isIndia = ["india", "bangalore", "bengaluru", "mumbai", "pune", "delhi", "gurugram", "gurgaon", "noida", "hyderabad", "chennai", "remote"].some(k => loc.includes(k));
+      if (!isIndia) {
         continue;
       }
 
