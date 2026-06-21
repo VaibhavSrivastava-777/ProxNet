@@ -38,7 +38,7 @@ export async function GET(
   if (session?.question_id) {
     const { data: question } = await supabase
       .from("questions")
-      .select("id, body, created_at, user_id")
+      .select("id, body, created_at, asker_id")
       .eq("id", session.question_id)
       .maybeSingle();
 
@@ -48,7 +48,7 @@ export async function GET(
         .from("chat_participants")
         .select("alias")
         .eq("session_id", sessionId)
-        .eq("user_id", question.user_id)
+        .eq("user_id", question.asker_id)
         .maybeSingle();
 
       questionMessage = {
@@ -56,7 +56,7 @@ export async function GET(
         body: question.body,
         created_at: question.created_at,
         alias: askerParticipant?.alias ?? "Resident",
-        isOwn: question.user_id === user.id,
+        isOwn: question.asker_id === user.id,
       };
     }
   }

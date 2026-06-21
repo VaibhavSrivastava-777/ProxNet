@@ -41,6 +41,7 @@ interface AskedQuestion {
 
 interface Props {
   refreshKey?: number;
+  onOpenDirectQuestion?: (target: { id: string; job_title: string; company: string }) => void;
 }
 
 function getInitials(name: string): string {
@@ -72,7 +73,8 @@ const fetcher = (url: string) => fetch(url).then((res) => {
   return res.json();
 });
 
-export function QuestionList({ refreshKey }: Props) {
+export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
+  const router = useRouter();
   const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[] }>(`/api/questions?_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000 });
 
   async function respond(questionId: string, targetId: string) {
@@ -163,25 +165,9 @@ export function QuestionList({ refreshKey }: Props) {
                   </div>
                 </div>
                 <button 
-                  onClick={async () => {
-                    const msg = window.prompt(`Ask a direct question to ${s.user.job_title}:`, `Hi! I'd love to connect and learn about your experience at ${s.user.company}.`);
-                    if (!msg) return;
-                    
-                    const res = await fetch("/api/questions", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        questionBody: msg,
-                        targetUserId: s.user.id
-                      })
-                    });
-                    if (res.ok) {
-                      const data = await res.json();
-                      if (data.question && data.question.id) {
-                         openChat(data.question.id);
-                      }
-                    } else {
-                      alert("Failed to start chat.");
+                  onClick={() => {
+                    if (onOpenDirectQuestion) {
+                      onOpenDirectQuestion(s.user);
                     }
                   }}
                   className="btn btn-ghost btn-sm text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10"

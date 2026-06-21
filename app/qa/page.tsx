@@ -8,6 +8,7 @@ import { useState } from "react";
 export default function QAPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
+  const [directTarget, setDirectTarget] = useState<{ id: string; job_title: string; company: string } | null>(null);
 
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-8 animate-fadeIn" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", paddingBottom: "3rem" }}>
@@ -25,7 +26,10 @@ export default function QAPage() {
       <div className="mb-6">
         <button
           type="button"
-          onClick={() => setFormOpen(true)}
+          onClick={() => {
+            setDirectTarget(null);
+            setFormOpen(true);
+          }}
           className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border-light)] hover:border-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] transition-all cursor-pointer shadow-sm group"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-accent)] group-hover:scale-110 transition-transform">
@@ -56,6 +60,7 @@ export default function QAPage() {
             
             <div className="p-0 overflow-hidden flex-1 flex flex-col">
               <QuestionForm
+                targetUser={directTarget || undefined}
                 onPosted={() => {
                   setRefreshKey((k) => k + 1);
                   setFormOpen(false);
@@ -66,7 +71,13 @@ export default function QAPage() {
         </div>
       )}
 
-      <QuestionList refreshKey={refreshKey} />
+      <QuestionList 
+        refreshKey={refreshKey} 
+        onOpenDirectQuestion={(target) => {
+          setDirectTarget(target);
+          setFormOpen(true);
+        }}
+      />
     </div>
   );
 }

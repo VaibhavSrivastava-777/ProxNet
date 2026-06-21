@@ -9,6 +9,11 @@ interface Props {
   defaultLng?: number;
   defaultRadius?: number;
   fixedCompany?: string;
+  targetUser?: {
+    id: string;
+    job_title: string;
+    company: string;
+  };
   onPosted?: () => void;
 }
 
@@ -17,6 +22,7 @@ export function QuestionForm({
   defaultLng = 77.209,
   defaultRadius = 5000,
   fixedCompany,
+  targetUser,
   onPosted,
 }: Props) {
   const router = useRouter();
@@ -151,8 +157,9 @@ export function QuestionForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         questionBody: body,
-        companyFilter: companyFilter || null,
-        titleFilter: titleFilter || null,
+        companyFilter: targetUser ? null : (companyFilter || null),
+        titleFilter: targetUser ? null : (titleFilter || null),
+        targetUserId: targetUser?.id || null,
         centerLat,
         centerLng,
         radiusMeters: radius,
@@ -181,69 +188,78 @@ export function QuestionForm({
 
       <div className="flex flex-col gap-4 mb-4 shrink-0">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="label">Location</label>
-            <select
-              className="input w-full"
-              value={locationType}
-              onChange={(e) => setLocationType(e.target.value as any)}
-            >
-              <option value="Home">Home</option>
-              <option value="Office">Office</option>
-              <option value="Others">Custom</option>
-            </select>
-          </div>
-          <div>
-            <label className="label">Company Filter</label>
-            {fixedCompany ? (
-              <input
-                className="input w-full bg-[var(--color-surface-secondary)] cursor-not-allowed"
-                value={fixedCompany}
-                readOnly
-              />
-            ) : (
-              <select
-                className="input w-full"
-                value={companyFilter}
-                onChange={(e) => setCompanyFilter(e.target.value)}
-                disabled={fetchingCompanies}
-                style={{ color: companyFilter ? "var(--color-text)" : "var(--color-text-tertiary)" }}
-              >
-                <option value="">Any Company</option>
-                {availableCompanies.map((c) => (
-                  <option key={c} value={c} style={{ color: "var(--color-text)" }}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          <div>
-            <label className="label">Job Title Filter</label>
-            {companyFilter ? (
-              <select
-                className="input w-full"
-                value={titleFilter}
-                onChange={(e) => setTitleFilter(e.target.value)}
-                disabled={fetchingTitles}
-                style={{ color: titleFilter ? "var(--color-text)" : "var(--color-text-tertiary)" }}
-              >
-                <option value="">Any Designation</option>
-                {availableTitles.map((t) => (
-                  <option key={t} value={t} style={{ color: "var(--color-text)" }}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                className="input w-full bg-[var(--color-surface-secondary)] cursor-not-allowed"
-                placeholder="Select a company first"
-                value={titleFilter}
-                disabled
-              />
-            )}
-          </div>
+          {targetUser ? (
+            <div className="col-span-3 mb-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-800">
+              <strong className="block text-sm uppercase tracking-wide opacity-80 mb-1">Direct Question</strong>
+              You are asking a direct, private question to a nearby <strong>{targetUser.job_title}</strong> at <strong>{targetUser.company}</strong>.
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="label">Location</label>
+                <select
+                  className="input w-full"
+                  value={locationType}
+                  onChange={(e) => setLocationType(e.target.value as any)}
+                >
+                  <option value="Home">Home</option>
+                  <option value="Office">Office</option>
+                  <option value="Others">Custom</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Company Filter</label>
+                {fixedCompany ? (
+                  <input
+                    className="input w-full bg-[var(--color-surface-secondary)] cursor-not-allowed"
+                    value={fixedCompany}
+                    readOnly
+                  />
+                ) : (
+                  <select
+                    className="input w-full"
+                    value={companyFilter}
+                    onChange={(e) => setCompanyFilter(e.target.value)}
+                    disabled={fetchingCompanies}
+                    style={{ color: companyFilter ? "var(--color-text)" : "var(--color-text-tertiary)" }}
+                  >
+                    <option value="">Any Company</option>
+                    {availableCompanies.map((c) => (
+                      <option key={c} value={c} style={{ color: "var(--color-text)" }}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label className="label">Job Title Filter</label>
+                {companyFilter ? (
+                  <select
+                    className="input w-full"
+                    value={titleFilter}
+                    onChange={(e) => setTitleFilter(e.target.value)}
+                    disabled={fetchingTitles}
+                    style={{ color: titleFilter ? "var(--color-text)" : "var(--color-text-tertiary)" }}
+                  >
+                    <option value="">Any Designation</option>
+                    {availableTitles.map((t) => (
+                      <option key={t} value={t} style={{ color: "var(--color-text)" }}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    className="input w-full bg-[var(--color-surface-secondary)] cursor-not-allowed"
+                    placeholder="Select a company first"
+                    value={titleFilter}
+                    disabled
+                  />
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {locationType === "Others" && (
