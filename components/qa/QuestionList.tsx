@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import { useRouter } from "next/navigation";
 
 interface IncomingQuestion {
   id: string;
