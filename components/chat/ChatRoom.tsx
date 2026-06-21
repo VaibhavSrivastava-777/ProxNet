@@ -129,6 +129,10 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
     };
   }, [sessionId, loadMessages, fetchSuggestions, myAlias]);
 
+  const scrollToBottom = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages, otherIsTyping]);
