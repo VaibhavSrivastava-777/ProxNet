@@ -26,6 +26,41 @@ export async function GET(
   if (!participant) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const supabase = createAdminClient();
+
+  // Fetch session details to get the question
+  const { data: session } = await supabase
+    .from("chat_sessions")
+    .select("question_id, created_at")
+    .eq("id", sessionId)
+    .maybeSingle();
+
+  let questionMessage = null;
+  if (session?.question_id) {
+    const { data: question } = await supabase
+      .from("questions")
+      .select("id, body, created_at, user_id")
+      .eq("id", session.question_id)
+      .maybeSingle();
+
+    if (question) {
+      // Find the asker's alias from participants
+      const { data: askerParticipant } = await supabase
+        .from("chat_participants")
+        .select("alias")
+        .eq("session_id", sessionId)
+        .eq("user_id", question.user_id)
+        .maybeSingle();
+
+      questionMessage = {
+        id: `q-${question.id}`,
+        body: question.body,
+        created_at: question.created_at,
+        alias: askerParticipant?.alias ?? "Resident",
+        isOwn: question.user_id === user.id,
+      };
+    }
+  }
+
   const { data: messages, error } = await supabase
     .from("chat_messages")
     .select("id, body, created_at, sender_id")
@@ -41,13 +76,17 @@ export async function GET(
 
   const aliasMap = new Map((participants ?? []).map((p) => [p.user_id, p.alias]));
 
-  const sanitized = (messages ?? []).map((m) => ({
+  let sanitized = (messages ?? []).map((m) => ({
     id: m.id,
     body: m.body,
     created_at: m.created_at,
     alias: aliasMap.get(m.sender_id) ?? "Anonymous",
     isOwn: m.sender_id === user.id,
   }));
+
+  if (questionMessage) {
+    sanitized = [questionMessage, ...sanitized];
+  }
 
   return NextResponse.json({
     messages: sanitized,
