@@ -3,12 +3,30 @@
 import { QuestionForm } from "@/components/qa/QuestionForm";
 import { QuestionList } from "@/components/qa/QuestionList";
 import { HowItWorksModal } from "@/components/HowItWorksModal";
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 
-export default function QAPage() {
+function QAContent() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [directTarget, setDirectTarget] = useState<{ id: string; job_title: string; company: string } | null>(null);
+
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    const userId = searchParams.get("userId");
+    const company = searchParams.get("company");
+    const title = searchParams.get("title");
+
+    if (userId && company && title) {
+      setDirectTarget({ id: userId, company, job_title: title });
+      setFormOpen(true);
+      
+      // Clean up the URL so it doesn't reopen on refresh
+      router.replace("/qa");
+    }
+  }, [searchParams, router]);
 
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-8 animate-fadeIn" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", paddingBottom: "3rem" }}>
@@ -79,5 +97,13 @@ export default function QAPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function QAPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+      <QAContent />
+    </Suspense>
   );
 }

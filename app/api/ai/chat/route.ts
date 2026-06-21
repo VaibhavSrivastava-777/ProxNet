@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const supabase = createAdminClient();
     
     // Fetch aggregate context safely
-    const { data: usersData } = await supabase.from("users").select("company, job_title").eq("is_active", true).limit(100);
+    const { data: usersData } = await supabase.from("users").select("id, company, job_title").eq("is_active", true).limit(100);
     const { data: jobsData } = await supabase.from("jobs").select("role, company").limit(50);
     const { data: qData } = await supabase.from("questions").select("body").eq("type", "forum").limit(20);
 
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const safeJobs = jobsData?.filter(j => j.company && j.role) || [];
 
     const contextStr = `
-Users currently active nearby (Job Titles and Companies only): ${JSON.stringify(safeUsers)}
+Users currently active nearby (Job Titles, Companies, and IDs): ${JSON.stringify(safeUsers)}
 Active job listings in the network: ${JSON.stringify(safeJobs)}
 Recent forum discussions: ${JSON.stringify(qData || [])}
 `;
@@ -32,16 +32,22 @@ Recent forum discussions: ${JSON.stringify(qData || [])}
     const systemPrompt = `You are ProxNet AI, the helpful, professional, and friendly networking assistant for the ProxNet platform.
 ProxNet is a hyper-local, anonymous professional networking platform that connects people in the same building or neighborhood.
 
+CURRENT USER INITIATING CHAT:
+Name: ${user.full_name || "Unknown"}
+Company: ${user.company || "Unknown"}
+Job Title: ${user.job_title || "Unknown"}
+About: ${user.about || "Not provided"}
+
 AVAILABLE CONTEXT (Use this to answer user questions about the network):
 ${contextStr}
 
 GUARDRAILS & RULES:
-1. NEVER reveal the exact identity, real name, email, phone number, LinkedIn URL, or precise physical location/address of any professional on the platform.
-2. If asked about a person or who works at a company, speak in aggregates or anonymized terms (e.g., "There are 2 Software Engineers at Google nearby" or "Someone nearby works at Microsoft").
-3. Do NOT make up data. If someone asks a question and the answer isn't in the context, clearly state that you don't have that information right now.
-4. Keep answers concise, helpful, and conversational.
-5. You are talking directly to a verified professional on the network.
-6. Format your responses clearly using Markdown where appropriate (bullet points, bold text).`;
+1. NEVER reveal the exact identity, real name, email, phone number, LinkedIn URL, or precise physical location/address of any professional in the AVAILABLE CONTEXT.
+2. If asked about a person or who works at a company, speak in aggregates or anonymized terms (e.g., "There are 2 Software Engineers at Google nearby").
+3. IMPORTANT: When suggesting a professional from the AVAILABLE CONTEXT (e.g. for career growth, referral, or advice), provide a direct link to ask them an anonymous question. Format the link exactly like this: [Ask a Question](/qa?userId=ID&company=COMPANY&title=TITLE). Replace ID, COMPANY, and TITLE with their exact values from the context. URL encode the company and title.
+4. Do NOT make up data.
+5. Keep answers concise, helpful, and conversational.
+6. Format your responses clearly using Markdown (bullet points, bold text).`;
 
     const formattedHistory = (history || []).map((h: any) => ({
       role: h.role === "user" ? "user" : "assistant",

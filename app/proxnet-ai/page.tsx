@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
+import ReactMarkdown from "react-markdown";
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -100,7 +102,9 @@ function AIChatInner() {
                 ? "bg-[var(--color-primary)] text-white rounded-br-sm shadow-md" 
                 : "bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-bl-sm shadow-sm text-[var(--color-text)]"
             }`}>
-              <div className="text-body-sm whitespace-pre-wrap">{msg.content}</div>
+              <div className="text-body-sm whitespace-pre-wrap prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0">
+                {msg.role === "user" ? msg.content : <ReactMarkdown>{msg.content}</ReactMarkdown>}
+              </div>
             </div>
           </div>
         ))}
