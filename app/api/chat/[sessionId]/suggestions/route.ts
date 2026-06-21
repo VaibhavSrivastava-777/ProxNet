@@ -60,17 +60,6 @@ export async function GET(
     .order("created_at", { ascending: false })
     .limit(10);
 
-  if (!isResident && (!messages || messages.length === 0)) {
-    // Responder empty state — return icebreaker suggestions
-    return NextResponse.json({
-      suggestions: [
-        "Hi! I saw your question on ProxNet 👋",
-        "Happy to connect and chat!",
-        "Can you tell me more about what you're looking for?",
-      ],
-    });
-  }
-
   const { data: participants } = await supabase
     .from("chat_participants")
     .select("user_id, alias")
@@ -96,8 +85,7 @@ Suggest 3 short, natural follow-up questions the user ("Me") could ask next rela
 
 Follow-up questions JSON array:`
     : `You are a helpful assistant for an anonymous professional networking chat. A user asked this question: "${originalQuestion}".
-${messages && messages.length > 0 ? `Here is the current conversation transcript so far:\n${transcript}\n` : ""}
-Suggest 3 short, natural reply options the current user ("Me", who is the professional responding) could send next. Keep suggestions concise (under 15 words each), friendly, and professional. Return ONLY a JSON array of 3 strings, no other text.
+${messages && messages.length > 0 ? `Here is the current conversation transcript so far:\n${transcript}\nSuggest 3 short, natural reply options` : "This is the start of the chat. Suggest 3 short, natural icebreakers"} the current user ("Me", who is the professional responding) could send next. Keep suggestions concise (under 15 words each), friendly, and professional. Return ONLY a JSON array of 3 strings, no other text.
 
 Reply suggestions JSON array:`;
 
