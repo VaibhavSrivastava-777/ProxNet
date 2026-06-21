@@ -495,7 +495,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                sendMessage(e as any);
+                handleSend(e as any);
               }
             }}
             rows={1}
