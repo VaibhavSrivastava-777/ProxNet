@@ -36,6 +36,7 @@ interface AskedQuestion {
   latest_activity_at: string;
   latest_message_body: string | null;
   latest_message_sender: string | null;
+  target_alias?: string | null;
 }
 
 interface Props {
