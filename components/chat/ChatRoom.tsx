@@ -40,6 +40,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [otherIsTyping, setOtherIsTyping] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -170,6 +171,16 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
     });
   }
 
+  async function handleReveal() {
+    setShowMenu(false);
+    const res = await fetch(`/api/chat/${sessionId}/reveal`, { method: "POST" });
+    if (res.ok) {
+      const data = await res.json();
+      setMyAlias(data.alias);
+      setMessages((prev) => [...prev, data.message]);
+    }
+  }
+
   const otherAlias = messages.find((m) => !m.isOwn)?.alias || "Anonymous";
   const charsLeft = MAX_CHARS - text.length;
   const charsNearLimit = charsLeft < 50;
@@ -188,18 +199,40 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
             <p className="text-caption">Anonymous Chat · You are {myAlias || "..."}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 relative">
           <div className="badge badge-accent hidden sm:flex">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 mr-1">
               <path fillRule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clipRule="evenodd" />
             </svg>
             Anonymous
           </div>
-          <button className="btn-icon text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]" title="More options">
+          <button 
+            className="btn-icon text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]" 
+            title="More options"
+            onClick={() => setShowMenu(!showMenu)}
+          >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
             </svg>
           </button>
+          
+          {showMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+              <div className="absolute right-0 top-full mt-2 w-48 rounded-xl bg-[var(--color-surface)] shadow-lg border border-[var(--color-border-light)] overflow-hidden z-50 animate-fadeIn">
+                <button 
+                  onClick={handleReveal}
+                  className="w-full text-left px-4 py-2.5 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                  </svg>
+                  Reveal Identity
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
