@@ -36,7 +36,12 @@ CURRENT USER INITIATING CHAT:
 Name: ${user.full_name || "Unknown"}
 Company: ${user.company || "Unknown"}
 Job Title: ${user.job_title || "Unknown"}
+Location Mode: ${user.active_location || "Unknown"}
 About: ${user.about || "Not provided"}
+
+--- USER'S PARSED RESUME TEXT (For hyper-personalized advice) ---
+${user.resume_text ? user.resume_text.substring(0, 3000) : "No resume uploaded."}
+-----------------------------------------------------------------
 
 AVAILABLE CONTEXT (Use this to answer user questions about the network):
 ${contextStr}
