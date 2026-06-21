@@ -76,9 +76,11 @@ const fetcher = (url: string) => fetch(url).then((res) => {
 
 export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   const router = useRouter();
+  const [isNavigating, setIsNavigating] = useState(false);
   const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[] }>(`/api/questions?_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000 });
 
   async function respond(questionId: string, targetId: string) {
+    setIsNavigating(true);
     const res = await fetch("/api/questions/respond", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -88,15 +90,19 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
       const data = await res.json();
       router.push(`/chat/${data.sessionId}`);
     } else {
+      setIsNavigating(false);
       alert("Failed to respond");
     }
   }
 
   async function openChat(questionId: string) {
+    setIsNavigating(true);
     const res = await fetch(`/api/chat/by-question/${questionId}`);
     if (res.ok) {
       const data = await res.json();
       router.push(`/chat/${data.sessionId}`);
+    } else {
+      setIsNavigating(false);
     }
   }
 
@@ -142,7 +148,16 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
     );
   }
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem", position: "relative" }}>
+      {isNavigating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-background)]/60 backdrop-blur-sm animate-fadeIn">
+          <div className="flex flex-col items-center gap-4 animate-pulse">
+            <img src="/logo.png" alt="ProxNet Loading" className="w-16 h-16 rounded-xl shadow-lg" />
+            <p className="text-body font-semibold text-[var(--color-primary)]">Opening secure chat...</p>
+          </div>
+        </div>
+      )}
+
       {data?.suggestions && data.suggestions.length > 0 && (
         <div className="card p-4 bg-[var(--color-primary-light)]/10 border border-[var(--color-primary)]/20 animate-fadeInDown">
           <h4 className="text-body-sm font-semibold mb-3 flex items-center gap-2 text-[var(--color-primary)]">
