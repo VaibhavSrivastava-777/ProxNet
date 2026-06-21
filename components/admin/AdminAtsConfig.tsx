@@ -137,15 +137,21 @@ export function AdminAtsConfig() {
               <option value="custom">Custom (Auto-Detect from URL)</option>
               <option value="greenhouse">Greenhouse</option>
               <option value="lever">Lever</option>
+              <option value="ashby">Ashby</option>
+              <option value="workable">Workable</option>
+              <option value="breezy">Breezy</option>
+              <option value="recruitee">Recruitee</option>
+              <option value="smartrecruiters">SmartRecruiters</option>
+              <option value="apify">Apify</option>
             </select>
           </div>
           <div className="flex-1">
             <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-1 block">
-              {provider === "custom" ? "Sample Job URL" : "Board Token"}
+              {provider === "custom" ? "Sample Job URL" : provider === "apify" ? "Dataset ID" : "Board Token"}
             </label>
             <input
               type="text"
-              placeholder={provider === "custom" ? "e.g. https://jobs.lever.co/netflix/123" : "e.g. netflix"}
+              placeholder={provider === "custom" ? "e.g. https://jobs.lever.co/netflix/123" : provider === "apify" ? "e.g. Wz2A8yD..." : "e.g. netflix"}
               className="input w-full"
               value={boardToken}
               onChange={(e) => setBoardToken(e.target.value)}
