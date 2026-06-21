@@ -52,15 +52,15 @@ export function AnimatedStats() {
 
   if (data.professionals === 0) return null;
 
-  const text = `Within a radius of ${data.radiusKm} km, you are connected to ${data.professionals} professionals from ${data.companies} companies.`;
+  const text = `Radius ${data.radiusKm} KM * ${data.professionals} People * ${data.companies} Companies`;
 
   return (
-    <div className="card p-6 mb-6" style={{ 
+    <div className="card p-4 sm:p-6 mb-6 overflow-hidden" style={{ 
       backgroundColor: "var(--color-surface)", 
       borderLeft: "4px solid var(--color-primary)",
       boxShadow: "0 4px 20px rgba(0,0,0,0.05)"
     }}>
-      <p className="text-h3" style={{ color: "var(--color-text)", fontWeight: 500, fontFamily: "var(--font-jetbrains-mono)", letterSpacing: "-0.02em" }}>
+      <p className="text-body-sm sm:text-body-lg md:text-h3 truncate" style={{ color: "var(--color-text)", fontWeight: 600, fontFamily: "var(--font-jetbrains-mono)", letterSpacing: "-0.02em" }}>
         <TypewriterText text={text} />
       </p>
       <style dangerouslySetInnerHTML={{__html: `
