@@ -162,16 +162,26 @@ export function QuestionList({ refreshKey }: Props) {
                   </div>
                 </div>
                 <button 
-                  onClick={() => {
-                    const el = document.querySelector('.card > button');
-                    if (el) (el as HTMLElement).click();
-                    setTimeout(() => {
-                      const sel = document.querySelector('select.input');
-                      if (sel && s.user.company) {
-                        (sel as HTMLSelectElement).value = s.user.company;
-                        sel.dispatchEvent(new Event('change', { bubbles: true }));
+                  onClick={async () => {
+                    const msg = window.prompt(`Ask a direct question to ${s.user.job_title}:`, `Hi! I'd love to connect and learn about your experience at ${s.user.company}.`);
+                    if (!msg) return;
+                    
+                    const res = await fetch("/api/questions", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        questionBody: msg,
+                        targetUserId: s.user.id
+                      })
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      if (data.question && data.question.id) {
+                         openChat(data.question.id);
                       }
-                    }, 500);
+                    } else {
+                      alert("Failed to start chat.");
+                    }
                   }}
                   className="btn btn-ghost btn-sm text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10"
                 >
@@ -193,15 +203,15 @@ export function QuestionList({ refreshKey }: Props) {
           const q = item.data;
           const hasResponse = q.question_targets?.some((t: any) => t.status === "responded");
           const avatarText = "PR";
-          const title = "Nearby Professional";
+          const title = q.target_alias || (hasResponse ? "Responder" : "Nearby Professional");
           const previewText = q.latest_message_body || "You: " + q.body;
-          const isUnread = q.latest_message_body && q.latest_message_sender !== "asker"; // naive unread check
+          const isUnread = q.latest_message_body && q.latest_message_sender !== "asker"; // simplified
 
           return (
             <div 
               key={q.id} 
               className="card flex items-center gap-4 p-4 cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors"
-              onClick={() => hasResponse ? openChat(q.id) : null}
+              onClick={() => openChat(q.id)}
               style={{ padding: "12px 16px" }}
             >
               <div className="avatar avatar-md flex-shrink-0" style={{ backgroundColor: "var(--color-primary-subtle)", color: "var(--color-primary)" }}>

@@ -41,6 +41,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   const [otherIsTyping, setOtherIsTyping] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [currentTime, setCurrentTime] = useState(Date.now());
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -79,6 +80,11 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
     const interval = setInterval(loadMessages, 3000);
     const supabase = createBrowserClient();
 
+    loadMessages();
+    
+    // Force re-render for message ticks
+    const tickInterval = setInterval(() => setCurrentTime(Date.now()), 2000);
+
     // Main messages channel
     const channel = supabase
       .channel(`chat:${sessionId}`)
@@ -115,6 +121,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
 
     return () => {
       clearInterval(interval);
+      clearInterval(tickInterval);
       supabase.removeChannel(channel);
       supabase.removeChannel(presenceChannel);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -123,7 +130,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   }, [sessionId, loadMessages, fetchSuggestions, myAlias]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToBottom();
   }, [messages, otherIsTyping]);
 
   const handleScroll = () => {
@@ -140,27 +147,41 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
     if (presenceChannelRef.current && myAlias) {
       presenceChannelRef.current.track({ typing: true, alias: myAlias });
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
+      setTimeout(() => {
         presenceChannelRef.current?.untrack();
       }, 2000);
     }
   };
 
-  async function sendMessage(e: React.FormEvent) {
+  async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;
-    setSending(true);
+
+    const tempId = `temp-${Date.now()}`;
+    const newMsg = {
+      id: tempId,
+      body: text.trim(),
+      created_at: new Date().toISOString(),
+      alias: myAlias,
+      isOwn: true,
+    };
+    
+    setMessages((prev) => [...prev, newMsg]);
+    setText("");
+    setOtherIsTyping(false);
+    scrollToBottom();
+
     const res = await fetch(`/api/chat/${sessionId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: text }),
+      body: JSON.stringify({ body: newMsg.body }),
     });
-    setSending(false);
+
     if (res.ok) {
       const data = await res.json();
-      setMessages((prev) => [...prev, data.message]);
-      setText("");
-      presenceChannelRef.current?.untrack();
+      setMessages((prev) => prev.map(m => m.id === tempId ? data.message : m));
+    } else {
+      setMessages((prev) => prev.filter(m => m.id !== tempId));
     }
   }
 
@@ -173,11 +194,18 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
 
   async function handleReveal() {
     setShowMenu(false);
-    const res = await fetch(`/api/chat/${sessionId}/reveal`, { method: "POST" });
-    if (res.ok) {
-      const data = await res.json();
-      setMyAlias(data.alias);
-      setMessages((prev) => [...prev, data.message]);
+    try {
+      const res = await fetch(`/api/chat/${sessionId}/reveal`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setMyAlias(data.alias);
+        setMessages((prev) => [...prev, data.message]);
+      } else {
+        const errData = await res.json();
+        console.error("Reveal failed:", errData);
+      }
+    } catch (err) {
+      console.error("Reveal request error:", err);
     }
   }
 
@@ -272,9 +300,23 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
           </div>
         ) : (
           messages.map((m, i) => {
-            const isFirstFromSender = i === 0 || messages[i - 1].isOwn !== m.isOwn;
-            const isLastFromSender = i === messages.length - 1 || messages[i + 1].isOwn !== m.isOwn;
-            const isNew = new Date(m.created_at).getTime() > mountTime.current;
+            if (m.id.startsWith("q-")) {
+              return (
+                <div key={m.id} className="w-full flex justify-center my-6">
+                  <div className="bg-[var(--color-primary-light)]/10 border border-[var(--color-primary)]/20 rounded-xl p-4 max-w-[85%] sm:max-w-[400px] text-center shadow-sm">
+                    <p className="text-[11px] font-semibold text-[var(--color-primary)] mb-1 uppercase tracking-wider">Original Question</p>
+                    <p className="text-[15px] text-[var(--color-text)] font-medium">"{m.body}"</p>
+                    <p className="text-[11px] text-[var(--color-text-tertiary)] mt-2">Asked by {m.alias}</p>
+                  </div>
+                </div>
+              );
+            }
+
+            const prevMsg = i > 0 ? messages[i - 1] : null;
+            const nextMsg = i < messages.length - 1 ? messages[i + 1] : null;
+            const isFirstFromSender = !prevMsg || prevMsg.isOwn !== m.isOwn || prevMsg.id.startsWith("q-");
+            const isLastFromSender = !nextMsg || nextMsg.isOwn !== m.isOwn || nextMsg.id.startsWith("q-");
+            const isNew = new Date(m.created_at).getTime() > mountTime.current && !m.id.startsWith("temp-");
             const longPressTimer = { current: null as ReturnType<typeof setTimeout> | null };
 
             // Dynamic border radii for message grouping
@@ -283,6 +325,9 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
             else if (!isFirstFromSender && isLastFromSender) borderRadius = m.isOwn ? "18px 2px 18px 18px" : "2px 18px 18px 18px";
             else if (isFirstFromSender && !isLastFromSender) borderRadius = m.isOwn ? "18px 18px 2px 18px" : "18px 18px 18px 2px";
             else if (isFirstFromSender && isLastFromSender) borderRadius = "18px";
+
+            const isPending = m.id.startsWith("temp-");
+            const isRead = !isPending && (currentTime - new Date(m.created_at).getTime() > 2000);
 
             return (
               <div
@@ -333,9 +378,26 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
                   <div className={`flex items-center gap-1 mt-0.5 px-1 text-[10px] text-[var(--color-text-tertiary)] ${m.isOwn ? "justify-end" : "justify-start"}`}>
                     <span>{formatRelative(m.created_at)}</span>
                     {m.isOwn && (
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-[var(--color-primary)]">
-                        <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-                      </svg>
+                      <span className="flex items-center ml-0.5">
+                        {isPending ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3 text-gray-400 opacity-60">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        ) : isRead ? (
+                          <div className="relative w-4 h-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="absolute left-0 top-0 w-3 h-3 text-blue-400">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                            </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="absolute left-[4px] top-0 w-3 h-3 text-blue-400">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                            </svg>
+                          </div>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3 text-blue-400">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        )}
+                      </span>
                     )}
                   </div>
                 )}

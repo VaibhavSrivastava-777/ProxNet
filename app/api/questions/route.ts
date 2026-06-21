@@ -24,9 +24,9 @@ export async function GET() {
 
   const { data: sessions } = await supabase
     .from("chat_sessions")
-    .select("id, question_id, created_at, chat_messages(body, created_at, sender_id)");
+    .select("id, question_id, created_at, chat_messages(body, created_at, sender_id), chat_participants(user_id, alias)");
 
-  const sessionActivityMap = new Map<string, { time: string; body: string | null; sender_id: string | null }>();
+  const sessionActivityMap = new Map<string, { time: string; body: string | null; sender_id: string | null; target_alias: string | null }>();
   if (sessions) {
     for (const session of sessions) {
       if (!session.question_id) continue;
@@ -42,10 +42,16 @@ export async function GET() {
         latestBody = latestMsg.body;
         latestSender = latestMsg.sender_id;
       }
+
+      let targetAlias = null;
+      if (session.chat_participants) {
+        const otherP = session.chat_participants.find((p: any) => p.user_id !== user.id);
+        if (otherP) targetAlias = otherP.alias;
+      }
       
       const currentLatest = sessionActivityMap.get(session.question_id);
       if (!currentLatest || new Date(latestTime).getTime() > new Date(currentLatest.time).getTime()) {
-        sessionActivityMap.set(session.question_id, { time: latestTime, body: latestBody, sender_id: latestSender });
+        sessionActivityMap.set(session.question_id, { time: latestTime, body: latestBody, sender_id: latestSender, target_alias: targetAlias });
       }
     }
   }
@@ -57,6 +63,7 @@ export async function GET() {
       latest_activity_at: activity?.time || q.created_at,
       latest_message_body: activity?.body || null,
       latest_message_sender: activity?.sender_id || null,
+      target_alias: activity?.target_alias || null,
     };
   });
   askedWithActivity.sort((a, b) => new Date(b.latest_activity_at).getTime() - new Date(a.latest_activity_at).getTime());
@@ -80,7 +87,7 @@ export async function GET() {
       company_filter: q.company_filter,
       title_filter: q.title_filter,
       created_at: q.created_at,
-      asker_alias: `Resident-${q.asker_id.slice(0, 4)}`,
+      asker_alias: activity?.target_alias || `Resident-${q.asker_id.slice(0, 4)}`,
       target_id: t.id,
       latest_activity_at: activity?.time || q.created_at,
       latest_message_body: activity?.body || null,
@@ -241,6 +248,7 @@ export async function POST(request: Request) {
     questionBody,
     companyFilter,
     titleFilter,
+    targetUserId,
     centerLat,
     centerLng,
     radiusMeters,
@@ -252,7 +260,7 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
 
-  const isForum = !companyFilter && !titleFilter;
+  const isForum = !companyFilter && !titleFilter && !targetUserId;
 
   const { data: question, error: qError } = await supabase
     .from("questions")
@@ -272,25 +280,29 @@ export async function POST(request: Request) {
   if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
 
   if (!isForum) {
-    const { data: users } = await supabase.from("users").select("*").eq("is_active", true).neq("id", user.id);
-    const { data: currentLocations } = await supabase.from("user_current_locations").select("*");
-    const locationMap = new Map(
-      (currentLocations ?? []).map((l) => [l.user_id, { lat: Number(l.lat), lng: Number(l.lng) }])
-    );
+    let targets: { question_id: string; professional_id: string }[] = [];
 
-    const targets: { question_id: string; professional_id: string }[] = [];
+    if (targetUserId) {
+      targets.push({ question_id: question.id, professional_id: targetUserId });
+    } else {
+      const { data: users } = await supabase.from("users").select("*").eq("is_active", true).neq("id", user.id);
+      const { data: currentLocations } = await supabase.from("user_current_locations").select("*");
+      const locationMap = new Map(
+        (currentLocations ?? []).map((l) => [l.user_id, { lat: Number(l.lat), lng: Number(l.lng) }])
+      );
 
-    for (const u of (users ?? []) as User[]) {
-      if (companyFilter && u.company?.toLowerCase() !== companyFilter.toLowerCase()) continue;
-      if (titleFilter && u.job_title?.toLowerCase() !== titleFilter.toLowerCase()) continue;
+      for (const u of (users ?? []) as User[]) {
+        if (companyFilter && u.company?.toLowerCase() !== companyFilter.toLowerCase()) continue;
+        if (titleFilter && u.job_title?.toLowerCase() !== titleFilter.toLowerCase()) continue;
 
-      const current = locationMap.get(u.id);
-      const loc = resolveUserLocation(u, current?.lat, current?.lng);
-      if (!loc) continue;
+        const current = locationMap.get(u.id);
+        const loc = resolveUserLocation(u, current?.lat, current?.lng);
+        if (!loc) continue;
 
-      const distance = haversineDistanceMeters(centerLat, centerLng, loc.lat, loc.lng);
-      if (distance <= (radiusMeters ?? 100)) {
-        targets.push({ question_id: question.id, professional_id: u.id });
+        const distance = haversineDistanceMeters(centerLat, centerLng, loc.lat, loc.lng);
+        if (distance <= (radiusMeters ?? 100)) {
+          targets.push({ question_id: question.id, professional_id: u.id });
+        }
       }
     }
 
