@@ -149,10 +149,10 @@ export async function GET() {
       suggestions = await Promise.all(nearbyMatches.map(async (u: any) => {
         let reason = "High compatibility based on your professional background.";
         
-        if (OPENAI_KEY && userRecord.resume_text && u.resume_text) {
+        if (OPENAI_KEY && userRecord?.resume_text && u.resume_text) {
           try {
             const prompt = `You are an expert AI professional matchmaker. 
-User A Summary: ${userRecord.about || (userRecord.resume_text ? userRecord.resume_text.slice(0, 500) : '')}
+User A Summary: ${userRecord?.about || (userRecord?.resume_text ? userRecord.resume_text.slice(0, 500) : '')}
 User B Summary: ${u.about || (u.resume_text ? u.resume_text.slice(0, 500) : '')}
 
 Analyze their backgrounds and write exactly ONE short, conversational sentence explaining why User A should connect with User B. Focus on shared domains, complementary skills, or common goals. Do not use their names, use "You both" or "You and this professional".`;
