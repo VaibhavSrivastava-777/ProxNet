@@ -16,6 +16,7 @@ export function UserTable() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | undefined>(undefined);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,6 +38,36 @@ export function UserTable() {
     if (!confirm("Delete this user?")) return;
     await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
     load();
+  }
+
+  async function handleFileUpload(userId: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingId(userId);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`/api/admin/users/${userId}/parse-resume`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        alert("Profile successfully updated from resume!");
+        load();
+      } else {
+        const errorData = await res.json();
+        alert(`Failed to parse resume: ${errorData.error}`);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("An error occurred during upload.");
+    } finally {
+      setUploadingId(null);
+      e.target.value = '';
+    }
   }
 
   const openAddModal = () => {
@@ -144,6 +175,23 @@ export function UserTable() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
+                        <label className="btn btn-ghost btn-sm px-2 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] cursor-pointer">
+                          {uploadingId === u.id ? (
+                            <span className="flex items-center gap-1">
+                              <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                              Parsing...
+                            </span>
+                          ) : (
+                            "Upload Resume"
+                          )}
+                          <input 
+                            type="file" 
+                            accept="application/pdf" 
+                            className="hidden" 
+                            onChange={(e) => handleFileUpload(u.id, e)} 
+                            disabled={uploadingId !== null}
+                          />
+                        </label>
                         <button onClick={() => openEditModal(u)} className="btn btn-ghost btn-sm px-2 text-[var(--color-primary)]">
                           Edit
                         </button>
