@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
-import { resolveUserLocation } from "@/lib/anonymize";
+import { resolveUserLocation, generateAlias } from "@/lib/anonymize";
 import type { User } from "@/lib/types";
 import { sendNotification } from "@/lib/notifications";
 
@@ -284,6 +284,23 @@ export async function POST(request: Request) {
 
     if (targetUserId) {
       targets.push({ question_id: question.id, professional_id: targetUserId });
+      
+      const { data: session } = await supabase.from("chat_sessions").insert({ question_id: question.id }).select("id").single();
+      if (session) {
+        const { data: usersData } = await supabase.from("users").select("id, company, job_title").in("id", [user.id, targetUserId]);
+        const asker = usersData?.find((u) => u.id === user.id);
+        const pro = usersData?.find((u) => u.id === targetUserId);
+
+        const getAlias = (u: any, defaultType: "resident" | "professional") => {
+          if (u && u.job_title && u.company) return `${u.job_title} @ ${u.company}`;
+          return generateAlias(defaultType, 1, u?.company);
+        };
+
+        await supabase.from("chat_participants").insert([
+          { session_id: session.id, user_id: user.id, alias: getAlias(asker, "resident") },
+          { session_id: session.id, user_id: targetUserId, alias: getAlias(pro, "professional") },
+        ]);
+      }
     } else {
       const { data: users } = await supabase.from("users").select("*").eq("is_active", true).neq("id", user.id);
       const { data: currentLocations } = await supabase.from("user_current_locations").select("*");
