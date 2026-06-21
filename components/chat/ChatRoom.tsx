@@ -476,7 +476,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
       )}
 
       {/* Input bar */}
-      <form onSubmit={sendMessage} className="flex items-end gap-2 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] p-3 shrink-0 relative z-20">
+      <form onSubmit={handleSend} className="flex items-end gap-2 border-t border-[var(--color-border-light)] p-3 bg-[var(--color-surface)]/90 backdrop-blur-sm sticky bottom-0 z-10 w-full">
         <button
           type="button"
           className="btn-icon shrink-0 w-10 h-10 mb-0.5 flex items-center justify-center text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] rounded-full transition-colors"
