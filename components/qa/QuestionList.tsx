@@ -153,6 +153,12 @@ export function QuestionList({ refreshKey }: Props) {
                   <div>
                     <div className="text-sm font-medium">{s.user.job_title}</div>
                     <div className="text-xs text-text-secondary">{s.user.company} &bull; {s.score}% Match</div>
+                    {s.reason && (
+                      <div className="text-xs text-[var(--color-primary)] mt-1 flex items-start gap-1 max-w-[280px]">
+                        <span className="shrink-0 leading-none">✨</span>
+                        <span className="leading-snug">{s.reason}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <button 

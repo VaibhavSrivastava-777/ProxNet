@@ -121,33 +121,109 @@ export async function GET() {
 
   let suggestions: any[] = [];
   if (myLoc && user.job_title) {
-    const { data: allUsers } = await supabase
-      .from("users")
-      .select("id, full_name, company, job_title, profile_photo_url, home_lat, home_lng")
-      .neq("id", user.id)
-      .not("home_lat", "is", null);
+    // 1. Try vector similarity match first
+    const { data: userRecord } = await supabase.from("users").select("resume_embedding, resume_text, about").eq("id", user.id).single();
+    
+    let vectorMatches: any[] = [];
+    if (userRecord?.resume_embedding) {
+      const { data: matches, error: rpcError } = await supabase.rpc("match_professionals_rpc", {
+        query_embedding: userRecord.resume_embedding,
+        exclude_id: user.id,
+        match_count: 20 // grab extra to filter by distance
+      });
+      if (!rpcError && matches && matches.length > 0) {
+        vectorMatches = matches;
+      }
+    }
 
-    if (allUsers) {
-      suggestions = allUsers.map((u: any) => {
-         const dist = haversineDistanceMeters(myLoc.lat, myLoc.lng, u.home_lat, u.home_lng);
-         let score = 0;
-         if (u.job_title?.toLowerCase() === user.job_title?.toLowerCase()) score += 60;
-         else if (u.job_title && user.job_title && (u.job_title.includes(user.job_title) || user.job_title.includes(u.job_title))) score += 30;
-         
-         if (u.company?.toLowerCase() === user.company?.toLowerCase()) score += 40;
+    if (vectorMatches.length > 0) {
+      // Filter by distance
+      const nearbyMatches = vectorMatches.filter((u: any) => {
+        const dist = haversineDistanceMeters(myLoc.lat, myLoc.lng, u.home_lat, u.home_lng);
+        return dist <= 5000;
+      }).slice(0, 3); // Take top 3 closest semantically
 
-         return {
-            user: {
-              id: u.id,
-              company: u.company,
-              job_title: u.job_title,
-              full_name: u.full_name,
-              profile_photo_url: u.profile_photo_url
-            },
-            score,
-            distance: dist
-         };
-      }).filter(s => s.score > 0 && s.distance <= 5000).sort((a, b) => b.score - a.score).slice(0, 3);
+      // Fetch AI reasons in parallel
+      const OPENAI_KEY = process.env.OPENAI_API_KEY;
+      
+      suggestions = await Promise.all(nearbyMatches.map(async (u: any) => {
+        let reason = "High compatibility based on your professional background.";
+        
+        if (OPENAI_KEY && userRecord.resume_text && u.resume_text) {
+          try {
+            const prompt = `You are an expert AI professional matchmaker. 
+User A Summary: ${userRecord.about || (userRecord.resume_text ? userRecord.resume_text.slice(0, 500) : '')}
+User B Summary: ${u.about || (u.resume_text ? u.resume_text.slice(0, 500) : '')}
+
+Analyze their backgrounds and write exactly ONE short, conversational sentence explaining why User A should connect with User B. Focus on shared domains, complementary skills, or common goals. Do not use their names, use "You both" or "You and this professional".`;
+            
+            const oaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${OPENAI_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.7,
+                max_tokens: 60
+              })
+            });
+            if (oaiRes.ok) {
+              const oaiData = await oaiRes.json();
+              reason = oaiData.choices[0].message.content.trim();
+            }
+          } catch (e) {
+            console.error("Failed to generate reason", e);
+          }
+        }
+
+        return {
+          user: {
+            id: u.id,
+            company: u.company,
+            job_title: u.job_title,
+            full_name: u.full_name,
+            profile_photo_url: u.profile_photo_url
+          },
+          score: Math.round(u.similarity * 100),
+          distance: haversineDistanceMeters(myLoc.lat, myLoc.lng, u.home_lat, u.home_lng),
+          reason
+        };
+      }));
+    } else {
+      // Fallback to legacy string matching if RPC is missing or embedding missing
+      const { data: allUsers } = await supabase
+        .from("users")
+        .select("id, full_name, company, job_title, profile_photo_url, home_lat, home_lng, about")
+        .neq("id", user.id)
+        .not("home_lat", "is", null);
+
+      if (allUsers) {
+        suggestions = allUsers.map((u: any) => {
+           const dist = haversineDistanceMeters(myLoc.lat, myLoc.lng, u.home_lat, u.home_lng);
+           let score = 0;
+           if (u.job_title?.toLowerCase() === user.job_title?.toLowerCase()) score += 60;
+           else if (u.job_title && user.job_title && (u.job_title.includes(user.job_title) || user.job_title.includes(u.job_title))) score += 30;
+           if (u.company?.toLowerCase() === user.company?.toLowerCase()) score += 40;
+
+           let reason = "Legacy profile match.";
+           if (score >= 60) reason = "You share identical job titles.";
+           else if (score >= 40) reason = "You work at the same company.";
+           else if (score >= 30) reason = "You are in similar roles.";
+
+           return {
+              user: {
+                id: u.id,
+                company: u.company,
+                job_title: u.job_title,
+                full_name: u.full_name,
+                profile_photo_url: u.profile_photo_url
+              },
+              score,
+              distance: dist,
+              reason
+           };
+        }).filter(s => s.score > 0 && s.distance <= 5000).sort((a, b) => b.score - a.score).slice(0, 3);
+      }
     }
   }
 
