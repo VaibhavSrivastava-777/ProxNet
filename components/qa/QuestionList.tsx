@@ -86,7 +86,9 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
     });
     if (res.ok) {
       const data = await res.json();
-      window.location.href = `/chat/${data.sessionId}`;
+      router.push(`/chat/${data.sessionId}`);
+    } else {
+      alert("Failed to respond");
     }
   }
 
@@ -94,7 +96,7 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
     const res = await fetch(`/api/chat/by-question/${questionId}`);
     if (res.ok) {
       const data = await res.json();
-      window.location.href = `/chat/${data.sessionId}`;
+      router.push(`/chat/${data.sessionId}`);
     }
   }
 
