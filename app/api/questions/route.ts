@@ -137,11 +137,8 @@ export async function GET() {
     }
 
     if (vectorMatches.length > 0) {
-      // Filter by distance
-      const nearbyMatches = vectorMatches.filter((u: any) => {
-        const dist = haversineDistanceMeters(myLoc.lat, myLoc.lng, u.home_lat, u.home_lng);
-        return dist <= 5000;
-      }).slice(0, 3); // Take top 3 closest semantically
+      // Take top 3 closest semantically, regardless of strict distance filter
+      const nearbyMatches = vectorMatches.slice(0, 3);
 
       // Fetch AI reasons in parallel
       const OPENAI_KEY = process.env.OPENAI_API_KEY;
