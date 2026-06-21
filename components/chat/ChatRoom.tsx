@@ -203,7 +203,11 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
       if (res.ok) {
         const data = await res.json();
         setMyAlias(data.alias);
-        setMessages((prev) => [...prev, data.message]);
+        if (data.messages) {
+          setMessages((prev) => [...prev, ...data.messages]);
+        } else if (data.message) {
+          setMessages((prev) => [...prev, data.message]);
+        }
       } else {
         const errData = await res.json();
         console.error("Reveal failed:", errData);
