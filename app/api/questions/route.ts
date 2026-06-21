@@ -122,12 +122,12 @@ export async function GET() {
   let suggestions: any[] = [];
   if (myLoc && user.job_title) {
     // 1. Try vector similarity match first
-    const { data: userRecord } = await supabase.from("users").select("resume_embedding, resume_text, about").eq("id", user.id).single();
+    const { data: userRecord } = await supabase.from("users").select("embedding, resume_text, about").eq("id", user.id).single();
     
     let vectorMatches: any[] = [];
-    if (userRecord?.resume_embedding) {
+    if (userRecord?.embedding) {
       const { data: matches, error: rpcError } = await supabase.rpc("match_professionals_rpc", {
-        query_embedding: userRecord.resume_embedding,
+        query_embedding: userRecord.embedding,
         exclude_id: user.id,
         match_count: 20 // grab extra to filter by distance
       });
