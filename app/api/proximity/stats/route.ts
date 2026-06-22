@@ -80,9 +80,19 @@ export async function GET() {
     }
   }
 
+  let locationContext = "Unknown";
+  if (currentLoc?.lat != null && currentLoc?.lng != null) {
+    locationContext = "Current Location";
+  } else if (user.home_lat != null && user.home_lng != null) {
+    locationContext = "Home";
+  } else if (user.office_lat != null && user.office_lng != null) {
+    locationContext = "Office";
+  }
+
   return NextResponse.json({
     professionals,
     companies: companies.size,
-    radiusKm: 5
+    radiusKm: 5,
+    locationContext
   });
 }

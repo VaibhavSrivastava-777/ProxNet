@@ -38,7 +38,7 @@ export function TypewriterText({ text, speedMs = 40 }: { text: string, speedMs?:
 }
 
 export function AnimatedStats() {
-  const { data, isLoading, error } = useSWR<{ professionals: number, companies: number, radiusKm: number }>("/api/proximity/stats", fetcher);
+  const { data, isLoading, error } = useSWR<{ professionals: number, companies: number, radiusKm: number, locationContext: string }>("/api/proximity/stats", fetcher);
 
   if (isLoading) {
     return (
@@ -52,15 +52,16 @@ export function AnimatedStats() {
 
   if (data.professionals === 0) return null;
 
-  const text = `Radius ${data.radiusKm} KM * ${data.professionals} People * ${data.companies} Companies`;
+  const contextStr = data.locationContext && data.locationContext !== "Unknown" ? ` (${data.locationContext})` : "";
+  const text = `Radius ${data.radiusKm} KM${contextStr} * ${data.professionals} People * ${data.companies} Companies`;
 
   return (
-    <div className="card p-4 sm:p-6 mb-6 overflow-hidden" style={{ 
+    <div className="card p-4 sm:p-6 mb-6 flex items-center justify-center overflow-hidden" style={{ 
       backgroundColor: "var(--color-surface)", 
       borderLeft: "4px solid var(--color-primary)",
       boxShadow: "0 4px 20px rgba(0,0,0,0.05)"
     }}>
-      <p className="text-body-sm sm:text-body-lg md:text-h3 truncate" style={{ color: "var(--color-text)", fontWeight: 600, fontFamily: "var(--font-jetbrains-mono)", letterSpacing: "-0.02em" }}>
+      <p className="text-[10px] min-[360px]:text-[12px] sm:text-[14px] md:text-base lg:text-lg xl:text-xl whitespace-nowrap overflow-hidden" style={{ color: "var(--color-text)", fontWeight: 600, fontFamily: "var(--font-jetbrains-mono)", letterSpacing: "-0.02em" }}>
         <TypewriterText text={text} />
       </p>
       <style dangerouslySetInnerHTML={{__html: `
