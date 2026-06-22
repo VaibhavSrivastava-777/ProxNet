@@ -39,8 +39,8 @@ export function AdminActions() {
           const bccList = data.emails.join(",");
           const subject = encodeURIComponent("Complete your ProxNet Profile!");
           const body = encodeURIComponent("Hi there,\n\nYou are missing out on local professional networking opportunities because your ProxNet profile is incomplete. Please add your company, job title, and location information to appear on the proximity map network!\n\nBest,\nThe ProxNet Team");
-          const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&bcc=${bccList}&su=${subject}&body=${body}`;
-          window.open(gmailUrl, "_blank");
+          const mailtoUrl = `mailto:?bcc=${bccList}&subject=${subject}&body=${body}`;
+          window.location.href = mailtoUrl;
         }
       } else {
         alert("Failed to send reminders");
