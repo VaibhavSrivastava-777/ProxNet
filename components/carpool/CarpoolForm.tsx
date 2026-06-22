@@ -290,28 +290,33 @@ export function CarpoolForm({ user, onPostCreated, onCancel, initialData, isAdmi
         </div>
       )}
       
-      <div className="flex gap-2 mb-6">
-        <button
-          type="button"
-          onClick={() => setType("seeker")}
-          className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${
-            type === "seeker" 
-              ? "bg-[var(--color-primary)] text-white shadow-md" 
-              : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]"
-          }`}
-        >
-          Seeker (Need a ride)
-        </button>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <button
           type="button"
           onClick={() => setType("giver")}
-          className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${
+          className={`p-6 rounded-2xl border-2 text-left transition-all ${
             type === "giver" 
-              ? "bg-[var(--color-accent)] text-white shadow-md" 
-              : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]"
+              ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5 shadow-md ring-1 ring-[var(--color-accent)]" 
+              : "border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-accent)]/50"
           }`}
         >
-          Giver (Offering a ride)
+          <div className="text-3xl mb-3">🚗</div>
+          <h3 className="text-lg font-bold mb-1 text-[var(--color-text)]">I'm Driving</h3>
+          <p className="text-sm text-[var(--color-text-secondary)]">Offer a seat and drop someone on your way to work.</p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setType("seeker")}
+          className={`p-6 rounded-2xl border-2 text-left transition-all ${
+            type === "seeker" 
+              ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5 shadow-md ring-1 ring-[var(--color-primary)]" 
+              : "border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/50"
+          }`}
+        >
+          <div className="text-3xl mb-3">🧍</div>
+          <h3 className="text-lg font-bold mb-1 text-[var(--color-text)]">I need a Ride</h3>
+          <p className="text-sm text-[var(--color-text-secondary)]">Hop in with a neighbor heading the same way.</p>
         </button>
       </div>
 

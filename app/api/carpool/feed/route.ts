@@ -291,7 +291,7 @@ export async function GET(request: Request) {
       suggestions = allUsers.map((u: any) => {
          const homeDist = haversineDistance(user.home_lat!, user.home_lng!, u.home_lat, u.home_lng);
          const officeDist = haversineDistance(user.office_lat!, user.office_lng!, u.office_lat, u.office_lng);
-         const scoreHome = Math.max(0, 100 - (homeDist / 1000) * 100);
+          const scoreHome = Math.max(0, 100 - (homeDist / 1000) * 100);
          const scoreOffice = Math.max(0, 100 - (officeDist / 1000) * 100);
          const score = Math.round((scoreHome + scoreOffice) / 2);
          return {
@@ -304,9 +304,48 @@ export async function GET(request: Request) {
             },
             score,
             homeDist,
-            officeDist
+            officeDist,
+            ai_suggestion: "" // to be filled
          };
       }).filter(s => s.homeDist <= 1000 && s.officeDist <= 1000).sort((a, b) => b.score - a.score).slice(0, 3);
+      
+      // Generate AI suggestions for the top matches
+      const OPENAI_KEY = process.env.OPENAI_API_KEY;
+      if (suggestions.length > 0 && OPENAI_KEY) {
+        try {
+          await Promise.all(suggestions.map(async (s) => {
+            const prompt = `You are a helpful carpool matchmaking AI. 
+            The current user is looking for potential carpool matches. 
+            A candidate named ${s.user.full_name} (${s.user.job_title} at ${s.user.company}) lives ${Math.round(s.homeDist)} meters from the user's home, and works ${Math.round(s.officeDist)} meters from the user's office.
+            
+            Write exactly ONE brief, conversational, persuasive sentence suggesting they share a ride. Do not use quotes.
+            Example: "Alex from Acme Corp lives just 500m away and works 200m from your office, maybe you two could share a ride!"`;
+
+            const completionRes = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: "POST",
+              headers: { 
+                "Authorization": `Bearer ${OPENAI_KEY}`, 
+                "Content-Type": "application/json" 
+              },
+              body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [{ role: "user", content: prompt }],
+                max_tokens: 60,
+                temperature: 0.7,
+              })
+            });
+
+            if (completionRes.ok) {
+              const oaiData = await completionRes.json();
+              s.ai_suggestion = oaiData.choices[0]?.message?.content?.trim() || `Maybe you could share a ride with ${s.user.full_name} from ${s.user.company}.`;
+            } else {
+              s.ai_suggestion = `Maybe you could share a ride with ${s.user.full_name} from ${s.user.company}.`;
+            }
+          }));
+        } catch (e) {
+          console.error("Failed to generate AI carpool suggestions:", e);
+        }
+      }
     }
   }
 

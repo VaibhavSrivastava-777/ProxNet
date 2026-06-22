@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { CarpoolClient } from "@/components/carpool/CarpoolClient";
+import { CarpoolGatekeeper } from "@/components/carpool/CarpoolGatekeeper";
 import { HowItWorksModal } from "@/components/HowItWorksModal";
 
 export const metadata = {
@@ -15,6 +16,8 @@ export default async function CarpoolPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  const hasLocations = !!(user.home_lat && user.home_lng && user.office_lat && user.office_lng);
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 animate-fadeInUp">
       <div className="mb-8">
@@ -27,7 +30,7 @@ export default async function CarpoolPage() {
         </p>
       </div>
 
-      <CarpoolClient user={user} />
+      {hasLocations ? <CarpoolClient user={user} /> : <CarpoolGatekeeper />}
     </div>
   );
 }

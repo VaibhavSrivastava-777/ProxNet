@@ -266,12 +266,17 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
                   <div className="flex justify-between"><span>Home Compatibility:</span> <strong>{s.homeDist < 1000 ? Math.round(s.homeDist) + "m" : (s.homeDist/1000).toFixed(1) + "km"}</strong></div>
                   <div className="flex justify-between"><span>Office Compatibility:</span> <strong>{s.officeDist < 1000 ? Math.round(s.officeDist) + "m" : (s.officeDist/1000).toFixed(1) + "km"}</strong></div>
                 </div>
+                {s.ai_suggestion && (
+                  <div className="mt-2 text-sm text-[var(--color-text-secondary)] italic border-l-2 border-[var(--color-accent)] pl-2">
+                    {s.ai_suggestion}
+                  </div>
+                )}
                 <button 
                   onClick={() => handleInitiateDirectChat(s.user.id)}
                   disabled={initiating === s.user.id}
                   className="btn btn-sm btn-accent w-full mt-auto"
                 >
-                  {initiating === s.user.id ? "Opening..." : "Message"}
+                  {initiating === s.user.id ? "Opening..." : "Ask"}
                 </button>
               </div>
             ))}
