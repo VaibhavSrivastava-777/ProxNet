@@ -19,27 +19,46 @@ function AIChatInner() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingHistory, setIsFetchingHistory] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   
   const hasInitialized = useRef(false);
 
   useEffect(() => {
-    if (initialQuery && !hasInitialized.current) {
+    async function loadHistory() {
+      try {
+        const res = await fetch("/api/ai/chat");
+        if (res.ok) {
+          const data = await res.json();
+          setMessages(data.messages || []);
+        }
+      } catch (err) {
+        console.error("Failed to load AI chat history", err);
+      } finally {
+        setIsFetchingHistory(false);
+      }
+    }
+    loadHistory();
+  }, []);
+
+  useEffect(() => {
+    if (!isFetchingHistory && initialQuery && !hasInitialized.current) {
       hasInitialized.current = true;
       sendMessage(initialQuery);
     }
-  }, [initialQuery]);
+  }, [initialQuery, isFetchingHistory]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isFetchingHistory]);
 
   async function sendMessage(text: string) {
     if (!text.trim()) return;
     
     const userMsg: Message = { role: "user", content: text };
+    // Optimistic update
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsLoading(true);
@@ -48,6 +67,7 @@ function AIChatInner() {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // We pass the current state of messages as history
         body: JSON.stringify({ message: text, history: messages }),
       });
 

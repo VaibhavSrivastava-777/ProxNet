@@ -1,12 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+
+const PHRASES = ["CarPool...", "Connections...", "Jobs...", "Events..."];
+const TYPING_SPEED = 100;
+const DELETING_SPEED = 50;
+const PAUSE_DURATION = 1500;
 
 export function HomeWidgets() {
   const router = useRouter();
   const [aiQuery, setAiQuery] = useState("");
+  
+  const [text, setText] = useState("");
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    
+    const currentPhrase = PHRASES[phraseIndex];
+    
+    if (isDeleting) {
+      if (text === "") {
+        setIsDeleting(false);
+        setPhraseIndex((prev) => (prev + 1) % PHRASES.length);
+        timer = setTimeout(() => {}, TYPING_SPEED);
+      } else {
+        timer = setTimeout(() => {
+          setText(currentPhrase.substring(0, text.length - 1));
+        }, DELETING_SPEED);
+      }
+    } else {
+      if (text === currentPhrase) {
+        timer = setTimeout(() => setIsDeleting(true), PAUSE_DURATION);
+      } else {
+        timer = setTimeout(() => {
+          setText(currentPhrase.substring(0, text.length + 1));
+        }, TYPING_SPEED);
+      }
+    }
+    
+    return () => clearTimeout(timer);
+  }, [text, isDeleting, phraseIndex]);
 
   const handleAiSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +60,7 @@ export function HomeWidgets() {
         <input
           type="text"
           className="w-full pl-10 pr-12 py-3 bg-[var(--color-surface)] border border-[var(--color-primary)]/30 rounded-2xl focus:outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 transition-all text-body font-medium shadow-sm"
-          placeholder="Ask ProxNet AI about the network..."
+          placeholder={`Ask ProxNet about ${text}`}
           value={aiQuery}
           onChange={(e) => setAiQuery(e.target.value)}
         />

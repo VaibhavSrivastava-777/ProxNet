@@ -31,16 +31,25 @@ export function AdminActions() {
     setLoadingReminders(true);
     try {
       const res = await fetch("/api/admin/remind-profiles", { method: "POST" });
-      const data = await res.json();
       if (res.ok) {
-        alert(`Reminders sent successfully to ${data.sent} users.`);
+        const data = await res.json();
+        alert(`Reminders sent successfully to ${data.sent} users via in-app notification.`);
+        
+        if (data.emails && data.emails.length > 0) {
+          const bccList = data.emails.join(",");
+          const subject = encodeURIComponent("Complete your ProxNet Profile!");
+          const body = encodeURIComponent("Hi there,\n\nYou are missing out on local professional networking opportunities because your ProxNet profile is incomplete. Please add your company, job title, and location information to appear on the proximity map network!\n\nBest,\nThe ProxNet Team");
+          const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&bcc=${bccList}&su=${subject}&body=${body}`;
+          window.open(gmailUrl, "_blank");
+        }
       } else {
-        alert(`Error: ${data.error}`);
+        alert("Failed to send reminders");
       }
-    } catch (e) {
+    } catch (err) {
       alert("Failed to send reminders");
+    } finally {
+      setLoadingReminders(false);
     }
-    setLoadingReminders(false);
   }
 
   async function handleScrapeJobs() {

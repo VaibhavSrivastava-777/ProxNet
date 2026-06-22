@@ -27,9 +27,10 @@ export async function GET() {
     .select("id, question_id, created_at, chat_messages(body, created_at, sender_id), chat_participants(user_id, alias)");
 
   const sessionActivityMap = new Map<string, { time: string; body: string | null; sender_id: string | null; target_alias: string | null }>();
+  let aiSession = null;
+
   if (sessions) {
     for (const session of sessions) {
-      if (!session.question_id) continue;
       let latestTime = session.created_at;
       let latestBody = null;
       let latestSender = null;
@@ -48,6 +49,19 @@ export async function GET() {
         const otherP = session.chat_participants.find((p: any) => p.user_id !== user.id);
         if (otherP) targetAlias = otherP.alias;
       }
+
+      if (!session.question_id && targetAlias === "ProxNet AI") {
+        aiSession = {
+          id: session.id,
+          latest_activity_at: latestTime,
+          latest_message_body: latestBody,
+          latest_message_sender: latestSender,
+          target_alias: targetAlias,
+        };
+        continue;
+      }
+
+      if (!session.question_id) continue;
       
       const currentLatest = sessionActivityMap.get(session.question_id);
       if (!currentLatest || new Date(latestTime).getTime() > new Date(currentLatest.time).getTime()) {
@@ -236,6 +250,7 @@ Analyze their backgrounds and write exactly ONE short, conversational sentence e
     incoming: incomingWithActivity,
     forum: forumWithActivity,
     suggestions,
+    aiSession,
   });
 }
 

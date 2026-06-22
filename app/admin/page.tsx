@@ -7,6 +7,7 @@ import { AdminCarpoolForm } from "@/components/admin/AdminCarpoolForm";
 import { AdminCarpoolTable } from "@/components/admin/AdminCarpoolTable";
 import { AdminActions } from "@/components/admin/AdminActions";
 import { AdminAtsConfig } from "@/components/admin/AdminAtsConfig";
+import { AdminModuleWrapper } from "@/components/admin/AdminModuleWrapper";
 
 export default function AdminDashboardPage() {
   return (
@@ -28,17 +29,29 @@ export default function AdminDashboardPage() {
         <SupabaseSetupBanner />
       </div>
 
-      <AdminActions />
+      <AdminModuleWrapper title="Admin Actions">
+        <AdminActions />
+      </AdminModuleWrapper>
       
-      <AdminAtsConfig />
+      <AdminModuleWrapper title="ATS Configurations">
+        <AdminAtsConfig />
+      </AdminModuleWrapper>
       
-      <UserTable />
+      <AdminModuleWrapper title="User Management">
+        <UserTable />
+      </AdminModuleWrapper>
 
-      <AdminJobTable />
+      <AdminModuleWrapper title="Job Board">
+        <AdminJobTable />
+      </AdminModuleWrapper>
 
-      <AdminCarpoolForm />
+      <AdminModuleWrapper title="Create Carpool">
+        <AdminCarpoolForm />
+      </AdminModuleWrapper>
 
-      <AdminCarpoolTable />
+      <AdminModuleWrapper title="Carpool Listings">
+        <AdminCarpoolTable />
+      </AdminModuleWrapper>
     </div>
   );
 }

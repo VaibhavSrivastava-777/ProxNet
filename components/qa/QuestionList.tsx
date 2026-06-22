@@ -77,7 +77,7 @@ const fetcher = (url: string) => fetch(url).then((res) => {
 export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   const router = useRouter();
   const [isNavigating, setIsNavigating] = useState(false);
-  const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[] }>(`/api/questions?_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000 });
+  const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[], aiSession?: any }>(`/api/questions?_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000 });
 
   async function respond(questionId: string, targetId: string) {
     setIsNavigating(true);
@@ -118,6 +118,7 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
 
   const asked = data?.asked || [];
   const incoming = data?.incoming || [];
+  const aiSession = data?.aiSession;
 
   // Unify and sort
   const unified = [
@@ -125,7 +126,7 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
     ...incoming.map(q => ({ type: "incoming" as const, data: q, ts: new Date(q.latest_activity_at).getTime() }))
   ].sort((a, b) => b.ts - a.ts);
 
-  if (unified.length === 0) {
+  if (unified.length === 0 && !aiSession) {
     return (
       <div style={{ textAlign: "center", padding: "4rem 1rem" }} className="animate-fadeIn card flex flex-col items-center justify-center">
         <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4 text-primary">
@@ -201,7 +202,37 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
       {/* Only Suggested Connections and Direct Messages */}
       <div className="stagger-children flex flex-col gap-2">
         <h4 className="text-body-sm font-semibold mb-1 mt-2 text-[var(--color-text-secondary)]">Direct Messages</h4>
-          {unified.length === 0 ? (
+        
+        {aiSession && (
+          <div 
+            key="ai-session"
+            className="card flex items-center gap-4 p-4 cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors border-[var(--color-primary)]/30 border"
+            onClick={() => router.push("/proxnet-ai")}
+            style={{ padding: "12px 16px" }}
+          >
+            <div className="avatar avatar-md flex-shrink-0 bg-transparent">
+              <img src="/logo.png" alt="ProxNet AI" className="w-full h-full rounded-md shadow-sm" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-baseline mb-1">
+                <h4 className="text-body font-semibold truncate text-[var(--color-text)]">ProxNet AI</h4>
+                <span className="text-caption text-[var(--color-text-tertiary)]">
+                  {formatRelative(aiSession.latest_activity_at)}
+                </span>
+              </div>
+              <div className="flex justify-between items-start gap-2 relative mt-1">
+                <div 
+                  className="text-body-sm text-[var(--color-text-secondary)] line-clamp-2 pr-4 relative flex-1"
+                  style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)', maskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)' }}
+                >
+                  {aiSession.latest_message_body || "Chat with your networking assistant..."}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {unified.length === 0 && !aiSession ? (
              <div className="text-center py-8 text-[var(--color-text-secondary)] text-sm">No direct messages yet.</div>
           ) : unified.map((item) => {
         if (item.type === "asked") {
