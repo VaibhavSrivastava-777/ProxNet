@@ -3,12 +3,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getCurrentPosition } from "@/lib/geo/get-current-position";
+import { RouteMap } from "@/components/map/RouteMap";
 
 export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) => void }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [initiating, setInitiating] = useState<string | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [activeMapPost, setActiveMapPost] = useState<any | null>(null);
   const router = useRouter();
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -190,6 +192,12 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
                     </span>
 
                     <div className="mt-3 flex gap-2 justify-end opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => setActiveMapPost(post)}
+                        className="btn btn-ghost btn-sm text-primary h-8 min-h-0 px-3"
+                      >
+                        View Map
+                      </button>
                       {isMe ? (
                         <button onClick={handleDelete} className="btn btn-ghost btn-sm text-[var(--color-error)] h-8 min-h-0 px-3">
                           Delete
@@ -224,6 +232,36 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
           );
         })}
       </div>
+
+      {/* Route Map Modal */}
+      {activeMapPost && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl animate-scaleIn">
+            <div className="p-4 border-b border-[var(--color-border-light)] flex justify-between items-center bg-[var(--color-surface-secondary)]">
+              <h3 className="font-bold text-sm text-[var(--color-text)]">
+                Commute Route: {activeMapPost.user?.full_name || "Professional"}
+              </h3>
+              <button onClick={() => setActiveMapPost(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
+                ✕
+              </button>
+            </div>
+            <div className="h-96 w-full relative">
+              <RouteMap 
+                startLat={activeMapPost.start_lat}
+                startLng={activeMapPost.start_lng}
+                destLat={activeMapPost.dest_lat}
+                destLng={activeMapPost.dest_lng}
+                startName={activeMapPost.start_name}
+                destName={activeMapPost.dest_name}
+              />
+            </div>
+            <div className="p-4 bg-[var(--color-surface-secondary)] border-t border-[var(--color-border-light)] flex flex-col gap-1 text-xs text-[var(--color-text-secondary)]">
+              <div><strong>From:</strong> {getLocDisplay(activeMapPost, true, activeMapPost.id === myPost?.id)}</div>
+              <div><strong>To:</strong> {getLocDisplay(activeMapPost, false, activeMapPost.id === myPost?.id)}</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
