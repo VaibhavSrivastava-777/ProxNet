@@ -4,136 +4,156 @@ import { useState, useEffect } from "react";
 
 interface Props {
   onPosted: () => void;
+  onCancel: () => void;
+  initialData?: any;
 }
 
-export function JobForm({ onPosted }: Props) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [type, setType] = useState<"seeker" | "giver">("seeker");
-  const [role, setRole] = useState("");
-  const [company, setCompany] = useState("");
-  const [experience, setExperience] = useState("");
-  const [skills, setSkills] = useState("");
-  const [isOnBehalf, setIsOnBehalf] = useState(false);
-  const [contactNumber, setContactNumber] = useState("");
+export function JobForm({ onPosted, onCancel, initialData }: Props) {
+  const [type, setType] = useState<"seeker" | "giver">(initialData?.type || "seeker");
+  const [role, setRole] = useState(initialData?.role || "");
+  const [company, setCompany] = useState(initialData?.company || "");
+  const [experience, setExperience] = useState(initialData?.experience_years?.toString() || "");
+  const [skills, setSkills] = useState(initialData?.skills || "");
+  const [isOnBehalf, setIsOnBehalf] = useState(initialData?.is_on_behalf || false);
+  const [contactNumber, setContactNumber] = useState(initialData?.contact_number || "");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    const handleEdit = (e: any) => {
-      const post = e.detail;
-      setIsOpen(true);
-      setIsEditing(true);
-      setEditId(post.id);
-      setType(post.type);
-      setRole(post.role || "");
-      setCompany(post.company || "");
-      setExperience(post.experience_years?.toString() || "");
-      setSkills(post.skills || "");
-      setIsOnBehalf(post.is_on_behalf || false);
-      setContactNumber(post.contact_number || "");
-    };
-    window.addEventListener("editJobPost", handleEdit);
-    return () => window.removeEventListener("editJobPost", handleEdit);
-  }, []);
+  const isEditing = !!initialData?.id;
+
+  // Experience label for preview
+  const expLabel = experience ? `${experience} years exp` : "";
+
+  // Build preview text
+  const previewName = "You";
+  const previewAction = type === "seeker" ? "looking for" : "referring for";
+  const previewRole = role || "a role";
+  const previewCompany = type === "giver" && company ? ` at ${company}` : "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!role.trim()) return;
     setLoading(true);
-    setMessage("");
+    setError("");
 
-    const method = isEditing ? "PATCH" : "POST";
-    const bodyPayload: any = {
-      type,
-      role,
-      company,
-      experience_years: experience,
-      skills,
-      is_on_behalf: isOnBehalf,
-      contact_number: contactNumber
-    };
-    if (isEditing && editId) {
-      bodyPayload.id = editId;
-    }
+    try {
+      const method = isEditing ? "PATCH" : "POST";
+      const bodyPayload: any = {
+        type,
+        role,
+        company: type === "giver" ? company : "",
+        experience_years: experience,
+        skills,
+        is_on_behalf: isOnBehalf,
+        contact_number: contactNumber,
+      };
+      if (isEditing) bodyPayload.id = initialData.id;
 
-    const res = await fetch("/api/jobs/post", {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(bodyPayload),
-    });
+      const res = await fetch("/api/jobs/post", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bodyPayload),
+      });
 
-    setLoading(false);
-    if (res.ok) {
-      setIsSuccess(true);
-      setMessage(`Successfully ${isEditing ? "updated" : "posted"} as a ${type === "seeker" ? "Candidate" : "Referrer"}!`);
-      setIsOpen(false);
-      setIsEditing(false);
-      setEditId(null);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to post");
+      }
+
       onPosted();
-    } else {
-      setIsSuccess(false);
-      setMessage("Failed to post.");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-    
-    setTimeout(() => setMessage(""), 4000);
   }
 
   return (
-    <div className="card p-6 sticky top-24">
-      <button 
-        type="button" 
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between text-left focus:outline-none"
-      >
-        <h3 className="text-h3 flex items-center gap-2">
+    <div className="card max-w-xl mx-auto p-0 animate-scaleIn overflow-hidden border border-[var(--color-border-light)] shadow-lg relative">
+      {/* Header */}
+      <div className="bg-[var(--color-surface-secondary)] p-4 flex justify-between items-center border-b border-[var(--color-border-light)]">
+        <h2 className="text-lg font-bold text-[var(--color-text)] flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-primary">
             <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.896 1.982-2.007 1.982H5.757c-1.111 0-2.007-.888-2.007-1.982v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v3.896m7.5 0a48.667 48.667 0 0 0-7.5 0" />
           </svg>
-          Post a Job or Referral
-        </h3>
-        <svg 
-          xmlns="http://www.w3.org/2000/svg" 
-          fill="none" viewBox="0 0 24 24" 
-          strokeWidth={2} stroke="currentColor" 
-          className={`w-5 h-5 text-text-tertiary transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-        </svg>
-      </button>
+          {isEditing ? "Edit Post" : "Quick Post"}
+        </h2>
+        <button onClick={onCancel} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] transition-colors">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+        </button>
+      </div>
 
-      {isOpen && (
-        <div className="mt-6 animate-fadeIn">
-          <div className="flex gap-2 mb-6">
-            <button
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                type === "seeker" 
-                  ? "bg-[var(--color-primary)] text-white shadow-sm" 
-                  : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border-light)]"
-              }`}
-              onClick={() => setType("seeker")}
-            >
-              I'm Looking (Seeker)
-            </button>
-            <button
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                type === "giver" 
-                  ? "bg-[var(--color-accent)] text-white shadow-sm" 
-                  : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border-light)]"
-              }`}
-              onClick={() => setType("giver")}
-            >
-              I'm Referring (Giver)
-            </button>
+      <div className="p-5 md:p-6 bg-[var(--color-surface)] space-y-5">
+        {error && (
+          <div className="p-3 bg-[var(--color-error-bg)] text-[var(--color-error)] rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+
+        {/* Chat Bubble Preview */}
+        <div className="flex gap-3">
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold flex-shrink-0">
+            Y
+          </div>
+          <div className={`p-4 rounded-2xl rounded-tl-sm text-sm border shadow-sm ${type === "giver" ? "bg-accent/5 border-accent/20" : "bg-primary/5 border-primary/20"}`}>
+            <span className="font-semibold text-[var(--color-text)]">{previewName}</span>
+            {" "}
+            {type === "seeker" ? "are" : "are"}{" "}
+            <strong>{previewAction}</strong>{" "}
+            <span className="font-medium text-[var(--color-text)]">{previewRole}</span>
+            <span className="font-medium text-[var(--color-text)]">{previewCompany}</span>.
+            {expLabel && <> <span className="text-[var(--color-text-secondary)]">{expLabel}.</span></>}
+            {skills && (
+              <span className="text-[var(--color-text-secondary)]">
+                {" "}Skills: {skills.split(",").slice(0, 3).map((s: string) => s.trim()).filter(Boolean).map((s: string) => `#${s}`).join(" ")}
+                {skills.split(",").length > 3 ? " ..." : ""}
+              </span>
+            )}
+            {isOnBehalf && <span className="text-[var(--color-text-tertiary)]"> (on behalf)</span>}
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Type Toggle + Experience */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">I am</span>
+              <div className="flex bg-[var(--color-surface-secondary)] p-1 rounded-lg">
+                <button type="button" onClick={() => setType("seeker")} className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${type === "seeker" ? "bg-[var(--color-surface)] shadow-sm text-primary" : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}>
+                  Looking 🔍
+                </button>
+                <button type="button" onClick={() => setType("giver")} className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${type === "giver" ? "bg-[var(--color-surface)] shadow-sm text-accent" : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}>
+                  Referring 🤝
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">Experience</span>
+              <select
+                className="input h-[42px] text-sm"
+                value={experience}
+                onChange={e => setExperience(e.target.value)}
+                required
+              >
+                <option value="">Select...</option>
+                <option value="1">0-2 years (Entry)</option>
+                <option value="3">3-5 years (Mid)</option>
+                <option value="6">5-8 years (Senior)</option>
+                <option value="10">8+ years (Lead)</option>
+              </select>
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="label">{type === "seeker" ? "Target Role" : "Hiring Role"}</label>
+          {/* Role + Company (for referrer) */}
+          <div className={type === "giver" ? "grid grid-cols-2 gap-3" : ""}>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
+                {type === "seeker" ? "Target Role" : "Hiring Role"}
+              </span>
               <input
                 required
-                className="input"
+                className="input text-sm"
                 placeholder="e.g. Senior Frontend Engineer"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
@@ -141,93 +161,69 @@ export function JobForm({ onPosted }: Props) {
             </div>
 
             {type === "giver" && (
-              <div>
-                <label className="label">Hiring Company</label>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">Company</span>
                 <input
                   required
-                  className="input"
+                  className="input text-sm"
                   placeholder="e.g. Google"
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
                 />
               </div>
             )}
+          </div>
 
-            <div>
-              <label className="label">Experience (Years)</label>
+          {/* Skills */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">Key Skills</span>
+            <input
+              required
+              className="input text-sm"
+              placeholder="e.g. React, Node.js, TypeScript"
+              value={skills}
+              onChange={(e) => setSkills(e.target.value)}
+            />
+          </div>
+
+          {/* On-behalf */}
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-surface-secondary)]">
+            <input
+              type="checkbox"
+              id="onBehalf"
+              checked={isOnBehalf}
+              onChange={e => setIsOnBehalf(e.target.checked)}
+              className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary"
+            />
+            <label htmlFor="onBehalf" className="text-sm text-[var(--color-text-secondary)] cursor-pointer">
+              Posting on behalf of someone? (share their WhatsApp)
+            </label>
+          </div>
+
+          {isOnBehalf && (
+            <div className="flex flex-col gap-1.5 animate-fadeIn">
+              <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">WhatsApp Number</span>
               <input
                 required
-                type="number"
-                min="0"
-                max="50"
-                className="input"
-                placeholder="e.g. 5"
-                value={experience}
-                onChange={(e) => setExperience(e.target.value)}
+                type="tel"
+                className="input text-sm"
+                placeholder="e.g. +919876543210"
+                value={contactNumber}
+                onChange={(e) => setContactNumber(e.target.value)}
               />
             </div>
+          )}
 
-            <div>
-              <label className="label">Key Skills (Comma separated)</label>
-              <input
-                required
-                className="input"
-                placeholder="e.g. React, Node.js, Typescript"
-                value={skills}
-                onChange={(e) => setSkills(e.target.value)}
-              />
-            </div>
-
-            <div className="flex items-center gap-2 mt-4">
-              <input 
-                type="checkbox" 
-                id="isOnBehalf"
-                checked={isOnBehalf}
-                onChange={e => setIsOnBehalf(e.target.checked)}
-                className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary"
-              />
-              <label htmlFor="isOnBehalf" className="text-sm font-medium text-[var(--color-text)]">
-                Posting on behalf of someone else?
-              </label>
-            </div>
-
-            {isOnBehalf && (
-              <div className="animate-fadeIn">
-                <label className="label">Their Contact Number (for WhatsApp)</label>
-                <input
-                  required
-                  type="tel"
-                  className="input"
-                  placeholder="e.g. +919876543210"
-                  value={contactNumber}
-                  onChange={(e) => setContactNumber(e.target.value)}
-                />
-              </div>
-            )}
-
-            {isEditing ? (
-              <div className="flex gap-3 mt-4">
-                <button type="submit" disabled={loading} className={`btn btn-primary flex-1 ${loading ? "opacity-50 cursor-not-allowed bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)] border-transparent hover:bg-[var(--color-surface-hover)]" : ""}`}>
-                  {loading ? <span className="spinner-sm" /> : "Update Post"}
-                </button>
-                <button type="button" onClick={() => { setIsOpen(false); setIsEditing(false); setEditId(null); }} className="btn btn-secondary text-text-tertiary">
-                  Skip
-                </button>
-              </div>
-            ) : (
-              <button type="submit" disabled={loading} className="btn btn-primary w-full mt-2">
-                {loading ? <span className="spinner-sm" /> : `Post as ${type === "seeker" ? "Seeker" : "Giver"}`}
-              </button>
-            )}
-          </form>
-        </div>
-      )}
-
-      {message && (
-        <div className={`alert ${isSuccess ? "alert-success" : "alert-error"} mt-4 animate-fadeIn`}>
-          {message}
-        </div>
-      )}
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={loading}
+            className={`btn w-full btn-lg ${type === "giver" ? "btn-accent" : "btn-primary"} disabled:opacity-50 mt-2`}
+          >
+            {loading ? "Posting..." : isEditing ? "Update Post" : "Shout to Group"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

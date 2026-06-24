@@ -54,6 +54,7 @@ export async function GET(request: Request) {
       *,
       user:users (
         id,
+        full_name,
         company,
         job_title
       )
@@ -174,10 +175,45 @@ export async function GET(request: Request) {
     filtered = filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
+  // 5. Attach ai_summary — count DM threads initiated by ProxNet AI for each post
+  const allPostIds = filtered.map((p: any) => p.id);
+  const myPostIds = myPosts.map((p: any) => p.id);
+  const combinedIds = [...new Set([...allPostIds, ...myPostIds])];
+
+  let aiSummaryMap: Record<string, string> = {};
+  if (combinedIds.length > 0) {
+    // Get the AI user
+    const { data: aiUser } = await supabase.from("users").select("id").eq("email", "ai@proxnet.com").maybeSingle();
+    if (aiUser) {
+      const { data: aiThreads } = await supabase
+        .from("job_threads")
+        .select("post_id")
+        .in("post_id", combinedIds);
+
+      if (aiThreads) {
+        const countMap: Record<string, number> = {};
+        for (const t of aiThreads) {
+          countMap[t.post_id] = (countMap[t.post_id] || 0) + 1;
+        }
+        for (const [postId, count] of Object.entries(countMap)) {
+          aiSummaryMap[postId] = `Sent a DM to ${count} professional${count > 1 ? "s" : ""} with matching skills.`;
+        }
+      }
+    }
+  }
+
+  // Attach ai_summary to posts
+  for (const post of filtered) {
+    if (aiSummaryMap[post.id]) post.ai_summary = aiSummaryMap[post.id];
+  }
+  for (const post of myPosts) {
+    if (aiSummaryMap[post.id]) (post as any).ai_summary = aiSummaryMap[post.id];
+  }
+
   return NextResponse.json({ 
     posts: filtered, 
     myPosts: myPosts,
-    othersCount: candidates.length, // Just return total candidate count since there could be multiple types
+    othersCount: candidates.length,
     requiresPost: false,
     currentUserId: user.id
   });
