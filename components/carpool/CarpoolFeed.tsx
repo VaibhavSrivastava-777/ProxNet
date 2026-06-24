@@ -8,6 +8,7 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [initiating, setInitiating] = useState<string | null>(null);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const router = useRouter();
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -21,6 +22,7 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
           const pos = await getCurrentPosition();
           lat = pos.lat.toString();
           lng = pos.lng.toString();
+          setCoords({ lat: pos.lat, lng: pos.lng });
         } catch (e) {
           // Ignore
         }
@@ -102,6 +104,35 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
     return `${hr}:${m.toString().padStart(2, '0')} ${ampm}`;
   };
 
+  const haversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; const p = Math.PI / 180;
+    const a = 0.5 - Math.cos((lat2 - lat1) * p) / 2 + Math.cos(lat1 * p) * Math.cos(lat2 * p) * (1 - Math.cos((lon2 - lon1) * p)) / 2;
+    return R * 2 * Math.asin(Math.sqrt(a));
+  };
+
+  const getLocDisplay = (post: any, isStart: boolean, isMe: boolean) => {
+    const name = isStart ? post.start_name : post.dest_name;
+    const lat = isStart ? post.start_lat : post.dest_lat;
+    const lng = isStart ? post.start_lng : post.dest_lng;
+    
+    const isGeneric = !name || name.toLowerCase() === "home" || name.toLowerCase() === "office";
+    
+    if (isMe) {
+      return name || (isStart ? "Home" : "Office");
+    }
+
+    if (isGeneric) {
+      if (coords) {
+        const dist = haversineDistance(coords.lat, coords.lng, lat, lng);
+        const distStr = dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`;
+        return `${isStart ? "their Home" : "their Office"} (${distStr} away)`;
+      }
+      return isStart ? "their Home" : "their Office";
+    }
+
+    return name;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center bg-[var(--color-surface-secondary)] p-3 rounded-lg">
@@ -155,7 +186,7 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
                         : "rounded-tl-sm bg-[var(--color-surface)] border-[var(--color-border)]"
                   }`}>
                     <span>
-                      <strong className="text-[var(--color-text)]">{firstName}</strong> is <strong>{post.type === "giver" ? "driving" : "seeking a ride"}</strong> from <span className="font-medium text-[var(--color-text)]">{post.start_name}</span> to <span className="font-medium text-[var(--color-text)]">{post.dest_name}</span> around <span className="font-medium text-[var(--color-text)]">{formatTime(post.time_start)}</span> today.
+                      <strong className="text-[var(--color-text)]">{firstName}</strong> is <strong>{post.type === "giver" ? "driving" : "seeking a ride"}</strong> from <span className="font-medium text-[var(--color-text)]">{getLocDisplay(post, true, !!isMe)}</span> to <span className="font-medium text-[var(--color-text)]">{getLocDisplay(post, false, !!isMe)}</span> around <span className="font-medium text-[var(--color-text)]">{formatTime(post.time_start)}</span> today.
                     </span>
 
                     <div className="mt-3 flex gap-2 justify-end opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
