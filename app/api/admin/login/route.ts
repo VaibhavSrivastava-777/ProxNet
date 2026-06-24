@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/is-configured";
-import { createAdminSession } from "@/lib/admin-session";
+import { createAdminSession, createNonAdminSession } from "@/lib/admin-session";
 
 function tryDevLogin(suID: string, suPWD: string): boolean {
   if (process.env.NODE_ENV === "production") return false;
@@ -11,10 +11,22 @@ function tryDevLogin(suID: string, suPWD: string): boolean {
   return Boolean(devId && devPwd && suID === devId && suPWD === devPwd);
 }
 
+function tryDevNonAdminLogin(suID: string, suPWD: string): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  const devId = process.env.NON_ADMIN_ID;
+  const devPwd = process.env.NON_ADMIN_PWD;
+  return Boolean(devId && devPwd && suID === devId && suPWD === devPwd);
+}
+
 export async function POST(request: Request) {
   const { suID, suPWD } = await request.json();
   if (!suID || !suPWD) {
     return NextResponse.json({ error: "Credentials required" }, { status: 400 });
+  }
+
+  if (tryDevNonAdminLogin(suID, suPWD)) {
+    await createNonAdminSession("dev-user", suID);
+    return NextResponse.json({ ok: true, mode: "dev-user" });
   }
 
   if (!isSupabaseConfigured()) {

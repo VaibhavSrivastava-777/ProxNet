@@ -9,6 +9,11 @@ export default async function JobsPage() {
     redirect("/login");
   }
 
+  const profileIncomplete = !user.company || !user.job_title || (!user.home_lat && !user.office_lat);
+  if (profileIncomplete) {
+    redirect("/profile?onboarding=true");
+  }
+
   return (
     <div className="mx-auto max-w-4xl py-6 md:py-8">
       <div className="mb-6 md:mb-8 text-center px-4">

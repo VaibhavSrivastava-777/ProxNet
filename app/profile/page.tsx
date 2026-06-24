@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { ProfileForm } from "@/components/profile/ProfileForm";
@@ -22,7 +23,9 @@ export default async function ProfilePage() {
           Manage your professional details and privacy settings.
         </p>
       </div>
-      <ProfileForm initialUser={user} />
+      <Suspense fallback={<div className="text-center py-12 text-sm text-[var(--color-text-secondary)]">Loading form...</div>}>
+        <ProfileForm initialUser={user} />
+      </Suspense>
     </div>
   );
 }

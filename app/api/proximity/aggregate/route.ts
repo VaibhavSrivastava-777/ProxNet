@@ -33,7 +33,14 @@ export async function GET(request: Request) {
 
   const clusters = new Map<
     string,
-    { company: string; count: number; latSum: number; lngSum: number; logoUrl: string }
+    {
+      company: string;
+      count: number;
+      latSum: number;
+      lngSum: number;
+      logoUrl: string;
+      titles: Record<string, number>;
+    }
   >();
 
   for (const u of (users ?? []) as User[]) {
@@ -61,11 +68,13 @@ export async function GET(request: Request) {
     const loc = bestLoc;
 
     const key = u.company.trim();
+    const title = (visibility?.showTitle && u.job_title?.trim()) ? u.job_title.trim() : "Professional";
     const existing = clusters.get(key);
     if (existing) {
       existing.count += 1;
       existing.latSum += loc.lat;
       existing.lngSum += loc.lng;
+      existing.titles[title] = (existing.titles[title] || 0) + 1;
     } else {
       clusters.set(key, {
         company: key,
@@ -73,6 +82,7 @@ export async function GET(request: Request) {
         latSum: loc.lat,
         lngSum: loc.lng,
         logoUrl: companyLogoUrl(key),
+        titles: { [title]: 1 },
       });
     }
   }
@@ -87,6 +97,7 @@ export async function GET(request: Request) {
       count: c.count,
       lat: jittered.lat,
       lng: jittered.lng,
+      titles: c.titles,
     };
   });
 

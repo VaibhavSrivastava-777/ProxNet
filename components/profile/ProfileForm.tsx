@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import type { User, UserVisibility } from "@/lib/types";
 import { createBrowserClient } from "@/lib/supabase/client";
@@ -151,6 +151,8 @@ interface Props {
 
 export function ProfileForm({ initialUser }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isOnboarding = searchParams?.get("onboarding") === "true";
   const [user, setUser] = useState(initialUser);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -160,6 +162,67 @@ export function ProfileForm({ initialUser }: Props) {
   const [uploadingResume, setUploadingResume] = useState(false);
 
   const visibility = user.visibility as UserVisibility;
+
+  const showCompany = !initialUser.company?.trim();
+  const showJobTitle = !initialUser.job_title?.trim();
+  const showLocation = !initialUser.home_lat && !initialUser.office_lat;
+  const showResume = !initialUser.resume_url;
+
+  const hasMissingFields = showCompany || showJobTitle || showLocation || showResume;
+  const showModal = isOnboarding && hasMissingFields;
+
+  const isCompanyValid = !showCompany || !!user.company?.trim();
+  const isJobTitleValid = !showJobTitle || !!user.job_title?.trim();
+  const isLocationValid = !showLocation || !!user.home_lat || !!user.office_lat;
+
+  const canSubmit = isCompanyValid && isJobTitleValid && isLocationValid;
+
+  async function handleOnboardingComplete(e: React.MouseEvent) {
+    e.preventDefault();
+    if (!user.company?.trim() || !user.job_title?.trim()) {
+      alert("Company and Job Title are required!");
+      return;
+    }
+    if (!user.home_lat && !user.office_lat) {
+      alert("At least one location (Home or Office) must be set to complete onboarding!");
+      return;
+    }
+    setSaving(true);
+    setMessage("");
+    const res = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        full_name: user.full_name,
+        company: user.company,
+        job_title: user.job_title,
+        about: user.about,
+        resume_url: user.resume_url,
+        resume_text: user.resume_text,
+        phone_number: user.phone_number,
+        profile_photo_url: user.profile_photo_url,
+        linkedin_profile_url: user.linkedin_profile_url,
+        home_name: user.home_name,
+        home_lat: user.home_lat ? Number(user.home_lat) : null,
+        home_lng: user.home_lng ? Number(user.home_lng) : null,
+        office_lat: user.office_lat ? Number(user.office_lat) : null,
+        office_lng: user.office_lng ? Number(user.office_lng) : null,
+        office_name: user.office_name,
+        active_location: user.active_location,
+        visibility,
+      }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      const data = await res.json();
+      setUser(data);
+      setMessage("Profile saved.");
+      setEditing(false);
+      router.push("/");
+    } else {
+      setMessage("Failed to save profile.");
+    }
+  }
 
   async function handleResumeUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -279,7 +342,8 @@ export function ProfileForm({ initialUser }: Props) {
   const subtitle = [user.job_title, user.company].filter(Boolean).join(" at ");
 
   return (
-    <form onSubmit={handleSave} className="stagger-children" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <>
+      <form onSubmit={handleSave} className="stagger-children" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* ---- Completion Warning ---- */}
       {needsCompletion && (
         <div className="alert alert-warning">
@@ -788,6 +852,224 @@ export function ProfileForm({ initialUser }: Props) {
           "Save profile"
         )}
       </button>
-    </form>
+      </form>
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto animate-scaleIn flex flex-col p-6 text-[var(--color-text)]">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[var(--color-border-light)] pb-4 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">📍</span>
+                <div>
+                  <h3 className="text-h2 font-bold text-[var(--color-primary)]">Complete Your Profile</h3>
+                  <p className="text-caption mt-0.5">Please provide the missing details below to unlock all features.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 bg-[var(--color-surface-secondary)] p-4 rounded-xl border border-[var(--color-border-light)] mb-5">
+              <div className="avatar avatar-md shrink-0">
+                {user.profile_photo_url ? (
+                  <img src={user.profile_photo_url} alt={user.full_name} className="rounded-full w-12 h-12 object-cover" />
+                ) : (
+                  <div className="bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-lg flex items-center justify-center w-12 h-12 rounded-full">
+                    {initials}
+                  </div>
+                )}
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm">{user.full_name}</h4>
+                <p className="text-xs text-[var(--color-text-secondary)]">{user.email}</p>
+                <span className="inline-block bg-[var(--color-success-bg)] text-[var(--color-success)] text-[10px] font-bold px-2 py-0.5 rounded-full mt-1.5 uppercase tracking-wider">
+                  LinkedIn Connected
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-5 flex-1 overflow-y-auto pr-1">
+              
+              {/* Professional Details Section (if company or designation is missing) */}
+              {(showCompany || showJobTitle) && (
+                <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-4">
+                  <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5">
+                    💼 Professional Details
+                  </h4>
+                  {showCompany && (
+                    <div>
+                      <label className="label font-semibold text-xs mb-1">Company Name <span className="text-red-500">*</span></label>
+                      <input
+                        className="input w-full"
+                        value={user.company ?? ""}
+                        placeholder="e.g. Google, Microsoft, Lenovo"
+                        required
+                        onChange={(e) => setUser({ ...user, company: e.target.value })}
+                      />
+                    </div>
+                  )}
+                  {showJobTitle && (
+                    <div>
+                      <label className="label font-semibold text-xs mb-1">Job Title / Designation <span className="text-red-500">*</span></label>
+                      <input
+                        className="input w-full"
+                        value={user.job_title ?? ""}
+                        placeholder="e.g. Senior Software Engineer"
+                        required
+                        onChange={(e) => setUser({ ...user, job_title: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Location Settings Section (if both home and office are missing) */}
+              {showLocation && (
+                <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-4">
+                  <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5">
+                    📍 Location Settings
+                  </h4>
+                  <p className="text-xs text-[var(--color-text-secondary)]">
+                    Provide at least one location (Home or Office) to appear on the local proximity map. <span className="text-red-500">*</span>
+                  </p>
+                  
+                  {/* Home Location */}
+                  <div className="border border-[var(--color-border-light)]/60 rounded-lg p-3 flex flex-col gap-3">
+                    <h5 className="font-semibold text-xs text-[var(--color-primary)] flex items-center gap-1">
+                      🏠 Home Location
+                    </h5>
+                    <div>
+                      <label className="label text-[11px] mb-1">Area / Apartment Complex Name</label>
+                      <div className="flex gap-2">
+                        <input
+                          className="input flex-1 text-sm py-1.5"
+                          value={user.home_name ?? ""}
+                          placeholder="e.g. L&T South City"
+                          onChange={(e) => setUser({ ...user, home_name: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-secondary shrink-0 text-xs px-3 py-1.5"
+                          disabled={!user.home_name || fetchingHome}
+                          onClick={() => fetchGeocode(user.home_name!, true)}
+                        >
+                          {fetchingHome ? "..." : "Fetch"}
+                        </button>
+                      </div>
+                    </div>
+                    <LocationPicker
+                      legend="Pin Home Position"
+                      lat={user.home_lat?.toString() ?? ""}
+                      lng={user.home_lng?.toString() ?? ""}
+                      defaultShowMap={false}
+                      onChange={(home_lat, home_lng) =>
+                        setUser({
+                          ...user,
+                          home_lat: home_lat ? Number(home_lat) : null,
+                          home_lng: home_lng ? Number(home_lng) : null,
+                        })
+                      }
+                    />
+                    {user.home_lat && (
+                      <span className="text-[11px] text-[var(--color-success)] font-medium flex items-center gap-1">
+                        ✓ Home Coordinates Set ({user.home_lat.toFixed(4)}, {user.home_lng?.toFixed(4)})
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Office Location */}
+                  <div className="border border-[var(--color-border-light)]/60 rounded-lg p-3 flex flex-col gap-3">
+                    <h5 className="font-semibold text-xs text-[var(--color-accent)] flex items-center gap-1">
+                      🏢 Office Location
+                    </h5>
+                    <div>
+                      <label className="label text-[11px] mb-1">Office Building / Business Park</label>
+                      <div className="flex gap-2">
+                        <input
+                          className="input flex-1 text-sm py-1.5"
+                          value={user.office_name ?? ""}
+                          placeholder="e.g. Manyata Tech Park"
+                          onChange={(e) => setUser({ ...user, office_name: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-secondary shrink-0 text-xs px-3 py-1.5"
+                          disabled={!user.office_name || fetchingOffice}
+                          onClick={() => fetchGeocode(user.office_name!, false)}
+                        >
+                          {fetchingOffice ? "..." : "Fetch"}
+                        </button>
+                      </div>
+                    </div>
+                    <LocationPicker
+                      legend="Pin Office Position"
+                      lat={user.office_lat?.toString() ?? ""}
+                      lng={user.office_lng?.toString() ?? ""}
+                      defaultShowMap={false}
+                      onChange={(office_lat, office_lng) =>
+                        setUser({
+                          ...user,
+                          office_lat: office_lat ? Number(office_lat) : null,
+                          office_lng: office_lng ? Number(office_lng) : null,
+                        })
+                      }
+                    />
+                    {user.office_lat && (
+                      <span className="text-[11px] text-[var(--color-success)] font-medium flex items-center gap-1">
+                        ✓ Office Coordinates Set ({user.office_lat.toFixed(4)}, {user.office_lng?.toFixed(4)})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Resume Upload Section (if resume is missing) */}
+              {showResume && (
+                <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-3">
+                  <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5">
+                    📄 Resume Upload
+                  </h4>
+                  <p className="text-xs text-[var(--color-text-secondary)]">
+                    Upload your resume (PDF) to auto-fill your profile and dramatically improve your AI job matches.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-1 bg-[var(--color-surface-hover)] p-3 rounded-lg border border-[var(--color-primary-subtle)]">
+                    <input
+                      id="onboarding-resume-upload"
+                      type="file"
+                      accept="application/pdf"
+                      onChange={handleResumeUpload}
+                      disabled={uploadingResume}
+                      className="file-input file-input-primary file-input-bordered file-input-sm w-full max-w-xs shadow-sm text-xs"
+                      title="Upload Resume (PDF)"
+                      aria-label="Upload Resume (PDF)"
+                    />
+                    {uploadingResume && <span className="text-xs text-text-tertiary">Extracting text...</span>}
+                    {user.resume_url && !uploadingResume && (
+                      <span className="text-[var(--color-success)] text-xs font-semibold flex items-center gap-1">
+                        ✓ Uploaded successfully!
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex justify-end items-center gap-3 mt-4 pt-4 border-t border-[var(--color-border-light)]">
+              <button
+                type="button"
+                className="btn btn-primary w-full"
+                disabled={saving || !canSubmit}
+                onClick={handleOnboardingComplete}
+              >
+                {saving ? "Completing..." : "Complete & Save Profile ✓"}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+    </>
   );
 }

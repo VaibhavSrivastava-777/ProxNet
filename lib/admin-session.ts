@@ -44,3 +44,38 @@ export async function clearAdminSession() {
   const cookieStore = await cookies();
   cookieStore.delete(COOKIE_NAME);
 }
+
+export async function createNonAdminSession(userId: string, suId: string) {
+  const token = await new SignJWT({ userId, suId, role: "user" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${MAX_AGE}s`)
+    .sign(getSecret());
+
+  const cookieStore = await cookies();
+  cookieStore.set("non_admin_session", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: MAX_AGE,
+  });
+}
+
+export async function getNonAdminSession(): Promise<{ userId: string; suId: string } | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("non_admin_session")?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, getSecret());
+    if (payload.role !== "user") return null;
+    return { userId: payload.userId as string, suId: payload.suId as string };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearNonAdminSession() {
+  const cookieStore = await cookies();
+  cookieStore.delete("non_admin_session");
+}

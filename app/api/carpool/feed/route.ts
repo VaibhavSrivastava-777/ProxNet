@@ -236,6 +236,33 @@ export async function GET(request: Request) {
     }).filter(cand => cand.score >= 0).sort((a, b) => b.score - a.score);
   }
 
+  // --- AI Summary Logic ---
+  // Count how many AI threads were created for each post to populate ai_summary
+  const postIds = [myPost?.id, ...filtered.map(p => p.id)].filter(Boolean);
+  if (postIds.length > 0) {
+    const { data: aiThreads } = await supabase
+      .from("carpool_threads")
+      .select("post_id")
+      .in("post_id", postIds);
+      
+    if (aiThreads) {
+      const threadCounts: Record<string, number> = {};
+      aiThreads.forEach(t => {
+        threadCounts[t.post_id] = (threadCounts[t.post_id] || 0) + 1;
+      });
+
+      if (myPost && threadCounts[myPost.id]) {
+        myPost.ai_summary = `Sent DMs to ${threadCounts[myPost.id]} professional${threadCounts[myPost.id] > 1 ? 's' : ''} along this route who might need a ride.`;
+      }
+      filtered.forEach(p => {
+        if (threadCounts[p.id]) {
+          p.ai_summary = `Sent DMs to ${threadCounts[p.id]} professional${threadCounts[p.id] > 1 ? 's' : ''} along this route who might need a ride.`;
+        }
+      });
+    }
+  }
+  // ------------------------
+
   // 4. Get count of others of the same type
   // Use a simple fetch and filter for accurate count given the complex logic
   let othersCount = 0;

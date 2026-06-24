@@ -82,4 +82,5 @@ export interface CompanyCluster {
   count: number;
   lat: number;
   lng: number;
+  titles?: Record<string, number>;
 }

@@ -65,6 +65,76 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 
+  // --- AI Matchmaking Logic ---
+  try {
+    const { data: allUsers } = await supabase
+      .from("users")
+      .select("id, full_name, home_lat, home_lng, office_lat, office_lng")
+      .neq("id", user.id)
+      .not("home_lat", "is", null)
+      .not("office_lat", "is", null);
+
+    if (allUsers && allUsers.length > 0) {
+      function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+        const R = 6371e3; const p = Math.PI / 180;
+        const a = 0.5 - Math.cos((lat2 - lat1) * p) / 2 + Math.cos(lat1 * p) * Math.cos(lat2 * p) * (1 - Math.cos((lon2 - lon1) * p)) / 2;
+        return R * 2 * Math.asin(Math.sqrt(a));
+      }
+
+      const matchedUsers = allUsers.filter(u => {
+        const dStart = haversineDistance(start_lat, start_lng, u.home_lat, u.home_lng);
+        const dEnd = haversineDistance(dest_lat, dest_lng, u.office_lat, u.office_lng);
+        return dStart <= 2000 && dEnd <= 2000;
+      });
+
+      if (matchedUsers.length > 0) {
+        // 1. Get or create AI user
+        let { data: aiUser } = await supabase.from("users").select("id").eq("email", "ai@proxnet.com").maybeSingle();
+        if (!aiUser) {
+          const { data: newAi } = await supabase.from("users").insert({
+            email: "ai@proxnet.com",
+            full_name: "ProxNet AI",
+            name: "ProxNet AI",
+            job_title: "AI Agent",
+            company: "ProxNet",
+            is_admin: true,
+            is_onboarded: true
+          }).select("id").single();
+          aiUser = newAi;
+        }
+
+        if (aiUser) {
+          // Send 1x1 messages
+          for (const match of matchedUsers) {
+            // Create a thread between AI and Match
+            const { data: thread } = await supabase.from("carpool_threads").insert({
+              post_id: data.id,
+              responder_post_id: data.id, // Mock
+              status: "active"
+            }).select("id").single();
+
+            if (thread) {
+              await supabase.from("carpool_participants").insert([
+                { thread_id: thread.id, user_id: aiUser.id, alias: "ProxNet AI" },
+                { thread_id: thread.id, user_id: match.id, alias: match.full_name || "Professional" }
+              ]);
+
+              const msgText = `Hi! ${user.full_name || "A professional"} is ${type === "giver" ? "driving" : "seeking a ride"} from ${start_name} to ${dest_name} around ${time_start}. This is right on your usual route! Would you like to connect with them?`;
+              await supabase.from("carpool_messages").insert({
+                thread_id: thread.id,
+                sender_id: aiUser.id,
+                content: msgText
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("AI Matchmaking failed:", e);
+  }
+  // ----------------------------
+
   return NextResponse.json({ ok: true, id: data.id });
 }
 

@@ -16,6 +16,11 @@ export default async function CarpoolPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  const profileIncomplete = !user.company || !user.job_title || (!user.home_lat && !user.office_lat);
+  if (profileIncomplete) {
+    redirect("/profile?onboarding=true");
+  }
+
   const hasLocations = !!(user.home_lat && user.home_lng && user.office_lat && user.office_lng);
 
   return (

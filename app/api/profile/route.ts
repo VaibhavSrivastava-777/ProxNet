@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isSupabaseConfigured } from "@/lib/supabase/is-configured";
 import { normalizeLinkedInUrl } from "@/lib/linkedin/normalize-url";
 
 export async function GET() {
@@ -14,6 +15,20 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
+
+  if (!isSupabaseConfigured()) {
+    const mockUser = {
+      ...user,
+      ...body,
+      id: user.id,
+      linkedin_sub: user.linkedin_sub,
+      email: user.email,
+      source: user.source,
+      created_at: user.created_at,
+      updated_at: new Date().toISOString(),
+    };
+    return NextResponse.json(mockUser);
+  }
   const supabase = createAdminClient();
 
   const updates: Record<string, unknown> = {

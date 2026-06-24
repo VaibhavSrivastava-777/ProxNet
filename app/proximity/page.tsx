@@ -6,6 +6,11 @@ export default async function ProximityPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  const profileIncomplete = !user.company || !user.job_title || (!user.home_lat && !user.office_lat);
+  if (profileIncomplete) {
+    redirect("/profile?onboarding=true");
+  }
+
   return (
     <div className="mx-auto max-w-6xl p-6 md:p-8 animate-fadeIn" style={{ paddingBottom: "3rem" }}>
       <div style={{ marginBottom: 16 }}>

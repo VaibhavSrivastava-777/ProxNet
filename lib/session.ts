@@ -1,6 +1,6 @@
 import { auth } from "./auth";
-import { findUserByLinkedInSub, ensureAdminUser } from "./users";
-import { getAdminSession } from "./admin-session";
+import { findUserByLinkedInSub, ensureAdminUser, ensureNonAdminUser } from "./users";
+import { getAdminSession, getNonAdminSession } from "./admin-session";
 import type { User } from "./types";
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -12,6 +12,11 @@ export async function getCurrentUser(): Promise<User | null> {
   const adminSession = await getAdminSession();
   if (adminSession) {
     return ensureAdminUser();
+  }
+
+  const nonAdminSession = await getNonAdminSession();
+  if (nonAdminSession) {
+    return ensureNonAdminUser();
   }
 
   return null;

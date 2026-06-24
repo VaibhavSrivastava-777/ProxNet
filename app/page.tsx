@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/session";
 import { AnimatedStats, TypewriterText } from "@/components/home/AnimatedStats";
@@ -13,6 +14,10 @@ export default async function HomePage() {
     // Fetch profile to check completion
     const user = await getCurrentUser();
     const profileIncomplete = user && (!user.company || !user.job_title || (!user.home_lat && !user.office_lat));
+
+    if (profileIncomplete) {
+      redirect("/profile?onboarding=true");
+    }
 
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 animate-fadeInUp">

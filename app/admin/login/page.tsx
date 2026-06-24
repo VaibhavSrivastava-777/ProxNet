@@ -22,7 +22,12 @@ export default function AdminLoginPage() {
     });
     setLoading(false);
     if (res.ok) {
-      router.push("/admin");
+      const data = await res.json().catch(() => ({}));
+      if (data.mode === "dev-user") {
+        router.push("/profile?onboarding=true");
+      } else {
+        router.push("/admin");
+      }
       router.refresh();
       return;
     }
