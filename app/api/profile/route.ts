@@ -4,6 +4,37 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/is-configured";
 import { normalizeLinkedInUrl } from "@/lib/linkedin/normalize-url";
 
+async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`, {
+      headers: {
+        "User-Agent": "ProxNet/1.0"
+      }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !data.address) return null;
+    
+    const addr = data.address;
+    const parts = [
+      addr.neighbourhood,
+      addr.suburb,
+      addr.road,
+      addr.residential,
+      addr.city_district,
+      addr.city || addr.town
+    ].filter(Boolean);
+    
+    if (parts.length > 0) {
+      return parts.slice(0, 2).join(", ");
+    }
+    return data.display_name || null;
+  } catch (e) {
+    console.error("Reverse geocoding failed", e);
+    return null;
+  }
+}
+
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -45,16 +76,42 @@ export async function PATCH(request: Request) {
   if (body.linkedin_profile_url !== undefined) {
     updates.linkedin_profile_url = normalizeLinkedInUrl(body.linkedin_profile_url);
   }
-  if (body.home_name !== undefined) updates.home_name = body.home_name;
+  const { data: currentUser } = await supabase.from("users").select("*").eq("id", user.id).single();
+
+  const homeLat = body.home_lat !== undefined ? body.home_lat : currentUser?.home_lat;
+  const homeLng = body.home_lng !== undefined ? body.home_lng : currentUser?.home_lng;
+  const hasHomeCoordChanged = (body.home_lat !== undefined && Number(body.home_lat) !== Number(currentUser?.home_lat)) ||
+                              (body.home_lng !== undefined && Number(body.home_lng) !== Number(currentUser?.home_lng));
+
+  if (hasHomeCoordChanged && homeLat && homeLng) {
+    const name = await reverseGeocode(Number(homeLat), Number(homeLng));
+    if (name) {
+      updates.home_name = name;
+    }
+  } else if (body.home_name !== undefined) {
+    updates.home_name = body.home_name;
+  }
   if (body.home_lat !== undefined) updates.home_lat = body.home_lat;
   if (body.home_lng !== undefined) updates.home_lng = body.home_lng;
-  if (body.office_name !== undefined) updates.office_name = body.office_name;
+
+  const officeLat = body.office_lat !== undefined ? body.office_lat : currentUser?.office_lat;
+  const officeLng = body.office_lng !== undefined ? body.office_lng : currentUser?.office_lng;
+  const hasOfficeCoordChanged = (body.office_lat !== undefined && Number(body.office_lat) !== Number(currentUser?.office_lat)) ||
+                                (body.office_lng !== undefined && Number(body.office_lng) !== Number(currentUser?.office_lng));
+
+  if (hasOfficeCoordChanged && officeLat && officeLng) {
+    const name = await reverseGeocode(Number(officeLat), Number(officeLng));
+    if (name) {
+      updates.office_name = name;
+    }
+  } else if (body.office_name !== undefined) {
+    updates.office_name = body.office_name;
+  }
   if (body.office_lat !== undefined) updates.office_lat = body.office_lat;
   if (body.office_lng !== undefined) updates.office_lng = body.office_lng;
+
   if (body.active_location !== undefined) updates.active_location = body.active_location;
   if (body.visibility !== undefined) updates.visibility = body.visibility;
-
-  const { data: currentUser } = await supabase.from("users").select("*").eq("id", user.id).single();
 
   if (body.company !== undefined || body.job_title !== undefined || body.about !== undefined || body.resume_text !== undefined) {
     const finalCompany = body.company !== undefined ? body.company : currentUser?.company;
