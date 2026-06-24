@@ -19,13 +19,28 @@ export function JobForm({ onPosted, onCancel, initialData }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [previewName, setPreviewName] = useState("You");
+  const [initial, setInitial] = useState("Y");
+
+  useEffect(() => {
+    fetch("/api/profile")
+      .then(res => res.json())
+      .then(user => {
+        if (user && user.full_name) {
+          const firstName = user.full_name.split(" ")[0];
+          setPreviewName(firstName);
+          setInitial(firstName.charAt(0).toUpperCase());
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const isEditing = !!initialData?.id;
 
   // Experience label for preview
   const expLabel = experience ? `${experience} years exp` : "";
 
   // Build preview text
-  const previewName = "You";
   const previewAction = type === "seeker" ? "looking for" : "referring for";
   const previewRole = role || "a role";
   const previewCompany = type === "giver" && company ? ` at ${company}` : "";
@@ -93,7 +108,7 @@ export function JobForm({ onPosted, onCancel, initialData }: Props) {
         {/* Chat Bubble Preview */}
         <div className="flex gap-3">
           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold flex-shrink-0">
-            Y
+            {initial}
           </div>
           <div className={`p-4 rounded-2xl rounded-tl-sm text-sm border shadow-sm ${type === "giver" ? "bg-accent/5 border-accent/20" : "bg-primary/5 border-primary/20"}`}>
             <span className="font-semibold text-[var(--color-text)]">{previewName}</span>

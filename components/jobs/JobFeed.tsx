@@ -266,7 +266,13 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
               <div key={post.id} className="flex flex-col gap-1 animate-fadeInUp">
                 {/* Main Chat Bubble */}
                 <div className={`flex gap-3 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
-                  <div className="w-10 h-10 rounded-full bg-[var(--color-surface-hover)] flex items-center justify-center text-[var(--color-text-secondary)] font-bold flex-shrink-0 border border-[var(--color-border-light)]">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0 border transition-all ${
+                    isMe
+                      ? "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-400 dark:border-indigo-800"
+                      : post.type === "giver"
+                        ? "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-950/30 dark:text-teal-400 dark:border-teal-800"
+                        : "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800"
+                  }`}>
                     {initial}
                   </div>
 
@@ -281,13 +287,26 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
                       )}
                     </div>
 
-                    <div className={`p-4 rounded-2xl text-sm border shadow-sm relative group ${
+                    <div className={`p-4 rounded-2xl text-sm border shadow-sm relative group transition-all ${
                       isMe
-                        ? "rounded-tr-sm bg-primary/10 border-primary/20 text-[var(--color-text)]"
+                        ? "rounded-tr-sm bg-gradient-to-l from-indigo-50/20 via-[var(--color-surface)] to-[var(--color-surface)] border-l-4 border-l-indigo-500 border-t-indigo-500/10 border-r-indigo-500/10 border-b-indigo-500/10 text-[var(--color-text)]"
                         : post.type === "giver"
-                          ? "rounded-tl-sm bg-accent/5 border-accent/20"
-                          : "rounded-tl-sm bg-[var(--color-surface)] border-[var(--color-border)]"
+                          ? "rounded-tl-sm bg-gradient-to-r from-teal-50/20 via-[var(--color-surface)] to-[var(--color-surface)] border-l-4 border-l-teal-500 border-t-teal-500/10 border-r-teal-500/10 border-b-teal-500/10"
+                          : "rounded-tl-sm bg-gradient-to-r from-blue-50/20 via-[var(--color-surface)] to-[var(--color-surface)] border-l-4 border-l-blue-500 border-t-blue-500/10 border-r-blue-500/10 border-b-blue-500/10"
                     }`}>
+                      {/* Role Pill Badge */}
+                      <div className="mb-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          isMe
+                            ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300"
+                            : post.type === "giver"
+                              ? "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300"
+                              : "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                        }`}>
+                          {isMe ? "My Post ✨" : post.type === "giver" ? "Referrer 🤝" : "Seeker 🔍"}
+                        </span>
+                      </div>
+
                       <span>
                         <strong className="text-[var(--color-text)]">{firstName}</strong>{" "}
                         is <strong>{post.type === "giver" ? "referring" : "looking"}</strong>{" "}
@@ -295,14 +314,20 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
                         {post.type === "giver" && post.company && (
                           <> at <span className="font-medium text-[var(--color-text)]">{post.company}</span></>
                         )}
-                        . {post.experience_years > 0 && <span className="text-[var(--color-text-secondary)]">{post.experience_years} years exp.</span>}
+                        . {post.experience_years > 0 && <span className="text-[var(--color-text-secondary)]"> {post.experience_years} years exp.</span>}
                       </span>
 
                       {/* Skills Tags */}
                       {post.skills && (
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {post.skills.split(",").map((s: string) => s.trim()).filter(Boolean).slice(0, 5).map((skill: string, idx: number) => (
-                            <span key={skill} className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${idx % 2 === 0 ? "bg-primary/10 text-primary border border-primary/20" : "bg-accent/10 text-accent border border-accent/20"}`}>
+                        <div className="flex flex-wrap gap-1.5 mt-2.5">
+                          {post.skills.split(",").map((s: string) => s.trim()).filter(Boolean).slice(0, 5).map((skill: string) => (
+                            <span key={skill} className={`text-[10px] px-2.5 py-0.5 rounded-full font-semibold border ${
+                              isMe
+                                ? "bg-indigo-50/50 text-indigo-700 border-indigo-100 dark:bg-indigo-950/20 dark:text-indigo-300 dark:border-indigo-900"
+                                : post.type === "giver"
+                                  ? "bg-teal-50/50 text-teal-700 border-teal-100 dark:bg-teal-950/20 dark:text-teal-300 dark:border-teal-900"
+                                  : "bg-blue-50/50 text-blue-700 border-blue-100 dark:bg-blue-950/20 dark:text-blue-300 dark:border-blue-900"
+                            }`}>
                               #{skill}
                             </span>
                           ))}

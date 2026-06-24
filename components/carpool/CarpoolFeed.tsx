@@ -188,7 +188,13 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
             <div key={post.id} className="flex flex-col gap-1 animate-fadeInUp">
               {/* Main Chat Bubble */}
               <div className={`flex gap-3 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
-                <div className="w-10 h-10 rounded-full bg-[var(--color-surface-hover)] flex items-center justify-center text-[var(--color-text-secondary)] font-bold flex-shrink-0 border border-[var(--color-border-light)]">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0 border transition-all ${
+                  isMe
+                    ? "bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-400 dark:border-indigo-800"
+                    : post.type === "giver"
+                      ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800"
+                      : "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
+                }`}>
                   {initial}
                 </div>
                 
@@ -199,13 +205,26 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
                     <span>{post.user?.job_title} at {post.user?.company}</span>
                   </div>
 
-                  <div className={`p-4 rounded-2xl text-sm border shadow-sm relative group ${
+                  <div className={`p-4 rounded-2xl text-sm border shadow-sm relative group transition-all ${
                     isMe 
-                      ? "rounded-tr-sm bg-primary/10 border-primary/20 text-[var(--color-text)]" 
+                      ? "rounded-tr-sm bg-gradient-to-l from-indigo-50/20 via-[var(--color-surface)] to-[var(--color-surface)] border-l-4 border-l-indigo-500 border-t-indigo-500/10 border-r-indigo-500/10 border-b-indigo-500/10 text-[var(--color-text)]" 
                       : post.type === "giver" 
-                        ? "rounded-tl-sm bg-accent/5 border-accent/20" 
-                        : "rounded-tl-sm bg-[var(--color-surface)] border-[var(--color-border)]"
+                        ? "rounded-tl-sm bg-gradient-to-r from-emerald-50/20 via-[var(--color-surface)] to-[var(--color-surface)] border-l-4 border-l-emerald-500 border-t-emerald-500/10 border-r-emerald-500/10 border-b-emerald-500/10" 
+                        : "rounded-tl-sm bg-gradient-to-r from-amber-50/20 via-[var(--color-surface)] to-[var(--color-surface)] border-l-4 border-l-amber-500 border-t-amber-500/10 border-r-amber-500/10 border-b-amber-500/10"
                   }`}>
+                    {/* Commute Pill Badge */}
+                    <div className="mb-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        isMe
+                          ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300"
+                          : post.type === "giver"
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                            : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                      }`}>
+                        {isMe ? "My Commute ✨" : post.type === "giver" ? "Driving 🚗" : "Seeking Ride 🚶‍♂️"}
+                      </span>
+                    </div>
+
                     <span>
                       <strong className="text-[var(--color-text)]">{firstName}</strong> is <strong>{post.type === "giver" ? "driving" : "seeking a ride"}</strong> from <span className="font-medium text-[var(--color-text)]">{getLocDisplay(post, true, !!isMe)}</span> to <span className="font-medium text-[var(--color-text)]">{getLocDisplay(post, false, !!isMe)}</span> around <span className="font-medium text-[var(--color-text)]">{formatTime(post.time_start)}</span> today.
                     </span>

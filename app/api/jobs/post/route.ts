@@ -2,6 +2,26 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+function extractTop5Skills(skills: string): string {
+  if (!skills) return "";
+  const skillList = skills
+    .split(/[,;|/]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+  
+  const uniqueSkills: string[] = [];
+  const seen = new Set<string>();
+  for (const s of skillList) {
+    const lower = s.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      uniqueSkills.push(s);
+    }
+  }
+  return uniqueSkills.slice(0, 5).join(", ");
+}
+
+
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -13,6 +33,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
+  const processedSkills = extractTop5Skills(skills);
   const supabase = createAdminClient();
 
   const { data, error } = await supabase
@@ -23,7 +44,7 @@ export async function POST(request: Request) {
       role,
       company: company || null,
       experience_years: parseInt(experience_years) || 0,
-      skills: skills || null,
+      skills: processedSkills || null,
       status: "active",
       is_on_behalf: is_on_behalf || false,
       contact_number: contact_number || null
@@ -39,7 +60,7 @@ export async function POST(request: Request) {
     if (!OPENAI_KEY) throw new Error("OpenAI key not configured");
 
     // 1. Generate embedding for this post
-    const postText = `Role: ${role}\nSkills: ${skills || "None"}\nExperience: ${experience_years || 0} years\nType: ${type === "giver" ? "Offering referral" : "Looking for role"}${company ? `\nCompany: ${company}` : ""}`;
+    const postText = `Role: ${role}\nSkills: ${processedSkills || "None"}\nExperience: ${experience_years || 0} years\nType: ${type === "giver" ? "Offering referral" : "Looking for role"}${company ? `\nCompany: ${company}` : ""}`;
 
     const embRes = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
@@ -209,6 +230,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
+  const processedSkills = extractTop5Skills(skills);
   const supabase = createAdminClient();
 
   const { data, error } = await supabase
@@ -218,7 +240,7 @@ export async function PATCH(request: Request) {
       role,
       company: company || null,
       experience_years: parseInt(experience_years) || 0,
-      skills: skills || null,
+      skills: processedSkills || null,
       is_on_behalf: is_on_behalf || false,
       contact_number: contact_number || null
     })
