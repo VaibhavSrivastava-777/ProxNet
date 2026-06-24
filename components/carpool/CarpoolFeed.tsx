@@ -113,12 +113,31 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
   };
 
   const getLocDisplay = (post: any, isStart: boolean, isMe: boolean) => {
-    const name = isStart ? post.start_name : post.dest_name;
+    let name = isStart ? post.start_name : post.dest_name;
     const lat = isStart ? post.start_lat : post.dest_lat;
     const lng = isStart ? post.start_lng : post.dest_lng;
     
-    const isGeneric = !name || name.toLowerCase() === "home" || name.toLowerCase() === "office";
+    let isGeneric = !name || name.toLowerCase() === "home" || name.toLowerCase() === "office";
     
+    if (isGeneric && post.user) {
+      const userHomeLat = Number(post.user.home_lat);
+      const userHomeLng = Number(post.user.home_lng);
+      const userOfficeLat = Number(post.user.office_lat);
+      const userOfficeLng = Number(post.user.office_lng);
+
+      if (userHomeLat && userHomeLng && Math.abs(lat - userHomeLat) < 0.0001 && Math.abs(lng - userHomeLng) < 0.0001) {
+        if (post.user.home_name && post.user.home_name.toLowerCase() !== "home") {
+          name = post.user.home_name;
+          isGeneric = false;
+        }
+      } else if (userOfficeLat && userOfficeLng && Math.abs(lat - userOfficeLat) < 0.0001 && Math.abs(lng - userOfficeLng) < 0.0001) {
+        if (post.user.office_name && post.user.office_name.toLowerCase() !== "office") {
+          name = post.user.office_name;
+          isGeneric = false;
+        }
+      }
+    }
+
     if (isMe) {
       return name || (isStart ? "Home" : "Office");
     }

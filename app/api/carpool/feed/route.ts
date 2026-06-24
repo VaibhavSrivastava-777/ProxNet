@@ -93,7 +93,13 @@ export async function GET(request: Request) {
       user:users (
         id,
         company,
-        job_title
+        job_title,
+        home_name,
+        office_name,
+        home_lat,
+        home_lng,
+        office_lat,
+        office_lng
       )
     `)
     .eq("status", "active")
