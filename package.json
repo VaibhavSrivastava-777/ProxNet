@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed:admin": "npx tsx --env-file=.env.local scripts/seed-admin.ts",
-    "seed:ats": "npx tsx --env-file=.env.local scripts/seed-ats.ts"
+    "seed:ats": "npx tsx --env-file=.env.local scripts/seed-ats.ts",
+    "scrape:jobs": "npx tsx scripts/scrape-jobs.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
