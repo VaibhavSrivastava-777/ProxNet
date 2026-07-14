@@ -110,6 +110,16 @@ export default function LoginPage() {
           anonymously.
         </p>
 
+        {/* Store Badges */}
+        <div style={{ display: "flex", gap: "12px", marginBottom: "28px" }}>
+          <a href="/install/ios" aria-label="App Store">
+            <img src="/icons/badge-app-store.svg" alt="App Store" style={{ height: "40px", width: "auto" }} />
+          </a>
+          <a href="https://play.google.com/store/apps/details?id=in.proxnet.app" target="_blank" rel="noopener noreferrer" aria-label="Google Play">
+            <img src="/icons/badge-google-play.svg" alt="Google Play" style={{ height: "40px", width: "auto" }} />
+          </a>
+        </div>
+
         {/* LinkedIn sign-in form */}
         <LoginButton className="btn btn-linkedin" style={{ width: "100%" }} />
 
@@ -123,36 +133,6 @@ export default function LoginPage() {
         >
           🔒 Your identity remains anonymous to other users
         </p>
-
-        {/* Admin login link */}
-        <p
-          className="text-caption"
-          style={{
-            margin: "24px 0 0 0",
-            textAlign: "center",
-          }}
-        >
-          <Link
-            href="/admin/login"
-            style={{
-              color: "var(--color-text-tertiary)",
-              textDecoration: "none",
-              transition: "color var(--transition-fast)",
-            }}
-          >
-            Admin login
-          </Link>
-        </p>
-
-        {/* Store Badges */}
-        <div style={{ display: "flex", gap: "10px", marginTop: "24px", opacity: 0.7 }}>
-          <a href="/install/ios" aria-label="App Store">
-            <img src="/icons/badge-app-store.svg" alt="App Store" style={{ height: "32px", width: "auto", transition: "opacity var(--transition-fast)" }} />
-          </a>
-          <a href="https://play.google.com/store/apps/details?id=in.proxnet.app" target="_blank" rel="noopener noreferrer" aria-label="Google Play">
-            <img src="/icons/badge-google-play.svg" alt="Google Play" style={{ height: "32px", width: "auto", transition: "opacity var(--transition-fast)" }} />
-          </a>
-        </div>
       </div>
     </div>
   );

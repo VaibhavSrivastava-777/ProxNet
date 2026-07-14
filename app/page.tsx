@@ -36,11 +36,8 @@ export default async function HomePage() {
             />
           </div>
           <div className="flex flex-col items-center justify-center gap-4">
-            <LoginButton className="btn btn-linkedin btn-lg shadow-xl shadow-black/20" />
-            <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • LINKEDIN VERIFIED • FREE TO USE</p>
-            
             {/* App Store & Play Store Badges */}
-            <div className="flex flex-col items-center gap-3 mt-6">
+            <div className="flex flex-col items-center gap-3 mb-4">
               <p className="text-caption text-white/50 uppercase tracking-widest font-medium">Available on</p>
               <div className="flex items-center gap-3 animate-fadeIn">
                 <a href="/install/ios" className="store-badge-link" aria-label="Download on the App Store">
@@ -51,6 +48,9 @@ export default async function HomePage() {
                 </a>
               </div>
             </div>
+
+            <LoginButton className="btn btn-linkedin btn-lg shadow-xl shadow-black/20" />
+            <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • LINKEDIN VERIFIED • FREE TO USE</p>
           </div>
         </div>
       </section>
@@ -110,10 +110,9 @@ export default async function HomePage() {
       {/* Bottom CTA */}
       <section className="px-4 py-24 text-center bg-[var(--color-surface)] flex flex-col items-center">
         <h2 className="text-h2 mb-8">Ready to discover who's next door?</h2>
-        <LoginButton className="btn btn-linkedin btn-lg" />
         
         {/* Store Badges */}
-        <div className="flex items-center gap-3 mt-8 opacity-70">
+        <div className="flex items-center gap-3 mb-8 opacity-70">
           <a href="/install/ios" aria-label="App Store">
             <img src="/icons/badge-app-store.svg" alt="App Store" className="h-10 w-auto hover:opacity-80 transition-opacity" />
           </a>
@@ -121,6 +120,8 @@ export default async function HomePage() {
             <img src="/icons/badge-google-play.svg" alt="Google Play" className="h-10 w-auto hover:opacity-80 transition-opacity" />
           </a>
         </div>
+
+        <LoginButton className="btn btn-linkedin btn-lg" />
       </section>
 
       {/* Footer */}
