@@ -29,10 +29,10 @@ export default function IosInstallPage() {
       const iosDetected = isIphone || isIpad || isMacintosh;
       setIsIos(iosDetected);
 
-      // If user is on Android, redirect to Play Store instead
+      // If user is on Android, redirect to Android install page
       const isAndroid = ua.includes("android");
       if (isAndroid) {
-        window.location.href = "https://play.google.com/store/apps/details?id=in.proxnet.app";
+        router.replace("/install/android");
       }
     }
   }, [router]);

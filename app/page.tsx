@@ -43,7 +43,7 @@ export default async function HomePage() {
                 <a href="/install/ios" className="store-badge-link" aria-label="Download on the App Store">
                   <img src="/icons/badge-app-store.svg" alt="Download on the App Store" className="h-11 w-auto hover:opacity-80 transition-opacity" />
                 </a>
-                <a href="https://play.google.com/store/apps/details?id=in.proxnet.app" target="_blank" rel="noopener noreferrer" className="store-badge-link" aria-label="Get it on Google Play">
+                <a href="/install/android" className="store-badge-link" aria-label="Get it on Google Play">
                   <img src="/icons/badge-google-play.svg" alt="Get it on Google Play" className="h-11 w-auto hover:opacity-80 transition-opacity" />
                 </a>
               </div>
@@ -116,7 +116,7 @@ export default async function HomePage() {
           <a href="/install/ios" aria-label="App Store">
             <img src="/icons/badge-app-store.svg" alt="App Store" className="h-10 w-auto hover:opacity-80 transition-opacity" />
           </a>
-          <a href="https://play.google.com/store/apps/details?id=in.proxnet.app" target="_blank" rel="noopener noreferrer" aria-label="Google Play">
+          <a href="/install/android" aria-label="Google Play">
             <img src="/icons/badge-google-play.svg" alt="Google Play" className="h-10 w-auto hover:opacity-80 transition-opacity" />
           </a>
         </div>

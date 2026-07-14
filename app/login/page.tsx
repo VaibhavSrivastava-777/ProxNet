@@ -115,7 +115,7 @@ export default function LoginPage() {
           <a href="/install/ios" aria-label="App Store">
             <img src="/icons/badge-app-store.svg" alt="App Store" style={{ height: "40px", width: "auto" }} />
           </a>
-          <a href="https://play.google.com/store/apps/details?id=in.proxnet.app" target="_blank" rel="noopener noreferrer" aria-label="Google Play">
+          <a href="/install/android" aria-label="Google Play">
             <img src="/icons/badge-google-play.svg" alt="Google Play" style={{ height: "40px", width: "auto" }} />
           </a>
         </div>
