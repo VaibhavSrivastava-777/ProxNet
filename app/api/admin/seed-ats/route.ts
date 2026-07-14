@@ -23,17 +23,35 @@ async function handleRequest(request: Request) {
 
   const supabase = createAdminClient();
   
-  // 1. Fetch network companies
+  const { searchParams } = new URL(request.url);
+  const force = searchParams.get("force") === "true";
+  const includeStatic = searchParams.get("all") === "true";
+
+  if (force) {
+    // Clear dynamically discovered configurations but preserve manual custom ones
+    const { error: deleteError } = await supabase
+      .from("company_ats_config")
+      .delete()
+      .neq("provider", "custom");
+    if (deleteError) {
+      return NextResponse.json({ error: `Failed to clear configs: ${deleteError.message}` }, { status: 500 });
+    }
+  }
+
+  // 1. Fetch network companies and trim trailing spaces
   const { data: users, error: userError } = await supabase.from("users").select("company");
   if (userError) return NextResponse.json({ error: userError.message }, { status: 500 });
 
   const networkCompanies = Array.from(new Set(
-    users.map(u => u.company).filter(c => c && c.trim() !== "")
+    users
+      .map(u => (u.company as string)?.trim())
+      .filter((c): c is string => !!c)
   ));
 
-  // 2. Combine with static catalog
-  const staticCompanies = Object.keys(companyMappings);
-  const allCompanies = Array.from(new Set([...networkCompanies, ...staticCompanies]));
+  // 2. Determine target companies to seed (only network by default to avoid timeouts)
+  const allCompanies = includeStatic
+    ? Array.from(new Set([...networkCompanies, ...Object.keys(companyMappings)]))
+    : networkCompanies;
 
   // 3. Fetch existing configurations to skip them
   const { data: existingConfigs, error: configsError } = await supabase
@@ -54,15 +72,18 @@ async function handleRequest(request: Request) {
   if (unseededCompanies.length === 0) {
     return NextResponse.json({
       success: true,
-      message: "All companies (network + static) are already seeded!",
+      message: force 
+        ? "Purged configurations and successfully re-seeded statically known boards!"
+        : "All target companies are already seeded!",
       seededCount: seededCompanies.size,
       remainingCount: 0
     });
   }
 
-  // 5. Process in a small batch of 5 to avoid Vercel timeouts
-  const batchSize = 5;
+  // 5. Process in a batch (batch size 15 if network only, 5 if full static catalog)
+  const batchSize = includeStatic ? 5 : 15;
   const batch = unseededCompanies.slice(0, batchSize);
+
   const results: string[] = [];
   let successCount = 0;
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { User } from "@/lib/types";
+import { LocationAutocomplete } from "@/components/map/LocationAutocomplete";
 
 interface CarpoolFormProps {
   user: User;
@@ -14,8 +15,15 @@ interface CarpoolFormProps {
 
 export function CarpoolForm({ user, onPostCreated, onCancel, initialData, isAdmin, onSubmitOverride }: CarpoolFormProps) {
   const [type, setType] = useState<"giver" | "seeker">(initialData?.type || "seeker");
-  const [direction, setDirection] = useState<"home_to_office" | "office_to_home">("home_to_office");
+  const [direction, setDirection] = useState<"home_to_office" | "office_to_home" | "custom">("home_to_office");
   
+  const [customStartName, setCustomStartName] = useState("");
+  const [customStartLat, setCustomStartLat] = useState<number | null>(null);
+  const [customStartLng, setCustomStartLng] = useState<number | null>(null);
+  const [customDestName, setCustomDestName] = useState("");
+  const [customDestLat, setCustomDestLat] = useState<number | null>(null);
+  const [customDestLng, setCustomDestLng] = useState<number | null>(null);
+
   // Set default time to next hour
   const [time, setTime] = useState(() => {
     if (initialData?.time_start) return initialData.time_start.slice(0, 5);
@@ -28,13 +36,28 @@ export function CarpoolForm({ user, onPostCreated, onCancel, initialData, isAdmi
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const startName = direction === "home_to_office" ? (user.home_name || "Home") : (user.office_name || "Office");
-  const destName = direction === "home_to_office" ? (user.office_name || "Office") : (user.home_name || "Home");
+  const startName = direction === "custom"
+    ? customStartName
+    : direction === "home_to_office"
+      ? (user.home_name || "Home")
+      : (user.office_name || "Office");
+
+  const destName = direction === "custom"
+    ? customDestName
+    : direction === "home_to_office"
+      ? (user.office_name || "Office")
+      : (user.home_name || "Home");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!user.home_lat || !user.home_lng || !user.office_lat || !user.office_lng) {
+
+    if (direction !== "custom" && (!user.home_lat || !user.home_lng || !user.office_lat || !user.office_lng)) {
       setError("Please update your Home and Office locations in your profile first.");
+      return;
+    }
+
+    if (direction === "custom" && (!customStartLat || !customStartLng || !customDestLat || !customDestLng)) {
+      setError("Please select both source and destination locations for your custom route.");
       return;
     }
 
@@ -47,10 +70,10 @@ export function CarpoolForm({ user, onPostCreated, onCancel, initialData, isAdmi
       endD.setHours(h, m + 30, 0);
       const timeEnd = `${endD.getHours().toString().padStart(2, '0')}:${endD.getMinutes().toString().padStart(2, '0')}`;
 
-      const start_lat = direction === "home_to_office" ? user.home_lat : user.office_lat;
-      const start_lng = direction === "home_to_office" ? user.home_lng : user.office_lng;
-      const dest_lat = direction === "home_to_office" ? user.office_lat : user.home_lat;
-      const dest_lng = direction === "home_to_office" ? user.office_lng : user.home_lng;
+      const start_lat = direction === "custom" ? customStartLat : (direction === "home_to_office" ? user.home_lat : user.office_lat);
+      const start_lng = direction === "custom" ? customStartLng : (direction === "home_to_office" ? user.home_lng : user.office_lng);
+      const dest_lat = direction === "custom" ? customDestLat : (direction === "home_to_office" ? user.office_lat : user.home_lat);
+      const dest_lng = direction === "custom" ? customDestLng : (direction === "home_to_office" ? user.office_lng : user.home_lng);
 
       const payload = {
         type,
@@ -137,11 +160,45 @@ export function CarpoolForm({ user, onPostCreated, onCancel, initialData, isAdmi
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">Route</span>
               <div className="flex bg-[var(--color-surface-secondary)] p-1 rounded-lg">
-                <button type="button" onClick={() => setDirection("home_to_office")} className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${direction === "home_to_office" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-text)]" : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}>To Office</button>
-                <button type="button" onClick={() => setDirection("office_to_home")} className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${direction === "office_to_home" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-text)]" : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}>To Home</button>
+                <button type="button" onClick={() => setDirection("home_to_office")} className={`flex-1 py-1.5 text-[11px] sm:text-xs font-medium rounded-md transition-all ${direction === "home_to_office" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-text)]" : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}>To Office</button>
+                <button type="button" onClick={() => setDirection("office_to_home")} className={`flex-1 py-1.5 text-[11px] sm:text-xs font-medium rounded-md transition-all ${direction === "office_to_home" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-text)]" : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}>To Home</button>
+                <button type="button" onClick={() => setDirection("custom")} className={`flex-1 py-1.5 text-[11px] sm:text-xs font-medium rounded-md transition-all ${direction === "custom" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-text)]" : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}>Custom</button>
               </div>
             </div>
           </div>
+
+          {direction === "custom" && (
+            <div className="flex flex-col gap-3 p-3 bg-[var(--color-surface-secondary)] rounded-lg border border-[var(--color-border-light)]">
+              <div>
+                <label className="label text-[11px] font-semibold mb-1">Start Location</label>
+                <LocationAutocomplete
+                  className="input w-full text-sm py-1.5"
+                  value={customStartName}
+                  placeholder="Where are you starting from?"
+                  onChange={(val) => setCustomStartName(val)}
+                  onSelect={({ name, lat, lng }) => {
+                    setCustomStartName(name);
+                    setCustomStartLat(lat);
+                    setCustomStartLng(lng);
+                  }}
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] font-semibold mb-1">Destination Location</label>
+                <LocationAutocomplete
+                  className="input w-full text-sm py-1.5"
+                  value={customDestName}
+                  placeholder="Where are you going to?"
+                  onChange={(val) => setCustomDestName(val)}
+                  onSelect={({ name, lat, lng }) => {
+                    setCustomDestName(name);
+                    setCustomDestLat(lat);
+                    setCustomDestLng(lng);
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">Time</span>

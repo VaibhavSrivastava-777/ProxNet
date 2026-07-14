@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const dynamic = "force-dynamic";
-
 // Fetch the user's latest 20 notifications
 export async function GET(request: Request) {
   const session = await auth();
@@ -36,12 +34,16 @@ export async function PATCH(request: Request) {
   }
 
   const supabase = createAdminClient();
-  const { id } = await request.json();
+  const { id, ids, url } = await request.json();
 
   let query = supabase.from("in_app_notifications").update({ is_read: true }).eq("user_id", session.user.id);
 
   if (id) {
     query = query.eq("id", id);
+  } else if (ids && Array.isArray(ids)) {
+    query = query.in("id", ids);
+  } else if (url) {
+    query = query.eq("url", url);
   }
 
   const { error } = await query;

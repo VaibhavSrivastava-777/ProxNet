@@ -143,6 +143,16 @@ export default function LoginPage() {
             Admin login
           </Link>
         </p>
+
+        {/* Store Badges */}
+        <div style={{ display: "flex", gap: "10px", marginTop: "24px", opacity: 0.7 }}>
+          <a href="/install/ios" aria-label="App Store">
+            <img src="/icons/badge-app-store.svg" alt="App Store" style={{ height: "32px", width: "auto", transition: "opacity var(--transition-fast)" }} />
+          </a>
+          <a href="https://play.google.com/store/apps/details?id=in.proxnet.app" target="_blank" rel="noopener noreferrer" aria-label="Google Play">
+            <img src="/icons/badge-google-play.svg" alt="Google Play" style={{ height: "32px", width: "auto", transition: "opacity var(--transition-fast)" }} />
+          </a>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { computeGoogleRoute } from "@/lib/google-routes";
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -31,6 +32,11 @@ export async function POST(request: Request) {
     .limit(1)
     .single();
 
+  const route_polyline = await computeGoogleRoute(
+    { lat: Number(start_lat), lng: Number(start_lng) },
+    { lat: Number(dest_lat), lng: Number(dest_lng) }
+  );
+
   const postData = {
     user_id: user.id,
     type,
@@ -47,6 +53,7 @@ export async function POST(request: Request) {
     time_start,
     time_end,
     seats,
+    route_polyline,
   };
 
   let data, error;

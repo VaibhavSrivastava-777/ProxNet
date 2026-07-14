@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { decodePolyline, computeRouteOverlap } from "@/lib/google-routes";
 
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3; // metres
@@ -86,6 +87,28 @@ export async function GET(request: Request) {
 
   const todayStr = new Date().toISOString().split('T')[0];
 
+  let isVirtual = false;
+  if (!myPost && user.home_lat && user.home_lng && user.office_lat && user.office_lng) {
+    myPost = {
+      id: "virtual",
+      user_id: user.id,
+      start_lat: user.home_lat,
+      start_lng: user.home_lng,
+      start_name: user.home_name || "Home",
+      dest_lat: user.office_lat,
+      dest_lng: user.office_lng,
+      dest_name: user.office_name || "Office",
+      time_start: "09:00",
+      time_end: "10:00",
+      type: "seeker",
+      is_recurring: true,
+      recurring_days: [0, 1, 2, 3, 4, 5, 6],
+      status: "active",
+      created_at: new Date().toISOString()
+    };
+    isVirtual = true;
+  }
+
   let query = supabase
     .from("carpool_posts")
     .select(`
@@ -157,7 +180,7 @@ export async function GET(request: Request) {
     const myStartMins = timeToMinutes(myPost.time_start);
     const myEndMins = timeToMinutes(myPost.time_end);
 
-    filtered = dateFilteredCandidates.map(candidate => {
+    const candidatesWithScores = dateFilteredCandidates.map(candidate => {
       // Vector Cosine Similarity
       const vectorSim = calculateVectorSimilarity(
          myPost.start_lat, myPost.start_lng, myPost.dest_lat, myPost.dest_lng,
@@ -169,9 +192,85 @@ export async function GET(request: Request) {
       
       const candStartMins = timeToMinutes(candidate.time_start);
       const candEndMins = timeToMinutes(candidate.time_end);
-      const timeOverlap = Math.max(0, Math.min(myEndMins, candEndMins) - Math.max(myStartMins, candStartMins));
+      let timeOverlap = Math.max(0, Math.min(myEndMins, candEndMins) - Math.max(myStartMins, candStartMins));
+      if (isVirtual) {
+        timeOverlap = 60; // Mock time overlap to bypass time penalty for virtual matches
+      }
 
-      // 1. Same-Type Matching (Splitting a cab / Two Drivers)
+      // Check if both posts have route polylines to perform advanced matching
+      if (myPost.route_polyline && candidate.route_polyline) {
+        let score = -1;
+        let matchType = "route_overlap_match";
+        let routeOverlap = 0;
+
+        if (candidate.type === myPost.type) {
+          // Same-Type Matching
+          const myRoute = decodePolyline(myPost.route_polyline);
+          const candRoute = decodePolyline(candidate.route_polyline);
+          const overlap1 = computeRouteOverlap(myRoute, candRoute, 500);
+          const overlap2 = computeRouteOverlap(candRoute, myRoute, 500);
+          routeOverlap = (overlap1 + overlap2) / 2;
+
+          if (routeOverlap >= 0.5 && distToCandStart <= 3000) {
+            const routeOverlapScore = routeOverlap * 100;
+            const startProximityScore = Math.max(0, 100 - (distToCandStart / 3000) * 100);
+            let timeScore = 100;
+            if (timeOverlap <= 0) {
+              const timeGap = Math.max(myStartMins, candStartMins) - Math.min(myEndMins, candEndMins);
+              timeScore = Math.max(0, 100 - timeGap);
+            }
+            score = Math.round(0.4 * routeOverlapScore + 0.3 * startProximityScore + 0.3 * timeScore);
+            score = Math.max(0, Math.min(100, score));
+            return {
+              ...candidate,
+              score,
+              distance: distFromCandEnd,
+              route_overlap: routeOverlap,
+              match_type: matchType,
+              sameTypeMatch: true
+            };
+          }
+        } else {
+          // Opposite-Type Matching (Giver vs Seeker)
+          const myRoute = decodePolyline(myPost.route_polyline);
+          const candRoute = decodePolyline(candidate.route_polyline);
+          const seekerRoute = myPost.type === "seeker" ? myRoute : candRoute;
+          const giverRoute = myPost.type === "giver" ? myRoute : candRoute;
+          
+          routeOverlap = computeRouteOverlap(seekerRoute, giverRoute, 500);
+          const giver = myPost.type === "giver" ? myPost : candidate;
+          const seeker = myPost.type === "seeker" ? myPost : candidate;
+          const dStart = haversineDistance(giver.start_lat, giver.start_lng, seeker.start_lat, seeker.start_lng);
+          const dEnd = haversineDistance(giver.dest_lat, giver.dest_lng, seeker.dest_lat, seeker.dest_lng);
+
+          if (routeOverlap >= 0.5 && dStart <= 4000) {
+            const routeOverlapScore = routeOverlap * 100;
+            const startProximityScore = Math.max(0, 100 - (dStart / 4000) * 100);
+            let timeScore = 100;
+            if (timeOverlap <= 0) {
+              const timeGap = Math.max(myStartMins, candStartMins) - Math.min(myEndMins, candEndMins);
+              timeScore = Math.max(0, 100 - timeGap);
+            }
+            score = Math.round(0.4 * routeOverlapScore + 0.3 * startProximityScore + 0.3 * timeScore);
+            score = Math.max(0, Math.min(100, score));
+            return {
+              ...candidate,
+              score,
+              distance: dEnd,
+              route_overlap: routeOverlap,
+              match_type: matchType
+            };
+          }
+        }
+
+        return {
+          ...candidate,
+          score: -1,
+          distance: distFromCandEnd
+        };
+      }
+
+      // 1. Same-Type Matching (Splitting a cab / Two Drivers) - Fallback
       if (candidate.type === myPost.type) {
          if (distToCandStart <= 3000 && vectorSim >= 0.85) {
             let score = 90; 
@@ -184,7 +283,7 @@ export async function GET(request: Request) {
               score -= timeGap;
             }
 
-            score = Math.max(0, Math.min(100, score));
+            score = Math.round(Math.max(0, Math.min(100, score)));
 
             return {
                ...candidate,
@@ -203,7 +302,7 @@ export async function GET(request: Request) {
          };
       }
 
-      // 2. Opposite-Type Matching (Giver vs Seeker)
+      // 2. Opposite-Type Matching (Giver vs Seeker) - Fallback
       const giver = myPost.type === "giver" ? myPost : candidate;
       const seeker = myPost.type === "seeker" ? myPost : candidate;
 
@@ -230,7 +329,7 @@ export async function GET(request: Request) {
         score -= timeGap;
       }
 
-      score = Math.max(0, Math.min(100, score));
+      score = Math.round(Math.max(0, Math.min(100, score)));
 
       return {
         ...candidate,
@@ -239,7 +338,29 @@ export async function GET(request: Request) {
         vector_sim: vectorSim,
         match_type: "vector_match"
       };
-    }).filter(cand => cand.score >= 0).sort((a, b) => b.score - a.score);
+    });
+
+    if (isVirtual) {
+      // For virtual matches, show all candidates within radius of current location (unless radius is -1),
+      // and map score to 0 if it is negative (non-match).
+      filtered = candidatesWithScores.map(cand => {
+        const startDist = lat && lng ? haversineDistance(lat, lng, cand.start_lat, cand.start_lng) : 0;
+        return {
+          ...cand,
+          distance: startDist,
+          score: cand.score < 0 ? 0 : cand.score
+        };
+      }).filter(cand => radius === -1 || cand.distance <= radius);
+
+      // Sort by score descending (high matches first), and then by created_at descending
+      filtered.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      });
+    } else {
+      // Real post: filter only matching ones (score >= 0)
+      filtered = candidatesWithScores.filter(cand => cand.score >= 0).sort((a, b) => b.score - a.score);
+    }
   }
 
   // --- AI Summary Logic ---
@@ -384,7 +505,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ 
     posts: filtered, 
-    myPost: myPost,
+    myPost: isVirtual ? null : myPost,
     othersCount,
     suggestions,
     requiresPost: false 

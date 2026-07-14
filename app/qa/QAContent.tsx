@@ -30,35 +30,6 @@ export function QAContent() {
 
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-8 animate-fadeIn" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", paddingBottom: "3rem" }}>
-      <div>
-        <div className="flex items-center justify-between">
-          <h1 className="text-h1">Messages &amp; Q&amp;A</h1>
-          <HowItWorksModal type="qa" />
-        </div>
-        <p className="text-body-sm" style={{ marginTop: "0.25rem" }}>
-          Ask questions anonymously to relevant professionals in your area.
-        </p>
-      </div>
-
-      {/* Ask a Question Button */}
-      <div className="mb-6">
-        <button
-          type="button"
-          onClick={() => {
-            setDirectTarget(null);
-            setFormOpen(true);
-          }}
-          className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border-light)] hover:border-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] transition-all cursor-pointer shadow-sm group"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-accent)] group-hover:scale-110 transition-transform">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-          <span className="text-h3 m-0 text-[var(--color-text)]">Ask Anonymously</span>
-        </button>
-      </div>
-
       {formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="bg-[var(--color-surface)] w-full max-w-2xl rounded-xl shadow-xl border border-[var(--color-border)] flex flex-col h-[85vh] max-h-[800px] animate-scaleIn">
@@ -92,7 +63,7 @@ export function QAContent() {
       <QuestionList 
         refreshKey={refreshKey} 
         onOpenDirectQuestion={(target) => {
-          setDirectTarget(target);
+          setDirectTarget(target || null);
           setFormOpen(true);
         }}
       />

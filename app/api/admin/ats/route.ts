@@ -16,6 +16,17 @@ export async function GET() {
   
   if (configError) return NextResponse.json({ error: configError.message }, { status: 500 });
 
+  // Extract cron status and filter it out of standard configs
+  const cronStatusConfig = (configs || []).find(c => c.provider === "cron_status");
+  const filteredConfigs = (configs || []).filter(c => c.provider !== "cron_status");
+  
+  let cronStatus = null;
+  if (cronStatusConfig) {
+    try {
+      cronStatus = JSON.parse(cronStatusConfig.board_token_or_url);
+    } catch (e) {}
+  }
+
   // Get all unique companies from users
   const { data: users, error: userError } = await supabase
     .from("users")
@@ -24,8 +35,8 @@ export async function GET() {
 
   if (userError) return NextResponse.json({ error: userError.message }, { status: 500 });
 
-  // Compute available companies
-  const configuredCompanies = new Set((configs || []).map(c => c.company_name.toLowerCase().trim()));
+  // Compute available companies (ignoring system status row)
+  const configuredCompanies = new Set(filteredConfigs.map(c => c.company_name.toLowerCase().trim()));
   
   const allCompanies = Array.from(new Set(
     (users || [])
@@ -35,16 +46,34 @@ export async function GET() {
 
   const availableCompanies = allCompanies.filter(c => !configuredCompanies.has(c.toLowerCase()));
 
-  return NextResponse.json({ configs, availableCompanies });
+  return NextResponse.json({ configs: filteredConfigs, availableCompanies, cronStatus });
 }
+
 
 export async function POST(request: Request) {
   const isAdmin = await getAdminSession();
   if (!isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let { company_name, provider, board_token_or_url } = await request.json();
-  if (!company_name || !provider || !board_token_or_url) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  if (!company_name) {
+    return NextResponse.json({ error: "Missing company_name" }, { status: 400 });
+  }
+
+  const supabase = createAdminClient();
+
+  // Auto-discovery if provider and board token are not provided
+  if (!provider && !board_token_or_url) {
+    try {
+      const { discoverAts } = await import("@/lib/ats-discovery");
+      const discovery = await discoverAts(company_name);
+      if (!discovery) {
+        return NextResponse.json({ error: `Could not auto-discover ATS strategy for "${company_name}"` }, { status: 404 });
+      }
+      provider = discovery.provider;
+      board_token_or_url = discovery.board;
+    } catch (e: any) {
+      return NextResponse.json({ error: `ATS discovery error: ${e.message}` }, { status: 500 });
+    }
   }
 
   // Auto-Detect logic from sample URL
@@ -76,7 +105,6 @@ export async function POST(request: Request) {
     }
   }
 
-  const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("company_ats_config")
     .insert({ company_name, provider, board_token_or_url })

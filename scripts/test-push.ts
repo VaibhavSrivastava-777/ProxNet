@@ -1,17 +1,23 @@
 import { createClient } from "@supabase/supabase-js";
-import webPush from "web-push";
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getMessaging } from "firebase-admin/messaging";
 
 // Initialize Supabase Admin Client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Initialize Web Push
-webPush.setVapidDetails(
-  process.env.NEXT_PUBLIC_VAPID_SUBJECT || "mailto:your-email@example.com",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+// Initialize Firebase Admin
+if (!getApps().length) {
+  initializeApp({
+    credential: cert({
+      projectId: process.env.FIREBASE_PROJECT_ID!,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL!,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    }),
+  });
+}
+const fcmMessaging = getMessaging();
 
 function haversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3;
@@ -85,42 +91,62 @@ async function runTestBroadcast() {
       }
     }
 
-    const payload = JSON.stringify({
-      title: "ProxNet Network Update 📍",
-      body: messageBody,
-      url: "/proximity"
-    });
+    const title = "ProxNet Network Update 📍";
 
     // 1. Insert into in_app_notifications
     await supabase.from("in_app_notifications").insert({
       user_id: user.id,
-      title: "ProxNet Network Update 📍",
+      title,
       body: messageBody,
       url: "/proximity"
     });
-    
-    // 2. Fetch push subscriptions
-    const { data: subs } = await supabase.from("push_subscriptions").select("*").eq("user_id", user.id);
-    
-    let successCount = 0;
-    if (subs) {
-      for (const sub of subs) {
+
+    // 2. Fetch user's FCM tokens
+    const { data: tokens } = await supabase.from("fcm_tokens").select("*").eq("user_id", user.id);
+
+    if (tokens && tokens.length > 0) {
+      console.log(`Sending test FCM to ${tokens.length} active devices for user ${user.id}...`);
+      for (const tokenRecord of tokens) {
         try {
-          const pushSubscription = {
-            endpoint: sub.endpoint,
-            keys: { p256dh: sub.p256dh, auth: sub.auth },
-          };
-          await webPush.sendNotification(pushSubscription, payload);
-          successCount++;
-        } catch (e) {
-          // Ignore
+          await fcmMessaging.send({
+            token: tokenRecord.token,
+            notification: {
+              title,
+              body: messageBody,
+            },
+            webpush: {
+              fcmOptions: {
+                link: "https://www.proxnet.in/proximity",
+              },
+              notification: {
+                icon: "/logo.png",
+                badge: "/icons/icon-96.png",
+                data: { url: "/proximity" },
+              },
+            },
+            android: {
+              priority: "high",
+              notification: {
+                channelId: "proxnet_messages",
+                sound: "default",
+                icon: "@mipmap/ic_launcher",
+              },
+            },
+          });
+        } catch (err: any) {
+          console.error("Test FCM delivery failed:", err.code);
+          if (
+            err.code === "messaging/registration-token-not-registered" ||
+            err.code === "messaging/invalid-registration-token"
+          ) {
+            await supabase.from("fcm_tokens").delete().eq("id", tokenRecord.id);
+          }
         }
       }
     }
-    
-    console.log(`Sent to user ${user.id}: ${messageBody}`);
   }
-  console.log("Done.");
+
+  console.log("Test broadcast run completed.");
 }
 
-runTestBroadcast();
+runTestBroadcast().catch(console.error);

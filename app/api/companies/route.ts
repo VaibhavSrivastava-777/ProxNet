@@ -3,8 +3,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
 import { resolveUserLocation } from "@/lib/anonymize";
 
-export const dynamic = "force-dynamic";
-
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const latParam = searchParams.get("lat");

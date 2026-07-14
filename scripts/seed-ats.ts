@@ -13,6 +13,20 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 async function seed() {
+  const force = process.argv.includes("--force");
+  
+  if (force) {
+    console.log("Purging all dynamically discovered configurations (preserving custom configs)...");
+    const { error: deleteError } = await supabase
+      .from("company_ats_config")
+      .delete()
+      .neq("provider", "custom");
+    if (deleteError) {
+      console.error("Failed to purge configs:", deleteError.message);
+      return;
+    }
+  }
+
   console.log("Fetching distinct companies from ProxNet network...");
   
   // Fetch existing companies from ProxNet network
@@ -26,7 +40,7 @@ async function seed() {
   }
 
   const networkCompanies = new Set(
-    users.map(u => u.company).filter(c => c && c.trim() !== "")
+    users.map(u => (u.company as string)?.trim()).filter((c): c is string => !!c)
   );
 
   // Add all statically known companies from the anonymize logic
@@ -67,15 +81,28 @@ async function seed() {
         successCount++;
       }
     } else {
-      console.log(`⏭️  No public Lever/Greenhouse board found. Skipping.`);
+      console.log(`⏭️  No public board found. Marking as 'none'.`);
+      
+      // Seed placeholder config under provider 'none' to avoid checking again next time
+      const { error } = await supabase
+        .from("company_ats_config")
+        .upsert({
+          company_name: formattedName,
+          provider: "none",
+          board_token_or_url: "none"
+        }, { onConflict: "company_name" });
+
+      if (error) {
+        console.error(`  ❌ Failed to upsert none-placeholder: ${error.message}`);
+      }
       skipCount++;
     }
     
-    // Add a tiny delay to respect rate limits on Lever/Greenhouse APIs
+    // Add a tiny delay to respect rate limits
     await new Promise(r => setTimeout(r, 200));
   }
 
-  console.log(`\n🎉 Done! Successfully seeded ${successCount} ATS configurations. (${skipCount} skipped)`);
+  console.log(`\n🎉 Done! Successfully seeded ${successCount} ATS configurations. (${skipCount} skipped/marked none)`);
 }
 
 seed();

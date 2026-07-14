@@ -14,7 +14,7 @@ export async function GET() {
 
   const { data: asked } = await supabase
     .from("questions")
-    .select("*, question_targets(status)")
+    .select("*, question_targets(status, professional_id)")
     .eq("asker_id", user.id);
 
   const { data: targeted } = await supabase
@@ -26,7 +26,7 @@ export async function GET() {
     .from("chat_sessions")
     .select("id, question_id, created_at, chat_messages(body, created_at, sender_id), chat_participants(user_id, alias)");
 
-  const sessionActivityMap = new Map<string, { time: string; body: string | null; sender_id: string | null; target_alias: string | null }>();
+  const sessionActivityMap = new Map<string, { time: string; body: string | null; sender_id: string | null; target_alias: string | null; sessionId: string }>();
   let aiSession = null;
 
   if (sessions) {
@@ -65,19 +65,30 @@ export async function GET() {
       
       const currentLatest = sessionActivityMap.get(session.question_id);
       if (!currentLatest || new Date(latestTime).getTime() > new Date(currentLatest.time).getTime()) {
-        sessionActivityMap.set(session.question_id, { time: latestTime, body: latestBody, sender_id: latestSender, target_alias: targetAlias });
+        sessionActivityMap.set(session.question_id, {
+          time: latestTime,
+          body: latestBody,
+          sender_id: latestSender,
+          target_alias: targetAlias,
+          sessionId: session.id
+        });
       }
     }
   }
 
   const askedWithActivity = (asked ?? []).map((q) => {
     const activity = sessionActivityMap.get(q.id);
+    let sender = null;
+    if (activity?.sender_id) {
+      sender = activity.sender_id === user.id ? "asker" : "responder";
+    }
     return { 
       ...q, 
       latest_activity_at: activity?.time || q.created_at,
       latest_message_body: activity?.body || null,
-      latest_message_sender: activity?.sender_id || null,
+      latest_message_sender: sender,
       target_alias: activity?.target_alias || null,
+      session_id: activity?.sessionId || null,
     };
   });
   askedWithActivity.sort((a, b) => new Date(b.latest_activity_at).getTime() - new Date(a.latest_activity_at).getTime());
@@ -94,6 +105,10 @@ export async function GET() {
   const incomingWithActivity = filteredTargeted.map((t) => {
     const q = t.questions;
     const activity = sessionActivityMap.get(q.id);
+    let sender = null;
+    if (activity?.sender_id) {
+      sender = activity.sender_id === user.id ? "responder" : "asker";
+    }
     return {
       id: q.id,
       body: q.body,
@@ -102,10 +117,12 @@ export async function GET() {
       title_filter: q.title_filter,
       created_at: q.created_at,
       asker_alias: activity?.target_alias || `Resident-${q.asker_id.slice(0, 4)}`,
+      asker_id: q.asker_id,
       target_id: t.id,
       latest_activity_at: activity?.time || q.created_at,
       latest_message_body: activity?.body || null,
-      latest_message_sender: activity?.sender_id || null,
+      latest_message_sender: sender,
+      session_id: activity?.sessionId || null,
     };
   });
   incomingWithActivity.sort((a, b) => new Date(b.latest_activity_at).getTime() - new Date(a.latest_activity_at).getTime());
@@ -145,12 +162,44 @@ export async function GET() {
     // 1. Try vector similarity match first
     const { data: userRecord } = await supabase.from("users").select("embedding, resume_text, about").eq("id", user.id).single();
     
+    let userEmbedding = userRecord?.embedding;
+    if (!userEmbedding && userRecord) {
+      const OPENAI_KEY = process.env.OPENAI_API_KEY;
+      if (OPENAI_KEY) {
+        const denseContext = userRecord.resume_text ? `Resume: ${userRecord.resume_text}` : `About: ${userRecord.about || "None"}`;
+        const textToEmbed = `Company: ${user.company || "None"}\nRole: ${user.job_title || "None"}\n${denseContext}`.slice(0, 8000);
+        try {
+          const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${OPENAI_KEY}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              input: textToEmbed,
+              model: "text-embedding-3-small"
+            })
+          });
+          if (oaiRes.ok) {
+            const oaiData = await oaiRes.json();
+            if (oaiData.data?.[0]?.embedding) {
+              userEmbedding = oaiData.data[0].embedding;
+              // Persist to DB
+              await supabase.from("users").update({ embedding: userEmbedding }).eq("id", user.id);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to generate user embedding on-the-fly for Q&A:", e);
+        }
+      }
+    }
+
     let vectorMatches: any[] = [];
-    if (userRecord?.embedding) {
+    if (userEmbedding) {
       const { data: matches, error: rpcError } = await supabase.rpc("match_professionals_rpc", {
-        query_embedding: userRecord.embedding,
+        query_embedding: userEmbedding,
         exclude_id: user.id,
-        match_count: 20 // grab extra to filter by distance
+        match_count: 100 // larger count to allow 5km filtering
       });
       if (!rpcError && matches && matches.length > 0) {
         vectorMatches = matches;
@@ -158,8 +207,12 @@ export async function GET() {
     }
 
     if (vectorMatches.length > 0) {
-      // Take top 3 closest semantically, regardless of strict distance filter
-      const nearbyMatches = vectorMatches.slice(0, 3);
+      // Filter candidates strictly within 5km (5000 meters)
+      const nearbyMatches = vectorMatches.filter((u: any) => {
+        if (!u.home_lat || !u.home_lng) return false;
+        const dist = haversineDistanceMeters(myLoc.lat, myLoc.lng, u.home_lat, u.home_lng);
+        return dist <= 5000;
+      }).slice(0, 5);
 
       // Fetch AI reasons in parallel
       const OPENAI_KEY = process.env.OPENAI_API_KEY;
@@ -167,11 +220,14 @@ export async function GET() {
       suggestions = await Promise.all(nearbyMatches.map(async (u: any) => {
         let reason = "High compatibility based on your professional background.";
         
-        if (OPENAI_KEY && userRecord?.resume_text && u.resume_text) {
+        if (OPENAI_KEY) {
           try {
+            const summaryA = `Company: ${user.company || 'None'}, Role: ${user.job_title || 'None'}, About: ${userRecord?.about || 'None'}, Resume: ${userRecord?.resume_text ? userRecord.resume_text.slice(0, 500) : 'None'}`;
+            const summaryB = `Company: ${u.company || 'None'}, Role: ${u.job_title || 'None'}, About: ${u.about || 'None'}, Resume: ${u.resume_text ? u.resume_text.slice(0, 500) : 'None'}`;
+
             const prompt = `You are an expert AI professional matchmaker. 
-User A Summary: ${userRecord?.about || (userRecord?.resume_text ? userRecord.resume_text.slice(0, 500) : '')}
-User B Summary: ${u.about || (u.resume_text ? u.resume_text.slice(0, 500) : '')}
+User A Summary: ${summaryA}
+User B Summary: ${summaryB}
 
 Analyze their backgrounds and write exactly ONE short, conversational sentence explaining why User A should connect with User B. Focus on shared domains, complementary skills, or common goals. Do not use their names, use "You both" or "You and this professional".`;
             
@@ -240,7 +296,7 @@ Analyze their backgrounds and write exactly ONE short, conversational sentence e
               distance: dist,
               reason
            };
-        }).filter(s => s.score > 0 && s.distance <= 5000).sort((a, b) => b.score - a.score).slice(0, 3);
+        }).filter(s => s.score > 0 && s.distance <= 5000).sort((a, b) => b.score - a.score).slice(0, 5);
       }
     }
   }
@@ -269,11 +325,176 @@ export async function POST(request: Request) {
     radiusMeters,
   } = body;
 
+  let lat = centerLat;
+  let lng = centerLng;
+  if (lat == null || lng == null) {
+    const u = user as any;
+    lat = u.home_lat || u.office_lat || 0.0;
+    lng = u.home_lng || u.office_lng || 0.0;
+  }
+
   if (!questionBody?.trim()) {
     return NextResponse.json({ error: "Question is required" }, { status: 400 });
   }
 
+  let sessionId: string | undefined = undefined;
   const supabase = createAdminClient();
+
+  if (targetUserId) {
+    const { data: existingTargets } = await supabase
+      .from("question_targets")
+      .select("question_id, questions(id, asker_id, type)")
+      .eq("professional_id", targetUserId);
+
+    const match = existingTargets?.find(t => {
+      const qList = t.questions as any;
+      const q = Array.isArray(qList) ? qList[0] : qList;
+      return q && q.type === "direct" && q.asker_id === user.id;
+    });
+
+    const getExistingSessionResponse = async (q: any) => {
+      const { data: session } = await supabase
+        .from("chat_sessions")
+        .select("id")
+        .eq("question_id", q.id)
+        .maybeSingle();
+
+      if (session) {
+        if (questionBody && questionBody.trim()) {
+          // Check if last message is identical to avoid duplicate posts on double clicks
+          const { data: lastMsg } = await supabase
+            .from("chat_messages")
+            .select("body")
+            .eq("session_id", session.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (!lastMsg || lastMsg.body !== questionBody.trim()) {
+            await supabase.from("chat_messages").insert({
+              session_id: session.id,
+              sender_id: user.id,
+              body: questionBody.trim(),
+            });
+
+            // Send notification
+            try {
+              const { data: otherP } = await supabase
+                .from("chat_participants")
+                .select("user_id")
+                .eq("session_id", session.id)
+                .neq("user_id", user.id)
+                .maybeSingle();
+
+              if (otherP) {
+                const { data: myP } = await supabase
+                  .from("chat_participants")
+                  .select("alias")
+                  .eq("session_id", session.id)
+                  .eq("user_id", user.id)
+                  .maybeSingle();
+
+                await sendNotification(otherP.user_id, {
+                  title: "New Message",
+                  body: `${myP?.alias || "Resident"}: "${questionBody.trim().slice(0, 60)}${questionBody.trim().length > 60 ? "..." : ""}"`,
+                  url: `/chat/${session.id}`,
+                  data: { sessionId: session.id }
+                });
+
+                // Simulated professional response logic
+                const { data: otherUser } = await supabase
+                  .from("users")
+                  .select("source, job_title, company")
+                  .eq("id", otherP.user_id)
+                  .maybeSingle();
+
+                if (otherUser && otherUser.source === "simulated") {
+                  (async () => {
+                    try {
+                      const apiKey = process.env.ANTHROPIC_API_KEY;
+                      if (!apiKey) return;
+
+                      const { data: prevMsgs } = await supabase
+                        .from("chat_messages")
+                        .select("body, sender_id")
+                        .eq("session_id", session.id)
+                        .order("created_at", { ascending: true });
+
+                      const history = (prevMsgs || []).map((m: any) => ({
+                        role: m.sender_id === user.id ? "user" : "assistant",
+                        content: m.body
+                      }));
+
+                      const systemPrompt = `You are a professional local resident networking on ProxNet.
+Your Profile:
+Role: ${otherUser.job_title}
+Company: ${otherUser.company}
+
+You are chatting with a local neighbor who connected with you.
+Be helpful, professional, and friendly. Speak naturally as a real human professional. Keep your answers extremely short and concise (1-3 sentences maximum).
+Never mention that you are an AI assistant or simulated user. Play your character fully.`;
+
+                      const modelName = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
+                      const response = await fetch("https://api.anthropic.com/v1/messages", {
+                        method: "POST",
+                        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+                        body: JSON.stringify({
+                          model: modelName,
+                          system: systemPrompt,
+                          max_tokens: 250,
+                          messages: history,
+                        }),
+                      });
+
+                      if (response.ok) {
+                        const result = await response.json();
+                        const replyText = result.content?.[0]?.text || "";
+                        if (replyText.trim()) {
+                          await supabase.from("chat_messages").insert({
+                            session_id: session.id,
+                            sender_id: otherP.user_id,
+                            body: replyText.trim()
+                          });
+                        }
+                      }
+                    } catch (e) {
+                      console.error("Failed to generate simulated professional AI response:", e);
+                    }
+                  })();
+                }
+              }
+            } catch (err) {
+              console.error("Failed to send notification for matched direct question message:", err);
+            }
+          }
+        }
+        return NextResponse.json({ question: q, alreadyExists: true, sessionId: session.id });
+      }
+      return NextResponse.json({ question: q, alreadyExists: true });
+    };
+
+    if (match) {
+      const qList = match.questions as any;
+      const q = Array.isArray(qList) ? qList[0] : qList;
+      return await getExistingSessionResponse(q);
+    }
+
+    const { data: existingReverse } = await supabase
+      .from("question_targets")
+      .select("question_id, questions(id, asker_id, type)")
+      .eq("professional_id", user.id);
+
+    const reverseMatch = existingReverse?.find(t => {
+      const qList = t.questions as any;
+      const q = Array.isArray(qList) ? qList[0] : qList;
+      return q && q.type === "direct" && q.asker_id === targetUserId;
+    });
+    if (reverseMatch) {
+      const qList = reverseMatch.questions as any;
+      const q = Array.isArray(qList) ? qList[0] : qList;
+      return await getExistingSessionResponse(q);
+    }
+  }
 
   const isForum = !companyFilter && !titleFilter && !targetUserId;
 
@@ -284,8 +505,8 @@ export async function POST(request: Request) {
       body: questionBody.trim(),
       company_filter: companyFilter || null,
       title_filter: titleFilter || null,
-      center_lat: centerLat,
-      center_lng: centerLng,
+      center_lat: lat,
+      center_lng: lng,
       radius_meters: radiusMeters ?? 100,
       type: isForum ? "forum" : "direct",
     })
@@ -302,6 +523,7 @@ export async function POST(request: Request) {
       
       const { data: session } = await supabase.from("chat_sessions").insert({ question_id: question.id }).select("id").single();
       if (session) {
+        sessionId = session.id;
         const { data: usersData } = await supabase.from("users").select("id, company, job_title").in("id", [user.id, targetUserId]);
         const asker = usersData?.find((u) => u.id === user.id);
         const pro = usersData?.find((u) => u.id === targetUserId);
@@ -355,7 +577,7 @@ export async function POST(request: Request) {
         console.error("Bulk notifications trigger error:", err);
       }
     }
-    return NextResponse.json({ question, targetCount: targets.length });
+    return NextResponse.json({ question, targetCount: targets.length, sessionId });
   }
 
   return NextResponse.json({ question, targetCount: 0 });

@@ -122,9 +122,9 @@ export default function ForumThreadPage() {
 
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-8 animate-fadeIn flex flex-col gap-6">
-      <button onClick={() => router.push('/qa')} className="text-sm flex items-center gap-1 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors w-fit">
+      <button onClick={() => router.push('/forum')} className="text-sm flex items-center gap-1 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors w-fit">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-        Back to Q&A
+        Back to Forum
       </button>
 
       <div className="card p-6 flex flex-col gap-4">

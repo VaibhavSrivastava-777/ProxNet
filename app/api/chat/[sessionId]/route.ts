@@ -131,11 +131,74 @@ export async function POST(
       .maybeSingle();
 
     if (otherParticipant) {
-      await sendNotification(otherParticipant.user_id, {
-        title: "New Message",
-        body: `${participant.alias}: "${body.trim().slice(0, 60)}${body.trim().length > 60 ? "..." : ""}"`,
-        url: `/chat/${sessionId}`,
-      });
+      const { data: otherUser } = await supabase
+        .from("users")
+        .select("source, job_title, company")
+        .eq("id", otherParticipant.user_id)
+        .maybeSingle();
+
+      if (otherUser && otherUser.source === "simulated") {
+        // Run async AI response generation playing the persona
+        (async () => {
+          try {
+            const apiKey = process.env.ANTHROPIC_API_KEY;
+            if (!apiKey) return;
+
+            const { data: prevMsgs } = await supabase
+              .from("chat_messages")
+              .select("body, sender_id")
+              .eq("session_id", sessionId)
+              .order("created_at", { ascending: true });
+
+            const history = (prevMsgs || []).map((m: any) => ({
+              role: m.sender_id === user.id ? "user" : "assistant",
+              content: m.body
+            }));
+
+            const systemPrompt = `You are a professional local resident networking on ProxNet.
+Your Profile:
+Role: ${otherUser.job_title}
+Company: ${otherUser.company}
+
+You are chatting with a local neighbor who connected with you.
+Be helpful, professional, and friendly. Speak naturally as a real human professional. Keep your answers extremely short and concise (1-3 sentences maximum).
+Never mention that you are an AI assistant or simulated user. Play your character fully.`;
+
+            const modelName = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
+            const response = await fetch("https://api.anthropic.com/v1/messages", {
+              method: "POST",
+              headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+              body: JSON.stringify({
+                model: modelName,
+                system: systemPrompt,
+                max_tokens: 250,
+                messages: history,
+              }),
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              const replyText = result.content?.[0]?.text || "";
+              if (replyText.trim()) {
+                await supabase.from("chat_messages").insert({
+                  session_id: sessionId,
+                  sender_id: otherParticipant.user_id,
+                  body: replyText.trim()
+                });
+              }
+            }
+          } catch (e) {
+            console.error("Failed to generate simulated professional AI response:", e);
+          }
+        })();
+      } else {
+        await sendNotification(otherParticipant.user_id, {
+          title: "New Message",
+          body: `${participant.alias}: "${body.trim().slice(0, 60)}${body.trim().length > 60 ? "..." : ""}"`,
+          url: `/chat/${sessionId}`,
+          data: { sessionId }
+        });
+      }
     }
   } catch (err) {
     console.error("Chat message notification trigger error:", err);
@@ -150,4 +213,76 @@ export async function POST(
       isOwn: true,
     },
   });
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ sessionId: string }> }
+) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { sessionId } = await params;
+  const participant = await assertParticipant(sessionId, user.id);
+  if (!participant) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { messageId } = await request.json();
+  if (!messageId) return NextResponse.json({ error: "Message ID required" }, { status: 400 });
+
+  const supabase = createAdminClient();
+
+  const { data: message } = await supabase
+    .from("chat_messages")
+    .select("sender_id")
+    .eq("id", messageId)
+    .eq("session_id", sessionId)
+    .maybeSingle();
+
+  if (!message) return NextResponse.json({ error: "Message not found" }, { status: 444 });
+  if (message.sender_id !== user.id) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+
+  const { error } = await supabase
+    .from("chat_messages")
+    .delete()
+    .eq("id", messageId);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ sessionId: string }> }
+) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { sessionId } = await params;
+  const participant = await assertParticipant(sessionId, user.id);
+  if (!participant) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { messageId, body } = await request.json();
+  if (!messageId || !body?.trim()) return NextResponse.json({ error: "Message ID and body required" }, { status: 400 });
+
+  const supabase = createAdminClient();
+
+  const { data: message } = await supabase
+    .from("chat_messages")
+    .select("sender_id")
+    .eq("id", messageId)
+    .eq("session_id", sessionId)
+    .maybeSingle();
+
+  if (!message) return NextResponse.json({ error: "Message not found" }, { status: 444 });
+  if (message.sender_id !== user.id) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+
+  const { error } = await supabase
+    .from("chat_messages")
+    .update({ body: body.trim() })
+    .eq("id", messageId);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
 }

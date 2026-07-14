@@ -81,6 +81,7 @@ const KNOWN_BOARDS: Record<string, { provider: string; board: string }> = {
   "elastic": { provider: "greenhouse", board: "elastic" },
   "supabase": { provider: "ashby", board: "supabase" },
   "linear": { provider: "ashby", board: "linear" },
+  "zscaler": { provider: "greenhouse", board: "zscaler" },
 
   // Indian Conglomerates
   "tata": { provider: "custom", board: "https://www.tata.com/careers" },
@@ -93,11 +94,11 @@ const KNOWN_BOARDS: Record<string, { provider: string; board: string }> = {
   "cognizant": { provider: "custom", board: "https://careers.cognizant.com/" },
 };
 
-async function fetchWithTimeout(url: string, timeoutMs = 5000) {
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 5000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, { ...options, signal: controller.signal });
     clearTimeout(id);
     return response;
   } catch (err) {
@@ -143,6 +144,68 @@ export async function discoverAts(companyName: string): Promise<{ provider: stri
   const variants = generateBoardVariants(companyName);
 
   for (const guess of variants) {
+    // Workday Probing (multi-trial subdomain/site variants)
+    const wdSubdomains = [
+      "myworkdayjobs.com", 
+      "wd3.myworkdayjobs.com", 
+      "wd1.myworkdayjobs.com", 
+      "wd5.myworkdayjobs.com", 
+      "wd103.myworkdayjobs.com", 
+      "wd101.myworkdayjobs.com"
+    ];
+
+    const tenantVariants = [guess];
+    if (guess.endsWith("careers")) {
+      tenantVariants.push(guess.replace(/careers$/, ""));
+    }
+    if (guess.endsWith("jobs")) {
+      tenantVariants.push(guess.replace(/jobs$/, ""));
+    }
+
+    const uniqueTenants = Array.from(new Set(tenantVariants));
+
+    for (const tenant of uniqueTenants) {
+      for (const subdomain of wdSubdomains) {
+        const siteVariants = [
+          `${tenant.charAt(0).toUpperCase() + tenant.slice(1)}Careers`,
+          `${tenant.charAt(0).toUpperCase() + tenant.slice(1)}Jobs`,
+          `${tenant}careers`,
+          `${tenant}jobs`,
+          tenant,
+          `careers`,
+          `Careers`
+        ];
+
+        for (const site of siteVariants) {
+          const checkUrl = `https://${tenant}.${subdomain}/wday/cxs/${tenant}/${site}/jobs`;
+          try {
+            const res = await fetchWithTimeout(checkUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+              },
+              body: JSON.stringify({
+                appliedFacets: {},
+                limit: 1,
+                offset: 0,
+                searchText: ""
+              })
+            }, 3000); // 3 seconds timeout per probe
+
+            if (res.status === 200 || res.status === 422) {
+              console.log(`[ATS Discover] Match found for Workday: ${tenant}.${subdomain}/wday/cxs/${tenant}/${site}/jobs`);
+              return {
+                provider: "workday",
+                board: `${tenant}.${subdomain}/wday/cxs/${tenant}/${site}/jobs`
+              };
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
     // Lever
     try {
       const leverRes = await fetchWithTimeout(`https://api.lever.co/v0/postings/${guess}?mode=json`);
@@ -179,9 +242,37 @@ export async function discoverAts(companyName: string): Promise<{ provider: stri
       }
     } catch (e) {}
 
+    // Workable
+    try {
+      const workableRes = await fetchWithTimeout(`https://www.workable.com/api/accounts/${guess}?details=true`);
+      if (workableRes.ok) {
+        const data = await workableRes.json();
+        if (data && Array.isArray(data.jobs) && data.jobs.length > 0) return { provider: "workable", board: guess };
+      }
+    } catch (e) {}
+
+    // Breezy
+    try {
+      const breezyRes = await fetchWithTimeout(`https://${guess}.breezy.hr/json`);
+      if (breezyRes.ok) {
+        const data = await breezyRes.json();
+        if (Array.isArray(data) && data.length > 0) return { provider: "breezy", board: guess };
+      }
+    } catch (e) {}
+
+    // Recruitee
+    try {
+      const recruiteeRes = await fetchWithTimeout(`https://${guess}.recruitee.com/api/offers`);
+      if (recruiteeRes.ok) {
+        const data = await recruiteeRes.json();
+        if (data && Array.isArray(data.offers) && data.offers.length > 0) return { provider: "recruitee", board: guess };
+      }
+    } catch (e) {}
+
     // Add a tiny delay between variants to be polite
     await new Promise(r => setTimeout(r, 100));
   }
 
   return null;
 }
+

@@ -1,3 +1,5 @@
+export const unstable_instant = false;
+
 import { UserForm } from "@/components/admin/UserForm";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdminSession } from "@/lib/admin-session";

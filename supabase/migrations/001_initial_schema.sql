@@ -17,7 +17,7 @@ create table if not exists users (
   home_lng numeric,
   office_lat numeric,
   office_lng numeric,
-  active_location text not null default 'current' check (active_location in ('home', 'office', 'current')),
+  active_location text not null default 'home' check (active_location in ('home', 'office', 'current')),
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

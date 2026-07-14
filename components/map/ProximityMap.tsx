@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { CompanyCluster } from "@/lib/types";
 import { QuestionForm } from "@/components/qa/QuestionForm";
 import useSWR from "swr";
+import { useRouter } from "next/navigation";
 
 const ProximityMapInner = dynamic(
   () => import("./ProximityMapInner").then((m) => m.ProximityMapInner),
@@ -25,6 +26,8 @@ const fetcher = (url: string) => fetch(url).then((res) => {
 });
 
 export function ProximityMap() {
+  const router = useRouter();
+  const [aiQuery, setAiQuery] = useState("");
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [radius, setRadius] = useState(5000);
   const [localError, setLocalError] = useState("");
@@ -243,6 +246,53 @@ export function ProximityMap() {
       <p className="text-caption" style={{ textAlign: "center", marginBottom: "-8px" }}>
         Click a company logo to ask questions. Company counts are anonymized and positions are approximate.
       </p>
+
+      {/* Radius & Ask ProxNet AI Scope Card */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-sm animate-fadeInUp">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-[var(--color-primary-subtle)] text-[var(--color-primary)] flex items-center justify-center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="m4.93 4.93 4.24 4.24"/>
+              <path d="m14.83 9.17 4.24-4.24"/>
+              <path d="M12 2v10"/>
+            </svg>
+          </div>
+          <div>
+            <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider">Search Scope</div>
+            <div className="text-body font-bold text-[var(--color-primary)]">Radius {radiusLabel}</div>
+          </div>
+        </div>
+
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!aiQuery.trim()) return;
+            router.push(`/proxnet-ai?q=${encodeURIComponent(aiQuery.trim())}`);
+          }} 
+          className="relative flex-1 max-w-md w-full"
+        >
+          <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+            <img src="/logo.png" alt="ProxNet AI" className="w-5 h-5 opacity-70 grayscale" />
+          </div>
+          <input
+            type="text"
+            className="w-full pl-10 pr-12 py-2.5 bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded-xl focus:outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 transition-all text-body-sm font-medium"
+            placeholder="Ask ProxNet..."
+            value={aiQuery}
+            onChange={(e) => setAiQuery(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={!aiQuery.trim()}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-lg bg-[var(--color-primary)] text-white disabled:opacity-50 transition-opacity"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+              <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+            </svg>
+          </button>
+        </form>
+      </div>
 
       {/* Map Container */}
       <div

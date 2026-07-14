@@ -1,16 +1,5 @@
-import webPush from "web-push";
+import { fcmMessaging } from "./firebase-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-// Initialize VAPID Details
-const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
-const vapidSubject = process.env.NEXT_PUBLIC_VAPID_SUBJECT || "mailto:your-email@example.com";
-
-if (vapidPublicKey && vapidPrivateKey) {
-  webPush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
-} else {
-  console.warn("VAPID Keys not fully configured. Web Push notifications will be disabled.");
-}
 
 export async function sendNotification(
   userId: string,
@@ -32,43 +21,58 @@ export async function sendNotification(
     console.error("Failed to insert in-app notification:", insertError);
   }
 
-  // 1. Fetch user's push subscriptions
-  const { data: subscriptions, error: sError } = await supabase
-    .from("push_subscriptions")
+  // 1. Fetch user's FCM tokens
+  const { data: fcmTokens, error: fcmError } = await supabase
+    .from("fcm_tokens")
     .select("*")
     .eq("user_id", userId);
 
-  if (sError) {
-    console.error("Failed to fetch push subscriptions for user:", userId, sError);
+  if (fcmError) {
+    console.error("Failed to fetch FCM tokens for user:", userId, fcmError);
   }
 
-  const payload = JSON.stringify({
-    title,
-    body,
-    icon: "/logo.png",
-    data: { url, ...data },
-  });
-
-  // 2. Dispatch Web Push notifications
-  if (subscriptions && subscriptions.length > 0 && vapidPublicKey && vapidPrivateKey) {
-    console.log(`Sending Web Push to ${subscriptions.length} active endpoints for user ${userId}...`);
-    for (const sub of subscriptions) {
-      const pushSubscription = {
-        endpoint: sub.endpoint,
-        keys: {
-          p256dh: sub.p256dh,
-          auth: sub.auth,
-        },
-      };
-
+  // 2. Dispatch FCM notifications
+  if (fcmMessaging && fcmTokens && fcmTokens.length > 0) {
+    console.log(`Sending FCM to ${fcmTokens.length} active devices for user ${userId}...`);
+    for (const tokenRecord of fcmTokens) {
       try {
-        await webPush.sendNotification(pushSubscription, payload);
+        await fcmMessaging.send({
+          token: tokenRecord.token,
+          notification: {
+            title,
+            body,
+          },
+          webpush: {
+            fcmOptions: {
+              link: `https://www.proxnet.in${url}`,
+            },
+            notification: {
+              icon: "/logo.png",
+              badge: "/icons/icon-96.png",
+              data: { url, ...data },
+              actions: [
+                { action: "reply", title: "Reply", type: "text", placeholder: "Type a reply..." } as any
+              ]
+            },
+          },
+          android: {
+            priority: "high",
+            notification: {
+              channelId: "proxnet_messages",
+              sound: "default",
+              icon: "@mipmap/ic_launcher",
+            },
+          },
+        });
       } catch (err: any) {
-        console.error("Web Push delivery failed for endpoint:", sub.endpoint, err.statusCode);
-        // If the subscription is expired or unsubscribed, remove it from the DB
-        if (err.statusCode === 410 || err.statusCode === 404) {
-          console.log("Subscription expired/unsubscribed. Cleaning up database record...");
-          await supabase.from("push_subscriptions").delete().eq("id", sub.id);
+        console.error("FCM delivery failed for token:", tokenRecord.token, err.code);
+        // Clean up expired or invalid registration tokens
+        if (
+          err.code === "messaging/registration-token-not-registered" ||
+          err.code === "messaging/invalid-registration-token"
+        ) {
+          console.log("FCM Token expired/unregistered. Cleaning up database record...");
+          await supabase.from("fcm_tokens").delete().eq("id", tokenRecord.id);
         }
       }
     }

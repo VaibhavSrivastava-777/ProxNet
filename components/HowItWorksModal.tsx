@@ -42,7 +42,7 @@ const content = {
     ]
   },
   qa: {
-    title: "How Q&A & Forums Work",
+    title: "How Chats & Forums Work",
     cases: [
       {
         title: "Targeted Questions",

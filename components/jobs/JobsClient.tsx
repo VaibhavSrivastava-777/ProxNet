@@ -7,7 +7,7 @@ import { JobInbox } from "./JobInbox";
 import { SuggestedJobs } from "./SuggestedJobs";
 
 export function JobsClient() {
-  const [activeTab, setActiveTab] = useState<"board" | "suggested">("board");
+  const [activeTab, setActiveTab] = useState<"board" | "suggested">("suggested");
   const [refreshKey, setRefreshKey] = useState(0);
   const [showComposer, setShowComposer] = useState(false);
   const [showInbox, setShowInbox] = useState(false);

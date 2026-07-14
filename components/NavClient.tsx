@@ -13,20 +13,12 @@ interface NavClientProps {
   userId?: string;
 }
 
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/\-/g, "+").replace(/_/g, "/");
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
+
 
 export function NavClient({ session, userName, userId }: NavClientProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const isChatRoom = pathname.startsWith("/chat/") || pathname === "/proxnet-ai";
   const { theme, resolved, setTheme } = useTheme();
 
   const isDark = resolved === "dark";
@@ -36,11 +28,9 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   };
 
   const navLinks = [
-    { href: "/", label: "Home", icon: HomeIcon },
     { href: "/proximity", label: "Proximity", icon: MapPinIcon },
-    { href: "/qa", label: "Q&A", icon: ChatIcon },
-    { href: "/carpool", label: "Carpool", icon: CarIcon },
-    { href: "/jobs", label: "Jobs", icon: BriefcaseIcon },
+    { href: "/qa", label: "Chats", icon: ChatIcon },
+    { href: "/forum", label: "Forum", icon: ForumIcon },
   ];
 
   // Web Push & In-App Toast States
@@ -154,36 +144,36 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       return;
     }
 
-    navigator.serviceWorker
-      .register("/sw.js")
-      .then((reg) => {
-        console.log("Service Worker registered successfully:", reg.scope);
-      })
-      .catch((err) => {
-        console.error("Service Worker registration failed:", err);
-      });
+    // Register static sw.js and dynamic firebase-messaging-sw.js
+    navigator.serviceWorker.register("/sw.js").catch(err => console.error("SW sw.js registration failed:", err));
+    navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" }).catch(err => console.error("SW FCM registration failed:", err));
 
     const checkPermission = async () => {
       const permission = Notification.permission;
       const dismissed = localStorage.getItem("dismissed_push_prompt") === "true";
-      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      const fcmVapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
 
-      // Only show prompt if permission is default, not dismissed, and VAPID key is configured
-      if (permission === "default" && !dismissed && vapidKey) {
+      // Only show prompt if permission is default, not dismissed, and FCM VAPID key is configured
+      if (permission === "default" && !dismissed && fcmVapidKey) {
         setShowPushPrompt(true);
       } else if (permission === "granted") {
         try {
+          const { getMessaging, getToken } = await import("@/lib/firebase-client");
+          const messaging = getMessaging();
           const registration = await navigator.serviceWorker.ready;
-          const subscription = await registration.pushManager.getSubscription();
-          if (subscription) {
-            await fetch("/api/profile/push", {
+          const token = await getToken(messaging, {
+            vapidKey: fcmVapidKey,
+            serviceWorkerRegistration: registration
+          });
+          if (token) {
+            await fetch("/api/fcm/register", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ subscription }),
+              body: JSON.stringify({ token, platform: "web" }),
             });
           }
         } catch (e) {
-          console.error("Failed to sync push subscription on mount:", e);
+          console.error("Failed to sync FCM token on mount:", e);
         }
       }
     };
@@ -223,7 +213,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     setShowInstallPrompt(false);
   };
 
-  // Handle Push Subscription
+  // Handle FCM Push Subscription
   const subscribeToPush = async () => {
     // Dismiss the prompt banner and save state immediately on click
     setShowPushPrompt(false);
@@ -235,27 +225,29 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         return;
       }
 
-      const registration = await navigator.serviceWorker.ready;
-      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!vapidKey) {
-        console.error("VAPID public key not set in environment.");
+      const fcmVapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+      if (!fcmVapidKey) {
+        console.error("Firebase VAPID key not set in environment.");
         return;
       }
 
-      const convertedVapidKey = urlBase64ToUint8Array(vapidKey);
-
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: convertedVapidKey,
+      const { getMessaging, getToken } = await import("@/lib/firebase-client");
+      const messaging = getMessaging();
+      const registration = await navigator.serviceWorker.ready;
+      const token = await getToken(messaging, {
+        vapidKey: fcmVapidKey,
+        serviceWorkerRegistration: registration
       });
 
-      await fetch("/api/profile/push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscription }),
-      });
+      if (token) {
+        await fetch("/api/fcm/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, platform: "web" }),
+        });
+      }
     } catch (error) {
-      console.error("Failed to subscribe to Web Push:", error);
+      console.error("Failed to subscribe to FCM push:", error);
     }
   };
 
@@ -274,6 +266,35 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       setInAppNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     } catch (e) {
       console.error("Failed to mark all as read", e);
+    }
+  };
+
+  const handleTabClick = async (tabHref: string) => {
+    let targetNotifs = [];
+    if (tabHref === "/qa") {
+      targetNotifs = inAppNotifications.filter(
+        (n) => !n.is_read && (n.url?.includes("/chat") || n.url === "/qa" || n.url === "/proxnet-ai")
+      );
+    } else if (tabHref === "/forum") {
+      targetNotifs = inAppNotifications.filter(
+        (n) => !n.is_read && n.url?.includes("/forum")
+      );
+    }
+
+    if (targetNotifs.length > 0) {
+      const ids = targetNotifs.map((n) => n.id);
+      setInAppNotifications((prev) =>
+        prev.map((n) => (ids.includes(n.id) ? { ...n, is_read: true } : n))
+      );
+      try {
+        await fetch("/api/notifications", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+      } catch (e) {
+        console.error("Failed to mark notifications as read", e);
+      }
     }
   };
 
@@ -542,18 +563,160 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       document.removeEventListener('touchstart', unlockAudio);
     };
   }, []);
-
   return (
     <>
       <audio id="honk-audio" src="/car-honk.mp3" preload="auto" />
       {/* Desktop Top Nav */}
-      <header
-        className="hidden md:block sticky top-0 z-[1010] bg-[var(--color-surface)] border-b border-[var(--color-border-light)] shadow-[var(--shadow-sm)]"
-        style={{ height: "var(--nav-height)" }}
-      >
-        <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-4">
+      {!isChatRoom && (
+        <header
+          className="hidden md:block sticky top-0 z-[1010] bg-[var(--color-surface)] border-b border-[var(--color-border-light)] shadow-[var(--shadow-sm)]"
+          style={{ height: "var(--nav-height)" }}
+        >
+          <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-4">
+            <Link href="/" className="flex items-center gap-2 text-lg font-bold">
+              <img src="/logo.png" alt="ProxNet" className="h-7 w-7 object-contain rounded" />
+              <span style={{ display: "inline-flex", alignItems: "center" }}>
+                <span style={{
+                  background: "linear-gradient(135deg, var(--color-primary) 30%, #0077ff 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  fontWeight: 800,
+                  letterSpacing: "-0.02em"
+                }}>Prox</span>
+                <span style={{
+                  background: "linear-gradient(135deg, var(--color-accent) 30%, #a855f7 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  fontWeight: 500,
+                  letterSpacing: "-0.01em"
+                }}>Net</span>
+                <sup style={{
+                  fontSize: "0.55em",
+                  fontWeight: "bold",
+                  color: "var(--color-text-secondary)",
+                  marginLeft: "1px",
+                  verticalAlign: "super"
+                }}>®</sup>
+              </span>
+            </Link>
+            
+            <nav className="flex h-full items-center">
+              {session &&
+                navLinks.map((l) => {
+                  const active = pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href));
+                  const hasUnreadChats = inAppNotifications.some(
+                    (n) => !n.is_read && (n.url?.includes("/chat") || n.url === "/qa" || n.url === "/proxnet-ai")
+                  );
+                  const hasUnreadForum = inAppNotifications.some(
+                    (n) => !n.is_read && n.url?.includes("/forum")
+                  );
+                  const showBadge = l.href === "/qa" 
+                    ? (hasUnreadChats || hasIncomingOpen) && !active 
+                    : l.href === "/forum" 
+                      ? hasUnreadForum && !active 
+                      : false;
+                  return (
+                    <Link
+                      key={l.href}
+                      href={l.href}
+                      onClick={() => handleTabClick(l.href)}
+                      className="flex h-full items-center gap-2 px-4 text-sm font-medium transition-colors hover:bg-[var(--color-surface-hover)] relative"
+                      style={{
+                        color: active ? "var(--color-primary)" : "var(--color-text-secondary)",
+                      }}
+                    >
+                      <span className="relative">
+                        <l.icon className="h-4 w-4" />
+                        {showBadge && (
+                          <span
+                            className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
+                            style={{ backgroundColor: "var(--color-error)" }}
+                          />
+                        )}
+                      </span>
+                      {l.label}
+                      {active && (
+                        <span
+                          className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t"
+                          style={{ backgroundColor: "var(--color-primary)" }}
+                        />
+                      )}
+                    </Link>
+                  );
+                })}
+            </nav>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); toggleTheme(); }}
+                className="btn-icon btn-ghost flex items-center justify-center text-[var(--color-text-secondary)]"
+                aria-label="Toggle theme"
+              >
+                {isDark ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+              </button>
+              
+              {session ? (
+                <>
+                  <div className="relative" ref={desktopDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setDesktopMenuOpen(!desktopMenuOpen)}
+                    className="avatar avatar-sm text-[var(--color-primary)] bg-[var(--color-primary-subtle)] hover:scale-105 transition-transform flex items-center justify-center font-bold"
+                    style={{ border: "none", outline: "none", padding: 0, cursor: "pointer" }}
+                    title={userName}
+                  >
+                    {userName ? userName.charAt(0).toUpperCase() : "U"}
+                  </button>
+                  {desktopMenuOpen && (
+                    <div
+                      className="absolute right-0 mt-2 py-2 w-48 bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-[var(--radius-md)] shadow-[var(--shadow-lg)] animate-fadeInDown z-[1020]"
+                    >
+                      <div className="px-4 py-2 border-b border-[var(--color-border-light)]">
+                        <p className="text-body-sm font-semibold truncate text-[var(--color-text)]">
+                          {userName || "User"}
+                        </p>
+                        <p className="text-caption truncate">Logged in</p>
+                      </div>
+                      <Link
+                        href="/profile"
+                        onClick={() => setDesktopMenuOpen(false)}
+                        className="w-full text-left px-4 py-2 hover:bg-[var(--color-surface-hover)] flex items-center gap-2 text-sm text-[var(--color-text)] transition-colors cursor-pointer"
+                        style={{ display: "flex", textDecoration: "none" }}
+                      >
+                        <UserIcon className="h-4 w-4" /> View Profile
+                      </Link>
+                      <form action={signOutAction} className="w-full">
+                        <button
+                          type="submit"
+                          className="w-full text-left px-4 py-2 hover:bg-[var(--color-surface-hover)] flex items-center gap-2 text-sm text-[var(--color-error)] transition-colors cursor-pointer"
+                          style={{ background: "none", border: "none" }}
+                        >
+                          <LogoutIcon className="h-4 w-4" /> Sign out
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+                </>
+              ) : (
+                <Link href="/login" className="btn btn-primary btn-sm">
+                  Login
+                </Link>
+              )}
+            </div>
+          </div>
+        </header>
+      )}
+
+      {/* Mobile Top Bar */}
+      {!isChatRoom && (
+        <header
+          className="md:hidden sticky top-0 z-[1010] flex items-center justify-between px-4 bg-[var(--color-surface)] border-b border-[var(--color-border-light)] shadow-[var(--shadow-sm)]"
+          style={{ height: "var(--nav-height)" }}
+        >
           <Link href="/" className="flex items-center gap-2 text-lg font-bold">
-            <img src="/logo.png" alt="ProxNet" className="h-7 w-7 object-contain rounded" />
+            <img src="/logo.png" alt="ProxNet" className="h-6 w-6 object-contain rounded" />
             <span style={{ display: "inline-flex", alignItems: "center" }}>
               <span style={{
                 background: "linear-gradient(135deg, var(--color-primary) 30%, #0077ff 100%)",
@@ -578,43 +741,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
               }}>®</sup>
             </span>
           </Link>
-          
-          <nav className="flex h-full items-center">
-            {session &&
-              navLinks.map((l) => {
-                const active = pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href));
-                const showBadge = (l.href === "/qa" && hasIncomingOpen && !active) || (l.href === "/carpool" && hasCarpoolNotification && !active) || (l.href === "/jobs" && hasJobsNotification && !active);
-                return (
-                  <Link
-                    key={l.href}
-                    href={l.href}
-                    className="flex h-full items-center gap-2 px-4 text-sm font-medium transition-colors hover:bg-[var(--color-surface-hover)] relative"
-                    style={{
-                      color: active ? "var(--color-primary)" : "var(--color-text-secondary)",
-                    }}
-                  >
-                    <span className="relative">
-                      <l.icon className="h-4 w-4" />
-                      {showBadge && (
-                        <span
-                          className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
-                          style={{ backgroundColor: "var(--color-error)" }}
-                        />
-                      )}
-                    </span>
-                    {l.label}
-                    {active && (
-                      <span
-                        className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t"
-                        style={{ backgroundColor: "var(--color-primary)" }}
-                      />
-                    )}
-                  </Link>
-                );
-              })}
-          </nav>
-
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={(e) => { e.preventDefault(); toggleTheme(); }}
@@ -623,85 +750,19 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             >
               {isDark ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
             </button>
-            
             {session ? (
-              <>
-                <div className="relative" ref={notificationsRef}>
-                  <button
-                    type="button"
-                    onClick={() => setNotificationsOpen(!notificationsOpen)}
-                    className="btn-icon btn-ghost flex items-center justify-center text-[var(--color-text-secondary)] relative"
-                    aria-label="Notifications"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-                    </svg>
-                    {inAppNotifications.filter((n: any) => !n.is_read).length > 0 && (
-                      <span className="absolute top-1 right-1.5 w-4 h-4 bg-[var(--color-error)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                        {inAppNotifications.filter((n: any) => !n.is_read).length}
-                      </span>
-                    )}
-                  </button>
-                  {notificationsOpen && (                    <div className="absolute right-0 mt-2 py-2 w-80 max-h-96 overflow-y-auto bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-[var(--radius-md)] shadow-[var(--shadow-lg)] animate-fadeInDown z-[1020]">
-                      <div className="px-4 py-2 border-b border-[var(--color-border-light)] flex justify-between items-center">
-                        <h3 className="font-semibold text-sm">Notifications</h3>
-                        {inAppNotifications.some(n => !n.is_read) && (
-                          <button 
-                            onClick={handleMarkAllRead}
-                            className="text-xs text-[var(--color-primary)] hover:underline"
-                          >
-                            Mark all read
-                          </button>
-                        )}
-                      </div>
-                      
-                      {inAppNotifications.filter(n => !n.is_read).length === 0 ? (
-                        <div className="px-4 py-6 text-center text-[var(--color-text-secondary)] text-sm">
-                          No new notifications
-                        </div>
-                      ) : (
-                        <div className="flex flex-col">
-                          {inAppNotifications.filter(n => !n.is_read).map((n) => (
-                            <button
-                              key={n.id}
-                              onClick={() => handleNotificationClick(n.id, n.url || "/")}
-                              className={`block w-full text-left px-4 py-3 border-b border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] active:bg-[var(--color-surface-active)] transition-colors flex flex-col gap-1 ${!n.is_read ? 'bg-[var(--color-primary-subtle)]' : ''}`}
-                            >
-                              <span className="text-sm font-semibold text-[var(--color-text)]">{n.title}</span>
-                              <div className="flex flex-col">
-                                <span className={`text-xs text-[var(--color-text-secondary)] ${expandedNotifs[n.id] ? '' : 'line-clamp-2'}`}>{n.body}</span>
-                                {n.body.length > 80 && (
-                                  <div
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setExpandedNotifs(prev => ({ ...prev, [n.id]: !prev[n.id] }));
-                                    }}
-                                    className="text-left text-xs font-medium text-[var(--color-primary)] mt-0.5 hover:underline w-max"
-                                  >
-                                    {expandedNotifs[n.id] ? "Show less" : "Read more"}
-                                  </div>
-                                )}
-                              </div>
-                              <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1">{new Date(n.created_at).toLocaleDateString()} {new Date(n.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="relative" ref={desktopDropdownRef}>
+                <>
+                <div className="relative" ref={mobileDropdownRef}>
                 <button
                   type="button"
-                  onClick={() => setDesktopMenuOpen(!desktopMenuOpen)}
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                   className="avatar avatar-sm text-[var(--color-primary)] bg-[var(--color-primary-subtle)] hover:scale-105 transition-transform flex items-center justify-center font-bold"
                   style={{ border: "none", outline: "none", padding: 0, cursor: "pointer" }}
                   title={userName}
                 >
                   {userName ? userName.charAt(0).toUpperCase() : "U"}
                 </button>
-                {desktopMenuOpen && (
+                {mobileMenuOpen && (
                   <div
                     className="absolute right-0 mt-2 py-2 w-48 bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-[var(--radius-md)] shadow-[var(--shadow-lg)] animate-fadeInDown z-[1020]"
                   >
@@ -713,7 +774,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                     </div>
                     <Link
                       href="/profile"
-                      onClick={() => setDesktopMenuOpen(false)}
+                      onClick={() => setMobileMenuOpen(false)}
                       className="w-full text-left px-4 py-2 hover:bg-[var(--color-surface-hover)] flex items-center gap-2 text-sm text-[var(--color-text)] transition-colors cursor-pointer"
                       style={{ display: "flex", textDecoration: "none" }}
                     >
@@ -728,165 +789,18 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                         <LogoutIcon className="h-4 w-4" /> Sign out
                       </button>
                     </form>
-                  </div>
-                )}
-              </div>
-              </>
-            ) : (
-              <Link href="/login" className="btn btn-primary btn-sm">
-                Login
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Mobile Top Bar */}
-      <header
-        className="md:hidden sticky top-0 z-[1010] flex items-center justify-between px-4 bg-[var(--color-surface)] border-b border-[var(--color-border-light)] shadow-[var(--shadow-sm)]"
-        style={{ height: "var(--nav-height)" }}
-      >
-        <Link href="/" className="flex items-center gap-2 text-lg font-bold">
-          <img src="/logo.png" alt="ProxNet" className="h-6 w-6 object-contain rounded" />
-          <span style={{ display: "inline-flex", alignItems: "center" }}>
-            <span style={{
-              background: "linear-gradient(135deg, var(--color-primary) 30%, #0077ff 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              fontWeight: 800,
-              letterSpacing: "-0.02em"
-            }}>Prox</span>
-            <span style={{
-              background: "linear-gradient(135deg, var(--color-accent) 30%, #a855f7 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              fontWeight: 500,
-              letterSpacing: "-0.01em"
-            }}>Net</span>
-            <sup style={{
-              fontSize: "0.55em",
-              fontWeight: "bold",
-              color: "var(--color-text-secondary)",
-              marginLeft: "1px",
-              verticalAlign: "super"
-            }}>®</sup>
-          </span>
-        </Link>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={(e) => { e.preventDefault(); toggleTheme(); }}
-            className="btn-icon btn-ghost flex items-center justify-center text-[var(--color-text-secondary)]"
-            aria-label="Toggle theme"
-          >
-            {isDark ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
-          </button>
-          {session ? (
-            <>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setNotificationsOpen(!notificationsOpen)}
-                  className="btn-icon btn-ghost flex items-center justify-center text-[var(--color-text-secondary)] relative"
-                  aria-label="Notifications"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-                  </svg>
-                  {inAppNotifications.filter((n: any) => !n.is_read).length > 0 && (
-                    <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-[var(--color-error)] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                      {inAppNotifications.filter((n: any) => !n.is_read).length}
-                    </span>
-                  )}
-                </button>
-                {/* Mobile dropdown uses the same state but fixed position might be better. We'll use absolute. */}
-                {notificationsOpen && (
-                  <div className="fixed top-[var(--nav-height)] right-2 w-80 bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-[var(--radius-md)] shadow-[var(--shadow-lg)] animate-fadeInDown z-[1020] max-h-96 overflow-y-auto">
-                    <div className="px-4 py-2 border-b border-[var(--color-border-light)] flex justify-between items-center">
-                      <p className="text-sm font-bold text-[var(--color-text)]">Notifications</p>
                     </div>
-                    {inAppNotifications.length === 0 ? (
-                      <p className="px-4 py-6 text-center text-sm text-[var(--color-text-tertiary)]">No notifications yet.</p>
-                    ) : (
-                      <div className="flex flex-col">
-                        {inAppNotifications.map((n: any) => (
-                          <button
-                            key={n.id}
-                            onClick={() => handleNotificationClick(n.id, n.url || "/")}
-                            className={`w-full text-left px-4 py-3 border-b border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] transition-colors flex flex-col gap-1 ${!n.is_read ? 'bg-[var(--color-primary-subtle)]' : ''}`}
-                          >
-                            <span className="text-sm font-semibold text-[var(--color-text)]">{n.title}</span>
-                            <div className="flex flex-col">
-                              <span className={`text-xs text-[var(--color-text-secondary)] ${expandedNotifs[n.id] ? '' : 'line-clamp-2'}`}>{n.body}</span>
-                              {n.body.length > 80 && (
-                                <div
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setExpandedNotifs(prev => ({ ...prev, [n.id]: !prev[n.id] }));
-                                  }}
-                                  className="text-left text-xs font-medium text-[var(--color-primary)] mt-0.5 hover:underline w-max"
-                                >
-                                  {expandedNotifs[n.id] ? "Show less" : "Read more"}
-                                </div>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1">{new Date(n.created_at).toLocaleDateString()}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="relative" ref={mobileDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="avatar avatar-sm text-[var(--color-primary)] bg-[var(--color-primary-subtle)] hover:scale-105 transition-transform flex items-center justify-center font-bold"
-                style={{ border: "none", outline: "none", padding: 0, cursor: "pointer" }}
-                title={userName}
-              >
-                {userName ? userName.charAt(0).toUpperCase() : "U"}
-              </button>
-              {mobileMenuOpen && (
-                <div
-                  className="absolute right-0 mt-2 py-2 w-48 bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-[var(--radius-md)] shadow-[var(--shadow-lg)] animate-fadeInDown z-[1020]"
-                >
-                  <div className="px-4 py-2 border-b border-[var(--color-border-light)]">
-                    <p className="text-body-sm font-semibold truncate text-[var(--color-text)]">
-                      {userName || "User"}
-                    </p>
-                    <p className="text-caption truncate">Logged in</p>
-                  </div>
-                  <Link
-                    href="/profile"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="w-full text-left px-4 py-2 hover:bg-[var(--color-surface-hover)] flex items-center gap-2 text-sm text-[var(--color-text)] transition-colors cursor-pointer"
-                    style={{ display: "flex", textDecoration: "none" }}
-                  >
-                    <UserIcon className="h-4 w-4" /> View Profile
-                  </Link>
-                  <form action={signOutAction} className="w-full">
-                    <button
-                      type="submit"
-                      className="w-full text-left px-4 py-2 hover:bg-[var(--color-surface-hover)] flex items-center gap-2 text-sm text-[var(--color-error)] transition-colors cursor-pointer"
-                      style={{ background: "none", border: "none" }}
-                    >
-                      <LogoutIcon className="h-4 w-4" /> Sign out
-                    </button>
-                  </form>
-                  </div>
-                )}
-              </div>
-              </>
-            ) : (
-              <Link href="/login" className="btn btn-primary btn-sm px-3 py-1">
-                Login
-              </Link>
-            )}
-        </div>
-      </header>
+                  )}
+                </div>
+                </>
+              ) : (
+                <Link href="/login" className="btn btn-primary btn-sm px-3 py-1">
+                  Login
+                </Link>
+              )}
+          </div>
+        </header>
+      )}
 
       {/* Profile Completion Reminder Banner */}
       {showProfileReminder && (
@@ -909,18 +823,29 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       )}
 
       {/* Mobile Bottom Tab Bar */}
-      {session && (
+      {!isChatRoom && session && (
         <nav
           className="md:hidden fixed bottom-0 left-0 right-0 z-[1010] flex items-center justify-around bg-[var(--color-surface)] border-t border-[var(--color-border-light)] shadow-[var(--shadow-lg)] pb-safe"
           style={{ height: "var(--bottom-nav-height)" }}
         >
           {navLinks.map((l) => {
             const active = pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href));
-            const showBadge = (l.href === "/qa" && hasIncomingOpen && !active) || (l.href === "/carpool" && hasCarpoolNotification && !active) || (l.href === "/jobs" && hasJobsNotification && !active);
+            const hasUnreadChats = inAppNotifications.some(
+              (n) => !n.is_read && (n.url?.includes("/chat") || n.url === "/qa" || n.url === "/proxnet-ai")
+            );
+            const hasUnreadForum = inAppNotifications.some(
+              (n) => !n.is_read && n.url?.includes("/forum")
+            );
+            const showBadge = l.href === "/qa" 
+              ? (hasUnreadChats || hasIncomingOpen) && !active 
+              : l.href === "/forum" 
+                ? hasUnreadForum && !active 
+                : false;
             return (
               <Link
                 key={l.href}
                 href={l.href}
+                onClick={() => handleTabClick(l.href)}
                 className="flex flex-1 flex-col items-center justify-center gap-1 h-full transition-colors relative"
                 style={{
                   color: active ? "var(--color-primary)" : "var(--color-text-tertiary)",
@@ -1111,6 +1036,14 @@ function BriefcaseIcon(props: any) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.896 1.982-2.007 1.982H5.757c-1.111 0-2.007-.888-2.007-1.982v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v3.896m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+    </svg>
+  );
+}
+
+function ForumIcon(props: any) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94-3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
     </svg>
   );
 }

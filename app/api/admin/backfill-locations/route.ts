@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const dynamic = "force-dynamic";
-
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function reverseGeocode(lat: number, lng: number): Promise<string | null> {

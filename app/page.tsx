@@ -4,8 +4,8 @@ import { auth } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/session";
 import { AnimatedStats, TypewriterText } from "@/components/home/AnimatedStats";
 import { LoginButton } from "@/components/auth/LoginButton";
-import { LocalForumFeed } from "@/components/home/LocalForumFeed";
 import { HomeWidgets } from "@/components/home/HomeWidgets";
+import { isProfileIncomplete } from "@/lib/profile-validation";
 
 export default async function HomePage() {
   const session = await auth();
@@ -13,58 +13,13 @@ export default async function HomePage() {
   if (session) {
     // Fetch profile to check completion
     const user = await getCurrentUser();
-    const profileIncomplete = user && (!user.company || !user.job_title || (!user.home_lat && !user.office_lat));
+    const profileIncomplete = isProfileIncomplete(user);
 
     if (profileIncomplete) {
       redirect("/profile?onboarding=true");
     }
 
-    return (
-      <div className="mx-auto max-w-4xl px-4 py-8 animate-fadeInUp">
-        <h1 className="text-h1 mb-6">Welcome back, {session.user?.name?.split(" ")[0]}</h1>
-
-        <AnimatedStats />
-
-        {/* Profile completion nudge */}
-        {profileIncomplete && (
-          <div
-            className="flex items-start gap-3 rounded-xl border mb-6 p-4 animate-fadeInUp"
-            style={{
-              borderColor: "var(--color-warning)",
-              backgroundColor: "var(--color-warning-bg)",
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"
-              style={{ width: "20px", height: "20px", flexShrink: 0, color: "var(--color-warning)", marginTop: "1px" }}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-            </svg>
-            <div className="flex-1 min-w-0">
-              <p className="text-body-sm font-semibold" style={{ color: "var(--color-text)" }}>
-                Complete your profile
-              </p>
-              <p className="text-caption mt-0.5" style={{ color: "var(--color-text-secondary)" }}>
-                Add your company, job title, and location information. Unless location information is provided, you won't appear on the proximity map network!
-              </p>
-            </div>
-            <Link
-              href="/profile"
-              className="btn btn-sm shrink-0"
-              style={{
-                backgroundColor: "var(--color-warning)",
-                color: "#fff",
-                border: "none",
-              }}
-            >
-              Complete →
-            </Link>
-          </div>
-        )}
-
-        <HomeWidgets />
-
-        <LocalForumFeed />
-      </div>
-    );
+    redirect("/qa");
   }
 
   return (
@@ -83,6 +38,19 @@ export default async function HomePage() {
           <div className="flex flex-col items-center justify-center gap-4">
             <LoginButton className="btn btn-linkedin btn-lg shadow-xl shadow-black/20" />
             <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • LINKEDIN VERIFIED • FREE TO USE</p>
+            
+            {/* App Store & Play Store Badges */}
+            <div className="flex flex-col items-center gap-3 mt-6">
+              <p className="text-caption text-white/50 uppercase tracking-widest font-medium">Available on</p>
+              <div className="flex items-center gap-3 animate-fadeIn">
+                <a href="/install/ios" className="store-badge-link" aria-label="Download on the App Store">
+                  <img src="/icons/badge-app-store.svg" alt="Download on the App Store" className="h-11 w-auto hover:opacity-80 transition-opacity" />
+                </a>
+                <a href="https://play.google.com/store/apps/details?id=in.proxnet.app" target="_blank" rel="noopener noreferrer" className="store-badge-link" aria-label="Get it on Google Play">
+                  <img src="/icons/badge-google-play.svg" alt="Get it on Google Play" className="h-11 w-auto hover:opacity-80 transition-opacity" />
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -104,8 +72,8 @@ export default async function HomePage() {
               <div className="w-10 h-10 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent)] flex items-center justify-center shadow-inner">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg>
               </div>
-              <h2 className="text-h3 font-semibold m-0">Anonymous Q&amp;A</h2>
-              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">Ask questions and get answers from nearby professionals.</p>
+              <h2 className="text-h3 font-semibold m-0">Anonymous Chats</h2>
+              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">Ask questions and chat with nearby professionals.</p>
             </Link>
 
             <Link href="/carpool" className="card p-6 flex flex-col gap-3 bg-[var(--color-surface)] border-b-[5px] border-[var(--color-success)] hover:-translate-y-1 hover:shadow-[var(--shadow-lg)] active:translate-y-1 active:border-b-2 transition-all duration-200">
@@ -143,6 +111,16 @@ export default async function HomePage() {
       <section className="px-4 py-24 text-center bg-[var(--color-surface)] flex flex-col items-center">
         <h2 className="text-h2 mb-8">Ready to discover who's next door?</h2>
         <LoginButton className="btn btn-linkedin btn-lg" />
+        
+        {/* Store Badges */}
+        <div className="flex items-center gap-3 mt-8 opacity-70">
+          <a href="/install/ios" aria-label="App Store">
+            <img src="/icons/badge-app-store.svg" alt="App Store" className="h-10 w-auto hover:opacity-80 transition-opacity" />
+          </a>
+          <a href="https://play.google.com/store/apps/details?id=in.proxnet.app" target="_blank" rel="noopener noreferrer" aria-label="Google Play">
+            <img src="/icons/badge-google-play.svg" alt="Google Play" className="h-10 w-auto hover:opacity-80 transition-opacity" />
+          </a>
+        </div>
       </section>
 
       {/* Footer */}

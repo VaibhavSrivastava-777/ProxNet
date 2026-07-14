@@ -1,6 +1,9 @@
+export const unstable_instant = { prefetch: 'static', unstable_disableValidation: true };
+
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import QAContentWrapper from "./QAContent";
+import { isProfileIncomplete } from "@/lib/profile-validation";
 
 export default async function QAPage() {
   const user = await getCurrentUser();
@@ -8,7 +11,7 @@ export default async function QAPage() {
     redirect("/login");
   }
 
-  const profileIncomplete = !user.company || !user.job_title || (!user.home_lat && !user.office_lat);
+  const profileIncomplete = isProfileIncomplete(user);
   if (profileIncomplete) {
     redirect("/profile?onboarding=true");
   }

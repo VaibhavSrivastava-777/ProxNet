@@ -5,8 +5,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import PDFParser from "pdf2json";
 import { normalizeLinkedInUrl } from "@/lib/linkedin/normalize-url";
 
-export const dynamic = "force-dynamic";
-
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

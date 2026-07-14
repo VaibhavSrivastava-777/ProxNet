@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LocationPicker } from "@/components/map/LocationPicker";
+import { LocationAutocomplete } from "@/components/map/LocationAutocomplete";
 
 interface Props {
   defaultLat?: number;
@@ -171,6 +172,11 @@ export function QuestionForm({
       const data = await res.json();
       setBody("");
       setIsSuccess(true);
+      if (targetUser && data.sessionId) {
+        router.push(`/chat/${data.sessionId}`);
+        onPosted?.();
+        return;
+      }
       if (data.targetCount > 0) {
         setMessage(`Question sent to ${data.targetCount} targeted professional(s).`);
       } else {
@@ -264,22 +270,16 @@ export function QuestionForm({
 
         {locationType === "Others" && (
           <div className="flex flex-col gap-2 p-3 bg-[var(--color-surface-secondary)] rounded-lg border border-[var(--color-border-light)]">
-            <div className="flex gap-2">
-              <input 
-                className="input flex-1" 
-                placeholder="Enter location e.g. Indiranagar, Bangalore" 
-                value={locationName} 
-                onChange={e => setLocationName(e.target.value)} 
-              />
-              <button 
-                type="button" 
-                className="btn btn-secondary shrink-0" 
-                onClick={fetchGeocode} 
-                disabled={fetchingLocation || !locationName}
-              >
-                {fetchingLocation ? "..." : "Fetch"}
-              </button>
-            </div>
+            <LocationAutocomplete
+              value={locationName}
+              placeholder="Enter location e.g. Indiranagar, Bangalore"
+              onChange={(val) => setLocationName(val)}
+              onSelect={({ name, lat, lng }) => {
+                setLocationName(name);
+                setLat(lat.toString());
+                setLng(lng.toString());
+              }}
+            />
             {lat && lng && (
               <LocationPicker
                 legend="Custom Location Pin"

@@ -1,8 +1,76 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getScraper } from "@/lib/scrapers/registry";
+import { isIndianOrIndianRemote } from "@/lib/scrapers/utils";
+
+export const maxDuration = 300; // Allow up to 5 minutes on Vercel
+
+function isJuniorJob(title: string, description: string): boolean {
+  const t = title.toLowerCase();
+  const d = description.toLowerCase();
+
+  const seniorKeywords = ["senior", "sr.", "sr ", "lead", "principal", "staff", "director", "manager", "architect", "head", "vp", "chief"];
+  const isExplicitlySenior = seniorKeywords.some(kw => t.includes(kw));
+  if (isExplicitlySenior) {
+    return false;
+  }
+
+  const juniorTitles = ["junior", "jr.", "jr ", "intern", "trainee", "fresher", "entry-level", "entry level"];
+  if (juniorTitles.some(kw => t.includes(kw))) {
+    return true;
+  }
+
+  const expRegexes = [
+    /(\d+)\s*(?:-|to)\s*(\d+)\s*years?/gi,
+    /(\d+)\+?\s*years?\s+(?:of\s+)?experience/gi,
+    /experience\s+(?:of\s+)?(\d+)\+?\s*years?/gi,
+    /min(?:imum)?\s*(\d+)\s*years?/gi
+  ];
+
+  for (const regex of expRegexes) {
+    let match;
+    regex.lastIndex = 0;
+    while ((match = regex.exec(d)) !== null) {
+      const val1 = parseInt(match[1], 10);
+      const val2 = match[2] ? parseInt(match[2], 10) : null;
+      if (!isNaN(val1)) {
+        if (val2 !== null) {
+          if (val2 < 3) {
+            return true;
+          }
+        } else {
+          if (val1 < 3) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+export async function GET(request: Request) {
+  return handleRequest(request, true);
+}
 
 export async function POST(request: Request) {
+  let onlyProxNet = false;
+  let companies: string[] | undefined;
+
+  try {
+    const body = await request.json();
+    onlyProxNet = !!body.onlyProxNet;
+    if (Array.isArray(body.companies)) {
+      companies = body.companies;
+    }
+  } catch (e) {}
+
+  return handleRequest(request, onlyProxNet, companies);
+}
+
+async function handleRequest(request: Request, onlyProxNet: boolean, targetCompanies?: string[]) {
   const authHeader = request.headers.get("authorization");
   const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
   const isAdmin = await getAdminSession();
@@ -12,364 +80,256 @@ export async function POST(request: Request) {
   }
 
   const supabase = createAdminClient();
-  
-  let requestBody: any = {};
+  const startTime = Date.now();
+
   try {
-    requestBody = await request.json();
-  } catch (e) {}
+    let query = supabase.from("company_ats_config").select("*").neq("provider", "cron_status");
 
-  let query = supabase.from("company_ats_config").select("*");
-
-  if (requestBody.onlyProxNet) {
-    const { data: users } = await supabase.from("users").select("company");
-    if (users && users.length > 0) {
-      // Create a case-insensitive set of ProxNet companies
-      const proxNetCompanies = Array.from(new Set(users.map((u: any) => {
-        if (!u.company) return "";
-        const clean = u.company.trim();
-        return clean.charAt(0).toUpperCase() + clean.slice(1); // Standardize capitalization like seed-ats does
-      }).filter(Boolean)));
-      
-      if (proxNetCompanies.length > 0) {
-        query = query.in("company_name", proxNetCompanies);
+    if (onlyProxNet) {
+      const { data: users } = await supabase.from("users").select("company");
+      if (users && users.length > 0) {
+        const proxNetCompanies = Array.from(new Set(users.map((u: any) => {
+          if (!u.company) return "";
+          const clean = u.company.trim();
+          return clean.charAt(0).toUpperCase() + clean.slice(1);
+        }).filter(Boolean)));
+        
+        if (proxNetCompanies.length > 0) {
+          query = query.in("company_name", proxNetCompanies);
+        }
       }
+    } else if (targetCompanies && targetCompanies.length > 0) {
+      query = query.in("company_name", targetCompanies);
     }
-  } else if (requestBody.companies && Array.isArray(requestBody.companies)) {
-    query = query.in("company_name", requestBody.companies);
-  }
 
-  // 1. Get ATS configs
-  const { data: atsConfigs, error: atsError } = await query;
+    const { data: atsConfigs, error: atsError } = await query;
+      
+    if (atsError) {
+      throw new Error(`Failed to fetch ATS configs: ${atsError.message}`);
+    }
     
-  if (atsError) {
-    return NextResponse.json({ error: "Failed to fetch ATS configs" }, { status: 500 });
-  }
-  
-  if (!atsConfigs || atsConfigs.length === 0) {
-    return NextResponse.json({ success: true, totalAdded: 0, message: "No ATS configs found. Please add them in the database." });
-  }
+    if (!atsConfigs || atsConfigs.length === 0) {
+      return NextResponse.json({ success: true, totalAdded: 0, message: "No ATS configs found to scrape." });
+    }
 
-  const OPENAI_KEY = process.env.OPENAI_API_KEY;
-  if (!OPENAI_KEY) {
-    return NextResponse.json({ error: "OPENAI_API_KEY is missing" }, { status: 500 });
-  }
+    const OPENAI_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_KEY) {
+      throw new Error("OPENAI_API_KEY is missing");
+    }
 
-  let totalProcessed = 0;
-  let totalAdded = 0;
+    let totalProcessed = 0;
+    let totalAdded = 0;
+    const stats: Record<string, { provider: string; totalFound: number; totalProcessed: number; totalAdded: number; error?: string }> = {};
 
-  // 1 month ago for filtering
-  const oneMonthAgo = new Date();
-  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
-  // Helper to strip HTML and decode entities
-  const stripHtml = (html: string) => {
-    if (!html) return '';
-    let text = html.replace(/<[^>]*>?/gm, ' ');
-    text = text.replace(/&nbsp;/g, ' ');
-    text = text.replace(/&amp;/g, '&');
-    text = text.replace(/&lt;/g, '<');
-    text = text.replace(/&gt;/g, '>');
-    text = text.replace(/&quot;/g, '"');
-    text = text.replace(/&#39;/g, "'");
-    text = text.replace(/&rsquo;/g, "'");
-    text = text.replace(/&lsquo;/g, "'");
-    text = text.replace(/&rdquo;/g, '"');
-    text = text.replace(/&ldquo;/g, '"');
-    text = text.replace(/&ndash;/g, '-');
-    text = text.replace(/&mdash;/g, '-');
-    return text.replace(/\s+/g, ' ').trim();
-  };
+    for (const config of atsConfigs) {
+      let jobs: any[] = [];
+      console.log(`Scraping API for ${config.company_name} (${config.provider})...`);
 
-  // 2. Fetch jobs from each ATS
-  for (const config of atsConfigs) {
-    let jobs: any[] = [];
-    
-    try {
-      if (config.provider === 'greenhouse') {
-        const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${config.board_token_or_url}/jobs?content=true`);
-        if (res.ok) {
-          const data = await res.json();
-          for (const j of data.jobs || []) {
-            jobs.push({
-              title: j.title,
-              location: j.location?.name || 'Remote',
-              url: j.absolute_url,
-              posted_at: j.updated_at,
-              description: stripHtml(j.content || j.title),
-              source: 'greenhouse'
-            });
+      const scraper = getScraper(config.company_name, config);
+      if (!scraper) {
+        console.warn(`No scraping strategy found for company: ${config.company_name}`);
+        await supabase
+          .from("company_ats_config")
+          .update({
+            last_scraped_at: new Date().toISOString(),
+            scrape_notes: `Failed: No scraping strategy registered for '${config.company_name}'.`
+          })
+          .eq("company_name", config.company_name);
+        stats[config.company_name] = {
+          provider: config.provider,
+          totalFound: 0,
+          totalProcessed: 0,
+          totalAdded: 0,
+          error: `No scraping strategy registered for '${config.company_name}'.`
+        };
+        continue;
+      }
+
+      try {
+        jobs = await scraper.scrape();
+      } catch (err: any) {
+        console.error(`Failed to fetch jobs for ${config.company_name}:`, err.message);
+        await supabase
+          .from("company_ats_config")
+          .update({
+            last_scraped_at: new Date().toISOString(),
+            scrape_notes: `Failed to scrape: ${err.message}`
+          })
+          .eq("company_name", config.company_name);
+        stats[config.company_name] = {
+          provider: config.provider,
+          totalFound: 0,
+          totalProcessed: 0,
+          totalAdded: 0,
+          error: err.message
+        };
+        continue;
+      }
+
+      let companyProcessed = 0;
+      let companyAdded = 0;
+      let companySkippedDate = 0;
+      let companySkippedLocation = 0;
+      let companySkippedExperience = 0;
+      let companySkippedContent = 0;
+
+      for (const job of jobs) {
+        // 1. Date cut-off check
+        if (job.posted_at) {
+          const jobDate = new Date(job.posted_at);
+          if (!isNaN(jobDate.getTime()) && jobDate < twoWeeksAgo) {
+            companySkippedDate++;
+            continue;
           }
         }
-      } else if (config.provider === 'lever') {
-        const res = await fetch(`https://api.lever.co/v0/postings/${config.board_token_or_url}?mode=json`);
-        if (res.ok) {
-          const data = await res.json();
-          for (const j of data || []) {
-            jobs.push({
-              title: j.text,
-              location: j.categories?.location || 'Remote',
-              url: j.hostedUrl,
-              posted_at: new Date(j.createdAt).toISOString(),
-              description: j.descriptionPlain || j.text,
-              source: 'lever'
-            });
-          }
-        }
-      } else if (config.provider === 'ashby') {
-        const res = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${config.board_token_or_url}`);
-        if (res.ok) {
-          const data = await res.json();
-          for (const j of data.jobs || []) {
-            jobs.push({
-              title: j.title,
-              location: j.location?.name || 'Remote',
-              url: j.jobUrl,
-              posted_at: j.publishedAt,
-              description: stripHtml(j.descriptionHtml || j.descriptionPlain || ''),
-              source: 'ashby'
-            });
-          }
-        }
-      } else if (config.provider === 'workable') {
-        const res = await fetch(`https://www.workable.com/api/accounts/${config.board_token_or_url}?details=true`);
-        if (res.ok) {
-          const data = await res.json();
-          for (const j of data.jobs || []) {
-            jobs.push({
-              title: j.title,
-              location: j.city || j.country || 'Remote',
-              url: j.url,
-              posted_at: j.created_at,
-              description: stripHtml(j.description || ''),
-              source: 'workable'
-            });
-          }
-        }
-      } else if (config.provider === 'breezy') {
-        const res = await fetch(`https://${config.board_token_or_url}.breezy.hr/json`);
-        if (res.ok) {
-          const data = await res.json();
-          for (const j of (Array.isArray(data) ? data : [])) {
-            jobs.push({
-              title: j.name,
-              location: j.location?.name || j.location?.city || 'Remote',
-              url: j.url,
-              posted_at: j.creation_date,
-              description: stripHtml(j.description || ''),
-              source: 'breezy'
-            });
-          }
-        }
-      } else if (config.provider === 'recruitee') {
-        const res = await fetch(`https://${config.board_token_or_url}.recruitee.com/api/offers`);
-        if (res.ok) {
-          const data = await res.json();
-          for (const j of data.offers || []) {
-            jobs.push({
-              title: j.title,
-              location: j.location || 'Remote',
-              url: j.careers_url,
-              posted_at: j.published_at,
-              description: stripHtml(j.description || ''),
-              source: 'recruitee'
-            });
-          }
-        }
-      } else if (config.provider === 'smartrecruiters') {
-        const res = await fetch(`https://api.smartrecruiters.com/v1/companies/${config.board_token_or_url}/postings`);
-        if (res.ok) {
-          const data = await res.json();
-          for (const j of data.content || []) {
-            // SmartRecruiters postings endpoint lacks description.
-            // We just set a placeholder and let the loop handle it if we want, or do individual fetch
-            // Let's do a fast individual fetch if date is recent
-            const postedDate = j.releasedDate ? new Date(j.releasedDate) : null;
-            if (!postedDate || isNaN(postedDate.getTime()) || postedDate >= oneMonthAgo) {
-              try {
-                const detailRes = await fetch(`https://api.smartrecruiters.com/v1/companies/${config.board_token_or_url}/postings/${j.id}`);
-                if (detailRes.ok) {
-                  const detailData = await detailRes.json();
-                  jobs.push({
-                    title: j.name,
-                    location: j.location?.city || 'Remote',
-                    url: `https://jobs.smartrecruiters.com/${config.board_token_or_url}/${j.id}`,
-                    posted_at: j.releasedDate,
-                    description: stripHtml(detailData.jobAd?.sections?.jobDescription?.text || ''),
-                    source: 'smartrecruiters'
-                  });
-                }
-              } catch (e) {
-                // Ignore detail fetch errors
-              }
-            }
-          }
-        }
-      } else if (config.provider === 'apify') {
-        // board_token_or_url contains the Dataset ID or Task ID where data was saved
-        const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
-        if (APIFY_TOKEN) {
-          const res = await fetch(`https://api.apify.com/v2/datasets/${config.board_token_or_url}/items?token=${APIFY_TOKEN}`);
-          if (res.ok) {
-            const data = await res.json();
-            for (const j of data || []) {
-              jobs.push({
-                title: j.title || j.position,
-                location: j.location || 'Remote',
-                url: j.url || j.jobUrl,
-                posted_at: j.postedAt || j.date || new Date().toISOString(),
-                description: stripHtml(j.description || j.text || ''),
-                source: 'apify'
-              });
-            }
-          }
-        }
-      } else if (config.provider === 'custom') {
-        // Option B: AI scrapes the single custom job URL
-        const res = await fetch(config.board_token_or_url);
-        if (res.ok) {
-          const html = await res.text();
-          const plainText = stripHtml(html).substring(0, 15000); // Limit to ~3-4k tokens
 
-          const prompt = `Extract the core job details from the following webpage text. Return ONLY valid JSON.
-Schema:
-{
-  "title": "Job Title",
-  "location": "Job Location (or Remote)",
-  "description": "Full text of the job description"
-}
+        // 2. India Location check
+        if (!isIndianOrIndianRemote(job.location)) {
+          companySkippedLocation++;
+          continue;
+        }
 
-Webpage Text:
-${plainText}`;
+        // 3. Title/description completeness
+        const hasTitle = job.title && job.title.trim() !== "" && job.title !== "Unknown Title" && job.title !== "Job Title";
+        const hasDesc = job.description && job.description.trim() !== "" && job.description !== "No description provided" && job.description !== "Full text of the job description";
+        if (!hasTitle || !hasDesc) {
+          companySkippedContent++;
+          continue;
+        }
 
-          const oaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        // 4. Experience check (no junior roles)
+        if (isJuniorJob(job.title, job.description)) {
+          companySkippedExperience++;
+          continue;
+        }
+
+        companyProcessed++;
+        totalProcessed++;
+
+        // 5. Generate Keywords & Embedding
+        let embedding = null;
+        let keywords: string[] = [];
+        try {
+          const textToEmbed = `Title: ${job.title}\nCompany: ${config.company_name}\nDescription: ${job.description}`.slice(0, 8000);
+
+          // Keywords extraction
+          const kwPrompt = `Extract 3 to 5 technical skills or buzzwords from the job. Return a JSON object with key 'keywords' containing an array of strings.\n\nJob:\n${textToEmbed}`;
+          const kwRes = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${OPENAI_KEY}`,
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              model: "gpt-4o-mini", // Cost effective model
-              messages: [{ role: "user", content: prompt }],
+              model: "gpt-4o-mini",
+              messages: [{ role: "user", content: kwPrompt }],
               response_format: { type: "json_object" }
             })
           });
 
-          if (oaiRes.ok) {
-            const oaiData = await oaiRes.json();
-            const extracted = JSON.parse(oaiData.choices[0].message.content);
-            jobs.push({
-              title: extracted.title || "Unknown Title",
-              location: extracted.location || "Remote",
-              url: config.board_token_or_url, // Save the single URL
-              posted_at: new Date().toISOString(),
-              description: extracted.description || "No description provided",
-              source: 'custom_ai'
-            });
+          if (kwRes.ok) {
+            const kwData = await kwRes.json();
+            try {
+              const parsed = JSON.parse(kwData.choices[0].message.content);
+              keywords = Array.isArray(parsed) ? parsed : Object.values(parsed)[0] as string[];
+              if (!Array.isArray(keywords)) keywords = [];
+            } catch(e) {}
           }
+
+          // Embedding generation
+          const embRes = await fetch("https://api.openai.com/v1/embeddings", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${OPENAI_KEY}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              input: textToEmbed,
+              model: "text-embedding-3-small"
+            })
+          });
+
+          if (embRes.ok) {
+            const embData = await embRes.json();
+            if (embData.data && embData.data.length > 0) {
+              embedding = embData.data[0].embedding;
+            }
+          }
+        } catch(e: any) {
+          console.error(`AI processing error for ${job.title}:`, e.message);
+        }
+
+        const jobData = {
+          company: config.company_name,
+          title: job.title,
+          location: job.location,
+          url: job.url,
+          description: job.description.substring(0, 5000),
+          ats_source: job.source,
+          posted_at: job.posted_at,
+          embedding
+        };
+
+        let { error: insertError } = await supabase.from("scraped_jobs").upsert({
+          ...jobData,
+          keywords: keywords.slice(0, 5)
+        }, { onConflict: "url" });
+
+        if (insertError) {
+          // Retry without keywords column
+          const { error: retryError } = await supabase.from("scraped_jobs").upsert(jobData, { onConflict: "url" });
+          insertError = retryError;
+        }
+
+        if (!insertError) {
+          companyAdded++;
+          totalAdded++;
         }
       }
-    } catch (e) {
-      console.error(`Failed to fetch ATS for ${config.company_name}`, e);
+
+      // Update config metadata
+      await supabase
+        .from("company_ats_config")
+        .update({
+          last_scraped_at: new Date().toISOString(),
+          total_jobs_found: jobs.length,
+          scrape_notes: `Scraped ${jobs.length} total. Saved ${companyAdded}. Skipped: ${companySkippedDate} date, ${companySkippedLocation} loc, ${companySkippedExperience} exp, ${companySkippedContent} empty.`
+        })
+        .eq("company_name", config.company_name);
+
+      stats[config.company_name] = {
+        provider: config.provider,
+        totalFound: jobs.length,
+        totalProcessed: companyProcessed,
+        totalAdded: companyAdded
+      };
     }
 
-    // 3. Process jobs and generate embeddings
-    for (const job of jobs) {
-      // Date filter (If missing or invalid, consider it within 30 days)
-      if (job.posted_at) {
-        const jobDate = new Date(job.posted_at);
-        if (!isNaN(jobDate.getTime()) && jobDate < oneMonthAgo) {
-          continue;
-        }
-      }
-
-      // Location filter (India only)
-      const loc = job.location ? job.location.toLowerCase() : "";
-      const isIndia = ["india", "bangalore", "bengaluru", "mumbai", "pune", "delhi", "gurugram", "gurgaon", "noida", "hyderabad", "chennai", "remote"].some(k => loc.includes(k));
-      if (!isIndia) {
-        continue;
-      }
-
-      // Check BOTH title and description
-      const hasTitle = job.title && job.title.trim() !== "" && job.title !== "Unknown Title" && job.title !== "Job Title";
-      const hasDesc = job.description && job.description.trim() !== "" && job.description !== "No description provided" && job.description !== "Full text of the job description";
-      if (!hasTitle || !hasDesc) {
-        continue; // Skip if we don't have BOTH title and description
-      }
-
-      totalProcessed++;
-
-      // Generate Keywords and Embedding
-      let embedding = null;
-      let keywords: string[] = [];
-      try {
-        const textToEmbed = `Title: ${job.title}\nCompany: ${config.company_name}\nDescription: ${job.description}`.slice(0, 8000); 
-        
-        // 1. Extract Keywords
-        const keywordPrompt = `Extract 3 to 5 highly relevant technical skills, tools, or buzzwords (e.g., "React", "Python", "B2B Sales") from the following job posting. Return a JSON object with a single key 'keywords' containing an array of strings.\n\nJob:\n${textToEmbed}`;
-        const kwRes = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${OPENAI_KEY}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            messages: [{ role: "user", content: keywordPrompt }],
-            response_format: { type: "json_object" } // Let's not use json_object for simple array if not object, wait we must use object if json_object
-          })
-        });
-        
-        if (kwRes.ok) {
-          const kwData = await kwRes.json();
-          try {
-             // Handle if GPT returns just array or an object with a key
-             const parsed = JSON.parse(kwData.choices[0].message.content);
-             keywords = Array.isArray(parsed) ? parsed : Object.values(parsed)[0] as string[];
-             if (!Array.isArray(keywords)) keywords = [];
-          } catch(e) {}
-        }
-
-        // 2. Generate Embedding
-        const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${OPENAI_KEY}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            input: textToEmbed,
-            model: "text-embedding-3-small"
-          })
-        });
-        
-        if (oaiRes.ok) {
-          const oaiData = await oaiRes.json();
-          if (oaiData.data && oaiData.data.length > 0) {
-            embedding = oaiData.data[0].embedding;
-          }
-        }
-      } catch(e) {
-        console.error("OpenAI processing failed", e);
-      }
-
-      // Upsert
-      const { error: insertError } = await supabase.from("scraped_jobs").upsert({
-        company: config.company_name,
-        title: job.title,
-        location: job.location,
-        url: job.url,
-        description: job.description.substring(0, 5000), // Keep description manageable
-        ats_source: job.source,
-        posted_at: job.posted_at,
-        embedding: embedding,
-        keywords: keywords.slice(0, 5)
-      }, { onConflict: "url" });
-      
-      if (!insertError) {
-        totalAdded++;
-      }
+    // Record cron status if running via authorization
+    if (isCron) {
+      await supabase.from("company_ats_config").upsert({
+        company_name: "cron_status",
+        provider: "cron_status",
+        board_token_or_url: "cron_status",
+        scrape_notes: `Cron finished successfully. Processed: ${totalProcessed}. Added/Updated: ${totalAdded} in ${Math.round((Date.now() - startTime) / 1000)}s.`,
+        last_scraped_at: new Date().toISOString(),
+        total_jobs_found: totalProcessed
+      }, { onConflict: "company_name" });
     }
+
+    return NextResponse.json({
+      success: true,
+      totalProcessed,
+      totalAdded,
+      stats,
+      durationSeconds: Math.round((Date.now() - startTime) / 1000)
+    });
+
+  } catch (err: any) {
+    console.error("Job scrape API failed:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
-
-  return NextResponse.json({ success: true, totalAdded, totalProcessed });
 }

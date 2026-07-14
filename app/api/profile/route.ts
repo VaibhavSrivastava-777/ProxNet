@@ -83,13 +83,13 @@ export async function PATCH(request: Request) {
   const hasHomeCoordChanged = (body.home_lat !== undefined && Number(body.home_lat) !== Number(currentUser?.home_lat)) ||
                               (body.home_lng !== undefined && Number(body.home_lng) !== Number(currentUser?.home_lng));
 
-  if (hasHomeCoordChanged && homeLat && homeLng) {
+  if (body.home_name !== undefined && body.home_name !== null) {
+    updates.home_name = body.home_name;
+  } else if (hasHomeCoordChanged && homeLat && homeLng) {
     const name = await reverseGeocode(Number(homeLat), Number(homeLng));
     if (name) {
       updates.home_name = name;
     }
-  } else if (body.home_name !== undefined) {
-    updates.home_name = body.home_name;
   }
   if (body.home_lat !== undefined) updates.home_lat = body.home_lat;
   if (body.home_lng !== undefined) updates.home_lng = body.home_lng;
@@ -99,13 +99,13 @@ export async function PATCH(request: Request) {
   const hasOfficeCoordChanged = (body.office_lat !== undefined && Number(body.office_lat) !== Number(currentUser?.office_lat)) ||
                                 (body.office_lng !== undefined && Number(body.office_lng) !== Number(currentUser?.office_lng));
 
-  if (hasOfficeCoordChanged && officeLat && officeLng) {
+  if (body.office_name !== undefined && body.office_name !== null) {
+    updates.office_name = body.office_name;
+  } else if (hasOfficeCoordChanged && officeLat && officeLng) {
     const name = await reverseGeocode(Number(officeLat), Number(officeLng));
     if (name) {
       updates.office_name = name;
     }
-  } else if (body.office_name !== undefined) {
-    updates.office_name = body.office_name;
   }
   if (body.office_lat !== undefined) updates.office_lat = body.office_lat;
   if (body.office_lng !== undefined) updates.office_lng = body.office_lng;

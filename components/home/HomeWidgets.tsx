@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-const PHRASES = ["CarPool...", "Connections...", "Jobs...", "Events..."];
+const PHRASES = ["Connections...", "Events..."];
 const TYPING_SPEED = 100;
 const DELETING_SPEED = 50;
 const PAUSE_DURATION = 1500;

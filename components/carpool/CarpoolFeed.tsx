@@ -213,7 +213,7 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
                         : "rounded-tl-sm bg-gradient-to-r from-amber-50/20 via-[var(--color-surface)] to-[var(--color-surface)] border-l-4 border-l-amber-500 border-t-amber-500/10 border-r-amber-500/10 border-b-amber-500/10"
                   }`}>
                     {/* Commute Pill Badge */}
-                    <div className="mb-2">
+                    <div className="mb-2 flex flex-wrap gap-2 items-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                         isMe
                           ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300"
@@ -223,6 +223,18 @@ export function CarpoolFeed({ onRequiresPost }: { onRequiresPost: (data?: any) =
                       }`}>
                         {isMe ? "My Commute ✨" : post.type === "giver" ? "Driving 🚗" : "Seeking Ride 🚶‍♂️"}
                       </span>
+
+                      {!isMe && typeof post.score === "number" && (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          post.score >= 70
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                            : post.score >= 50
+                              ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800"
+                              : "bg-gray-50 text-gray-600 dark:bg-gray-800/40 dark:text-gray-400 border border-gray-200 dark:border-gray-800"
+                        }`}>
+                          {post.score >= 50 ? `${Math.round(post.score)}% Match` : "Less than 50% match"}
+                        </span>
+                      )}
                     </div>
 
                     <span>

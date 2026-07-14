@@ -41,6 +41,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const likedComments = new Set(myLikes?.filter(l => l.comment_id).map(l => l.comment_id));
 
   return NextResponse.json({
+    isAdmin: user.source === "admin",
     question: {
       ...question,
       asker_alias: `Neighbor-${question.asker_id.slice(0, 4)}`,
@@ -51,6 +52,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       has_liked: likedComments.has(c.id)
     }))
   });
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const user = await getCurrentUser();
+  if (!user || user.source !== "admin") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("questions")
+    .delete()
+    .eq("id", id)
+    .eq("type", "forum");
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

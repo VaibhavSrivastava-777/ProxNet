@@ -1,12 +1,15 @@
+export const unstable_instant = { prefetch: 'static', unstable_disableValidation: true };
+
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { ProximityMap } from "@/components/map/ProximityMap";
+import { isProfileIncomplete } from "@/lib/profile-validation";
 
 export default async function ProximityPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const profileIncomplete = !user.company || !user.job_title || (!user.home_lat && !user.office_lat);
+  const profileIncomplete = isProfileIncomplete(user);
   if (profileIncomplete) {
     redirect("/profile?onboarding=true");
   }

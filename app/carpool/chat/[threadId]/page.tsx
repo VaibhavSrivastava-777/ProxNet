@@ -1,3 +1,5 @@
+export const unstable_instant = false;
+
 import { auth } from "@/lib/auth";
 import { getCurrentUser } from "@/lib/session";
 import { redirect } from "next/navigation";

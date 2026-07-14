@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 
+import { useRouter } from "next/navigation";
+import { CompanyLogo, parseAlias } from "../qa/QuestionList";
+
 interface Message {
   id: string;
   body: string;
@@ -31,6 +34,7 @@ function formatRelative(ts: string): string {
 }
 
 export function ChatRoom({ sessionId }: { sessionId: string }) {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [myAlias, setMyAlias] = useState("");
   const [text, setText] = useState("");
@@ -42,12 +46,41 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const presenceChannelRef = useRef<any>(null);
   const mountTime = useRef(Date.now());
+
+  useEffect(() => {
+    const originalPadding = document.body.style.paddingBottom;
+    document.body.style.paddingBottom = "0px";
+    return () => {
+      document.body.style.paddingBottom = originalPadding;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (sessionId) {
+      fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: `/chat/${sessionId}` })
+      }).catch(err => console.error("Failed to mark notifications read:", err));
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [text]);
 
   const loadMessages = useCallback(async () => {
     const res = await fetch(`/api/chat/${sessionId}`);
@@ -161,6 +194,30 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
     e.preventDefault();
     if (!text.trim()) return;
 
+    if (editingMessageId) {
+      const msgId = editingMessageId;
+      const originalText = text.trim();
+      
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msgId ? { ...m, body: originalText } : m))
+      );
+      
+      setEditingMessageId(null);
+      setText("");
+
+      const res = await fetch(`/api/chat/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: msgId, body: originalText }),
+      });
+
+      if (!res.ok) {
+        alert("Failed to edit message");
+        loadMessages();
+      }
+      return;
+    }
+
     const tempId = `temp-${Date.now()}`;
     const newMsg = {
       id: tempId,
@@ -186,6 +243,28 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
       setMessages((prev) => prev.map(m => m.id === tempId ? data.message : m));
     } else {
       setMessages((prev) => prev.filter(m => m.id !== tempId));
+    }
+  }
+
+  function startEditing(msgId: string, currentBody: string) {
+    setEditingMessageId(msgId);
+    setText(currentBody);
+  }
+
+  async function handleDeleteMessage(msgId: string) {
+    if (!confirm("Are you sure you want to delete this message?")) return;
+
+    setMessages((prev) => prev.filter((m) => m.id !== msgId));
+
+    const res = await fetch(`/api/chat/${sessionId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messageId: msgId }),
+    });
+
+    if (!res.ok) {
+      alert("Failed to delete message");
+      loadMessages();
     }
   }
 
@@ -218,57 +297,29 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   }
 
   const otherAlias = messages.find((m) => !m.isOwn)?.alias || "Anonymous";
+  const { jobTitle, company } = parseAlias(otherAlias);
   const charsLeft = MAX_CHARS - text.length;
   const charsNearLimit = charsLeft < 50;
 
   return (
-    <div className="card flex flex-col overflow-hidden" style={{ height: "calc(100vh - var(--nav-height) - 32px)", marginTop: "16px" }}>
+    <div className="flex flex-col h-[100dvh] w-full max-w-4xl mx-auto bg-[var(--color-surface)] md:border-x border-[var(--color-border-light)] relative shadow-md">
 
       {/* Header bar */}
-      <div className="flex items-center justify-between border-b border-[var(--color-border-light)] bg-[var(--color-surface)] px-4 py-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="avatar avatar-md bg-[var(--color-primary-subtle)] text-[var(--color-primary)]">
-            {otherAlias.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <h3 className="text-h3 leading-tight">{otherAlias}</h3>
-            <p className="text-caption">Anonymous Chat · You are {myAlias || "..."}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 relative">
-          <div className="badge badge-accent hidden sm:flex">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 mr-1">
-              <path fillRule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clipRule="evenodd" />
-            </svg>
-            Anonymous
-          </div>
-          <button 
-            className="btn-icon text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]" 
-            title="More options"
-            onClick={() => setShowMenu(!showMenu)}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
-            </svg>
-          </button>
-          
-          {showMenu && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-full mt-2 w-48 rounded-xl bg-[var(--color-surface)] shadow-lg border border-[var(--color-border-light)] overflow-hidden z-50 animate-fadeIn">
-                <button 
-                  onClick={handleReveal}
-                  className="w-full text-left px-4 py-2.5 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] flex items-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                  </svg>
-                  Reveal Identity
-                </button>
-              </div>
-            </>
-          )}
+      <div className="flex items-center gap-3 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] px-4 py-3 shrink-0">
+        <button
+          onClick={() => router.push("/qa")}
+          className="btn-icon text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] rounded-full p-1"
+          style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+        </button>
+        <CompanyLogo company={company} size={40} />
+        <div className="flex-1 min-w-0">
+          <h3 className="text-body font-semibold truncate text-[var(--color-text)] m-0 leading-tight">{jobTitle}</h3>
+          <p className="text-[11px] text-[var(--color-text-secondary)] truncate m-0 mt-0.5">You are chatting as {myAlias || "..."}</p>
         </div>
       </div>
 
@@ -308,6 +359,14 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
           </div>
         ) : (
           messages.map((m, i) => {
+            const prevMsg = i > 0 ? messages[i - 1] : null;
+            const nextMsg = i < messages.length - 1 ? messages[i + 1] : null;
+
+            const currentDay = new Date(m.created_at).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+            const prevMsgDay = prevMsg ? new Date(prevMsg.created_at).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" }) : null;
+            const showDaySeparator = currentDay !== prevMsgDay;
+            const todayStr = new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+
             if (m.id.startsWith("q-")) {
               return (
                 <div key={m.id} className="w-full flex justify-center my-6">
@@ -320,9 +379,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
               );
             }
 
-            const prevMsg = i > 0 ? messages[i - 1] : null;
-            const nextMsg = i < messages.length - 1 ? messages[i + 1] : null;
-            const isFirstFromSender = !prevMsg || prevMsg.isOwn !== m.isOwn || prevMsg.id.startsWith("q-");
+            const isFirstFromSender = !prevMsg || prevMsg.isOwn !== m.isOwn || prevMsg.id.startsWith("q-") || showDaySeparator;
             const isLastFromSender = !nextMsg || nextMsg.isOwn !== m.isOwn || nextMsg.id.startsWith("q-");
             const isNew = new Date(m.created_at).getTime() > mountTime.current && !m.id.startsWith("temp-");
             const longPressTimer = { current: null as ReturnType<typeof setTimeout> | null };
@@ -338,47 +395,82 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
             const isRead = !isPending && (currentTime - new Date(m.created_at).getTime() > 2000);
 
             return (
-              <div
-                key={m.id}
-                className={`flex flex-col w-full max-w-[85%] ${isNew ? "animate-fadeInUp" : ""} ${
-                  m.isOwn ? "ml-auto items-end" : "mr-auto items-start"
-                } ${isFirstFromSender ? "mt-3" : "mt-[2px]"}`}
-              >
-                {!m.isOwn && isFirstFromSender && (
+              <div key={m.id} className="contents">
+                {showDaySeparator && (
+                  <div className="w-full flex justify-center my-4">
+                    <span className="text-[11px] font-semibold px-3 py-1 bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] rounded-full shadow-sm border border-[var(--color-border-light)]">
+                      {currentDay === todayStr ? "Today" : currentDay}
+                    </span>
+                  </div>
+                )}
+                <div
+                  className={`flex flex-col w-full max-w-[85%] ${isNew ? "animate-fadeInUp" : ""} ${
+                    m.isOwn ? "ml-auto items-end" : "mr-auto items-start"
+                  } ${isFirstFromSender ? "mt-3" : "mt-[2px]"} group`}
+                >
+                  {!m.isOwn && isFirstFromSender && (
                   <span className="text-[11px] font-semibold text-[var(--color-primary)] ml-2 mb-0.5">
                     {m.alias}
                   </span>
                 )}
 
-                <div
-                  className={`px-3.5 py-2 text-[15px] relative group select-none shadow-sm ${
-                    m.isOwn
-                      ? "bg-gradient-to-br from-[var(--color-primary)] to-blue-600 text-white"
-                      : "bg-[var(--color-surface)]/90 backdrop-blur-sm text-[var(--color-text)] border border-[var(--color-border-light)]"
-                  }`}
-                  style={{
-                    borderRadius,
-                    cursor: "pointer",
-                    userSelect: "none",
-                  }}
-                  onContextMenu={(e) => { e.preventDefault(); handleLongPress(m.id, m.body); }}
-                  onTouchStart={() => {
-                    longPressTimer.current = setTimeout(() => handleLongPress(m.id, m.body), 600);
-                  }}
-                  onTouchEnd={() => {
-                    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-                  }}
-                >
-                  <p>{m.body}</p>
-
-                  {/* Copied tooltip */}
-                  {copiedId === m.id && (
-                    <span
-                      className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[var(--color-text)] text-[var(--color-text-inverse)] text-[11px] px-2 py-0.5 rounded-md whitespace-nowrap z-10 shadow-md"
-                    >
-                      Copied!
-                    </span>
+                <div className="flex items-center gap-2 w-full max-w-full">
+                  {m.isOwn && !isPending && (
+                    <div className="flex gap-1 shrink-0 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        onClick={() => startEditing(m.id, m.body)}
+                        className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] rounded-md transition-colors"
+                        title="Edit Message"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMessage(m.id)}
+                        className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-error)] hover:bg-[var(--color-surface-hover)] rounded-md transition-colors"
+                        title="Delete Message"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
                   )}
+
+                  <div
+                    className={`px-3.5 py-2 text-[15px] relative select-none shadow-sm flex-1 ${
+                      m.isOwn
+                        ? "bg-gradient-to-br from-[var(--color-primary)] to-blue-600 text-white"
+                        : "bg-[var(--color-surface)]/90 backdrop-blur-sm text-[var(--color-text)] border border-[var(--color-border-light)]"
+                    }`}
+                    style={{
+                      borderRadius,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onContextMenu={(e) => { e.preventDefault(); handleLongPress(m.id, m.body); }}
+                    onTouchStart={() => {
+                      longPressTimer.current = setTimeout(() => handleLongPress(m.id, m.body), 600);
+                    }}
+                    onTouchEnd={() => {
+                      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+                    }}
+                  >
+                    <p className="whitespace-pre-wrap break-words">{m.body}</p>
+
+                    {/* Copied tooltip */}
+                    {copiedId === m.id && (
+                      <span
+                        className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[var(--color-text)] text-[var(--color-text-inverse)] text-[11px] px-2 py-0.5 rounded-md whitespace-nowrap z-10 shadow-md"
+                      >
+                        Copied!
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* External Timestamp & Read Receipt */}
@@ -410,6 +502,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
                   </div>
                 )}
               </div>
+            </div>
             );
           })
         )}
@@ -479,19 +572,28 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
+      {/* Editing Message Banner */}
+      {editingMessageId && (
+        <div className="bg-[var(--color-primary-subtle)] px-4 py-2 flex items-center justify-between border-t border-[var(--color-border-light)] text-xs text-[var(--color-primary)] font-medium z-10 shrink-0">
+          <span>Editing message...</span>
+          <button
+            type="button"
+            onClick={() => {
+              setEditingMessageId(null);
+              setText("");
+            }}
+            className="hover:underline text-[var(--color-text-secondary)]"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Input bar */}
       <form onSubmit={handleSend} className="flex items-end gap-2 border-t border-[var(--color-border-light)] p-3 bg-[var(--color-surface)]/90 backdrop-blur-sm sticky bottom-0 z-10 w-full">
-        <button
-          type="button"
-          className="btn-icon shrink-0 w-10 h-10 mb-0.5 flex items-center justify-center text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] rounded-full transition-colors"
-          title="More actions"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-        </button>
         <div className="flex-1 relative">
           <textarea
+            ref={textareaRef}
             className="input w-full min-h-[44px] max-h-[120px] rounded-[22px] py-2.5 px-4 resize-none leading-tight bg-[var(--color-bg)] border-[var(--color-border)] focus:border-[var(--color-primary)] focus:bg-[var(--color-surface)] transition-colors"
             placeholder="Type a message…"
             value={text}
