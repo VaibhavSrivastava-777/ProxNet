@@ -140,7 +140,32 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
   // Register SW and check permission on mount
   useEffect(() => {
-    if (!session || typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    if (!session || typeof window === "undefined") {
+      return;
+    }
+
+    // 1. Check if running inside the native Android app (via bridge)
+    if ((window as any).AndroidBridge) {
+      const registerNativeToken = async () => {
+        try {
+          const nativeToken = (window as any).AndroidBridge.getFCMToken();
+          if (nativeToken) {
+            await fetch("/api/fcm/register", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token: nativeToken, platform: "android" }),
+            });
+            console.log("FCM token registered natively for Android");
+          }
+        } catch (e) {
+          console.error("Native JS Bridge token read failed:", e);
+        }
+      };
+      registerNativeToken();
+      return; // Skip normal PWA service worker setup
+    }
+
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
       return;
     }
 

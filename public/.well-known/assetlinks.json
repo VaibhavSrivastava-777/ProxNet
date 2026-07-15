@@ -1,11 +1,16 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "in.proxnet.app",
       "sha256_cert_fingerprints": [
-        "14:6D:E9:83:C5:8E:B0:F4:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6:A6"
+        "E6:8B:11:DC:C8:25:49:F2:C9:5B:9F:AE:4C:0F:91:53:B4:7A:DC:03:DE:3E:B0:44:81:6E:41:68:32:D4:B0:A3"
+      ],
+      "GOOGLE_PLAY_CONSOLE_SHA256_FINGERPRINT": [
+        "88:EE:66:2C:D7:0A:6B:75:A1:37:19:B0:69:C8:D2:16:52:2E:C7:18:2F:FE:4F:B6:EF:F5:6E:72:80:6C:07:F9"
       ]
     }
   }

@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.ProxNet" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">#004182</item>
+        <item name="colorPrimaryDark">#171717</item>
+        <item name="colorAccent">#0077ff</item>
+    </style>
+</resources>
