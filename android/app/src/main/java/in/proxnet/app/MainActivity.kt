@@ -1,6 +1,7 @@
 package `in`.proxnet.app
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
@@ -40,8 +41,10 @@ class MainActivity : AppCompatActivity() {
         // Check if app was launched via notification click containing redirect URL
         val redirectUrl = intent?.getStringExtra("url")
         if (!redirectUrl.isNullOrEmpty()) {
+            android.util.Log.d("ProxNetWebView", "Loading redirect URL: https://www.proxnet.in$redirectUrl")
             webView.loadUrl("https://www.proxnet.in$redirectUrl")
         } else {
+            android.util.Log.d("ProxNetWebView", "Loading default URL: https://www.proxnet.in")
             webView.loadUrl("https://www.proxnet.in")
         }
     }
@@ -75,11 +78,26 @@ class MainActivity : AppCompatActivity() {
         val customUA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
         settings.userAgentString = customUA
 
-        // Set WebViewClient with detailed error logging to Logcat
+        // Set WebViewClient with detailed error logging and page load indicators
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 // Return false so WebView handles the URL loading internally
                 return false
+            }
+
+            // Fallback override for older Android API levels
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                return false
+            }
+
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                android.util.Log.d("ProxNetWebView", "Page load started: $url")
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                android.util.Log.d("ProxNetWebView", "Page load completed: $url")
             }
 
             override fun onReceivedError(
@@ -101,7 +119,6 @@ class MainActivity : AppCompatActivity() {
                 handler: SslErrorHandler?,
                 error: SslError?
             ) {
-                // Log SSL errors (Common on emulators with wrong system date/time)
                 android.util.Log.e("ProxNetWebView", "SSL Error: ${error.toString()}")
                 super.onReceivedSslError(view, handler, error)
             }
