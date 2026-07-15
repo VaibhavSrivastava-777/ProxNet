@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { createBrowserClient } from "@/lib/supabase/client";
 
+function formatAbsoluteTime(ts: string): string {
+  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 interface Props {
   threadId: string;
   userId: string;
@@ -180,7 +184,7 @@ export function JobChatRoom({ threadId, userId }: Props) {
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 whatsapp-chat-bg">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <p className="text-sm text-text-tertiary">No messages yet. Send a message to start!</p>
@@ -200,20 +204,42 @@ export function JobChatRoom({ threadId, userId }: Props) {
               );
             }
 
+            const borderRadius = isMe ? "8px 8px 0px 8px" : "8px 8px 8px 0px";
+
             return (
               <div key={idx} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
                 <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-2 ${
+                  className={`px-3 py-1.5 text-[15px] relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-[80%] ${
                     isMe
-                      ? "bg-primary text-white rounded-br-sm"
-                      : "bg-surface-secondary text-text border border-border-light rounded-bl-sm"
+                      ? "bg-[var(--whatsapp-bubble-sent)] text-[var(--whatsapp-text)]"
+                      : "bg-[var(--whatsapp-bubble-received)] text-[var(--whatsapp-text)]"
                   }`}
+                  style={{
+                    borderRadius,
+                    paddingRight: isMe ? "62px" : "48px",
+                    paddingBottom: "8px",
+                  }}
                 >
-                  <p className="text-sm whitespace-pre-wrap break-words">{m.body}</p>
+                  <p className="whitespace-pre-wrap break-words m-0 leading-normal">{m.body}</p>
+                  
+                  {/* WhatsApp-like Inline Timestamp */}
+                  <div className="absolute bottom-[3px] right-[7px] flex items-center gap-0.5 text-[9px] text-gray-500/80 dark:text-gray-400/60 select-none">
+                    <span>{formatAbsoluteTime(m.created_at)}</span>
+                    {isMe && (
+                      <span className="flex items-center ml-0.5">
+                        {/* Double Blue Ticks */}
+                        <div className="relative w-4 h-3 flex items-center justify-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-0 top-0.5 w-3 h-3 text-[#53bdeb]">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-[3px] top-0.5 w-3 h-3 text-[#53bdeb]">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        </div>
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-[10px] text-text-tertiary mt-1 px-1">
-                  {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
-                </span>
               </div>
             );
           })
@@ -222,12 +248,12 @@ export function JobChatRoom({ threadId, userId }: Props) {
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSend} className="p-3 border-t border-border-light bg-surface flex gap-2 items-end">
+      <form onSubmit={handleSend} className="p-3 border-t border-border-light bg-[var(--whatsapp-bg)]/90 backdrop-blur-sm flex gap-2 items-end">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type a message..."
-          className="input flex-1 min-h-[44px] max-h-32 py-2.5 resize-none leading-tight"
+          className="input flex-1 min-h-[44px] max-h-32 rounded-[24px] py-2.5 px-4 resize-none leading-tight bg-[var(--color-surface)] border-none shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:ring-0 focus:outline-none text-[var(--color-text)] transition-colors"
           rows={1}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -239,13 +265,19 @@ export function JobChatRoom({ threadId, userId }: Props) {
         <button
           type="submit"
           disabled={!input.trim() || sending}
-          className="btn btn-primary btn-icon h-[44px] w-[44px] shrink-0 flex items-center justify-center rounded-full"
+          className="btn-icon shrink-0 w-11 h-11 mb-0 flex items-center justify-center rounded-full transition-all active:scale-95 disabled:opacity-50 disabled:bg-gray-300 disabled:text-gray-500"
+          style={{
+            backgroundColor: input.trim() ? "#00a884" : "#cbd5e1",
+            color: "white",
+            height: "44px",
+            width: "44px",
+          }}
         >
           {sending ? (
             <span className="spinner-sm" style={{ borderTopColor: "white" }} />
           ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 ml-1">
-              <path d="M3.478 2.404a.75.75 0 00-.926.941l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.404z" />
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 ml-0.5">
+              <path d="M3.478 2.404a.75.75 0 00-.926.941l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
             </svg>
           )}
         </button>

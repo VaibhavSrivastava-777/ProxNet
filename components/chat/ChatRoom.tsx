@@ -33,6 +33,10 @@ function formatRelative(ts: string): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function formatAbsoluteTime(ts: string): string {
+  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 export function ChatRoom({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -327,8 +331,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 flex flex-col bg-[var(--color-bg)]"
-        style={{ backgroundImage: "radial-gradient(var(--color-border-light) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
+        className="flex-1 overflow-y-auto p-4 flex flex-col whatsapp-chat-bg"
       >
         {messages.length === 0 ? (
           /* Icebreaker empty state */
@@ -369,7 +372,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
 
             if (m.id.startsWith("q-")) {
               return (
-                <div key={m.id} className="w-full flex justify-center my-6">
+                <div key={m.id} className="w-full flex justify-center my-6 animate-scaleIn">
                   <div className="bg-[var(--color-primary-light)]/10 border border-[var(--color-primary)]/20 rounded-xl p-4 max-w-[85%] sm:max-w-[400px] text-center shadow-sm">
                     <p className="text-[11px] font-semibold text-[var(--color-primary)] mb-1 uppercase tracking-wider">Original Question</p>
                     <p className="text-[15px] text-[var(--color-text)] font-medium">"{m.body}"</p>
@@ -385,11 +388,11 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
             const longPressTimer = { current: null as ReturnType<typeof setTimeout> | null };
 
             // Dynamic border radii for message grouping
-            let borderRadius = m.isOwn ? "18px 18px 2px 18px" : "18px 18px 18px 2px";
-            if (!isFirstFromSender && !isLastFromSender) borderRadius = m.isOwn ? "18px 2px 2px 18px" : "2px 18px 18px 2px";
-            else if (!isFirstFromSender && isLastFromSender) borderRadius = m.isOwn ? "18px 2px 18px 18px" : "2px 18px 18px 18px";
-            else if (isFirstFromSender && !isLastFromSender) borderRadius = m.isOwn ? "18px 18px 2px 18px" : "18px 18px 18px 2px";
-            else if (isFirstFromSender && isLastFromSender) borderRadius = "18px";
+            let borderRadius = m.isOwn ? "8px 8px 0px 8px" : "8px 8px 8px 0px";
+            if (!isFirstFromSender && !isLastFromSender) borderRadius = m.isOwn ? "8px 8px 8px 8px" : "8px 8px 8px 8px";
+            else if (!isFirstFromSender && isLastFromSender) borderRadius = m.isOwn ? "8px 8px 0px 8px" : "8px 8px 8px 0px";
+            else if (isFirstFromSender && !isLastFromSender) borderRadius = m.isOwn ? "8px 8px 8px 8px" : "8px 8px 8px 8px";
+            else if (isFirstFromSender && isLastFromSender) borderRadius = m.isOwn ? "8px 8px 0px 8px" : "8px 8px 8px 0px";
 
             const isPending = m.id.startsWith("temp-");
             const isRead = !isPending && (currentTime - new Date(m.created_at).getTime() > 2000);
@@ -409,100 +412,107 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
                   } ${isFirstFromSender ? "mt-3" : "mt-[2px]"} group`}
                 >
                   {!m.isOwn && isFirstFromSender && (
-                  <span className="text-[11px] font-semibold text-[var(--color-primary)] ml-2 mb-0.5">
-                    {m.alias}
-                  </span>
-                )}
-
-                <div className="flex items-center gap-2 w-full max-w-full">
-                  {m.isOwn && !isPending && (
-                    <div className="flex gap-1 shrink-0 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        onClick={() => startEditing(m.id, m.body)}
-                        className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] rounded-md transition-colors"
-                        title="Edit Message"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteMessage(m.id)}
-                        className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-error)] hover:bg-[var(--color-surface-hover)] rounded-md transition-colors"
-                        title="Delete Message"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
-                      </button>
-                    </div>
+                    <span className="text-[11px] font-semibold text-[var(--color-primary)] ml-2 mb-0.5">
+                      {m.alias}
+                    </span>
                   )}
 
-                  <div
-                    className={`px-3.5 py-2 text-[15px] relative select-none shadow-sm flex-1 ${
-                      m.isOwn
-                        ? "bg-gradient-to-br from-[var(--color-primary)] to-blue-600 text-white"
-                        : "bg-[var(--color-surface)]/90 backdrop-blur-sm text-[var(--color-text)] border border-[var(--color-border-light)]"
-                    }`}
-                    style={{
-                      borderRadius,
-                      cursor: "pointer",
-                      userSelect: "none",
-                    }}
-                    onContextMenu={(e) => { e.preventDefault(); handleLongPress(m.id, m.body); }}
-                    onTouchStart={() => {
-                      longPressTimer.current = setTimeout(() => handleLongPress(m.id, m.body), 600);
-                    }}
-                    onTouchEnd={() => {
-                      if (longPressTimer.current) clearTimeout(longPressTimer.current);
-                    }}
-                  >
-                    <p className="whitespace-pre-wrap break-words">{m.body}</p>
-
-                    {/* Copied tooltip */}
-                    {copiedId === m.id && (
-                      <span
-                        className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[var(--color-text)] text-[var(--color-text-inverse)] text-[11px] px-2 py-0.5 rounded-md whitespace-nowrap z-10 shadow-md"
-                      >
-                        Copied!
-                      </span>
+                  <div className="flex items-center gap-2 w-full max-w-full">
+                    {m.isOwn && !isPending && (
+                      <div className="flex gap-1 shrink-0 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => startEditing(m.id, m.body)}
+                          className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] rounded-md transition-colors"
+                          title="Edit Message"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMessage(m.id)}
+                          className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-error)] hover:bg-[var(--color-surface-hover)] rounded-md transition-colors"
+                          title="Delete Message"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        </button>
+                      </div>
                     )}
+
+                    <div
+                      className={`px-3 py-1.5 text-[15px] relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-full ${
+                        m.isOwn
+                          ? "bg-[var(--whatsapp-bubble-sent)] text-[var(--whatsapp-text)]"
+                          : "bg-[var(--whatsapp-bubble-received)] text-[var(--whatsapp-text)]"
+                      }`}
+                      style={{
+                        borderRadius,
+                        cursor: "pointer",
+                        userSelect: "none",
+                        paddingRight: m.isOwn ? "62px" : "48px",
+                        paddingBottom: "8px",
+                      }}
+                      onContextMenu={(e) => { e.preventDefault(); handleLongPress(m.id, m.body); }}
+                      onTouchStart={() => {
+                        longPressTimer.current = setTimeout(() => handleLongPress(m.id, m.body), 600);
+                      }}
+                      onTouchEnd={() => {
+                        if (longPressTimer.current) clearTimeout(longPressTimer.current);
+                      }}
+                    >
+                      <p className="whitespace-pre-wrap break-words m-0 leading-normal">{m.body}</p>
+
+                      {/* WhatsApp-like Inline Timestamp & Ticks */}
+                      <div className="absolute bottom-[3px] right-[7px] flex items-center gap-0.5 text-[9px] text-gray-500/80 dark:text-gray-400/60 select-none">
+                        <span>{formatAbsoluteTime(m.created_at)}</span>
+                        {m.isOwn && (
+                          <span className="flex items-center ml-0.5">
+                            {isPending ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3 text-gray-400 opacity-60">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                              </svg>
+                            ) : isRead ? (
+                              /* Double Blue Ticks */
+                              <div className="relative w-4 h-3 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-0 top-0.5 w-3 h-3 text-[#53bdeb]">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-[3px] top-0.5 w-3 h-3 text-[#53bdeb]">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                </svg>
+                              </div>
+                            ) : (
+                              /* Double Gray Ticks */
+                              <div className="relative w-4 h-3 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-0 top-0.5 w-3 h-3 text-gray-400/80">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-[3px] top-0.5 w-3 h-3 text-gray-400/80">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                </svg>
+                              </div>
+                            )}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Copied tooltip */}
+                      {copiedId === m.id && (
+                        <span
+                          className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[var(--color-text)] text-[var(--color-text-inverse)] text-[11px] px-2 py-0.5 rounded-md whitespace-nowrap z-10 shadow-md animate-scaleIn"
+                        >
+                          Copied!
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-
-                {/* External Timestamp & Read Receipt */}
-                {isLastFromSender && (
-                  <div className={`flex items-center gap-1 mt-0.5 px-1 text-[10px] text-[var(--color-text-tertiary)] ${m.isOwn ? "justify-end" : "justify-start"}`}>
-                    <span>{formatRelative(m.created_at)}</span>
-                    {m.isOwn && (
-                      <span className="flex items-center ml-0.5">
-                        {isPending ? (
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3 text-gray-400 opacity-60">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                          </svg>
-                        ) : isRead ? (
-                          <div className="relative w-4 h-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="absolute left-0 top-0 w-3 h-3 text-blue-400">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                            </svg>
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="absolute left-[4px] top-0 w-3 h-3 text-blue-400">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                            </svg>
-                          </div>
-                        ) : (
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3 text-blue-400">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                          </svg>
-                        )}
-                      </span>
-                    )}
-                  </div>
-                )}
               </div>
-            </div>
             );
           })
         )}
@@ -590,11 +600,11 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
       )}
 
       {/* Input bar */}
-      <form onSubmit={handleSend} className="flex items-end gap-2 border-t border-[var(--color-border-light)] p-3 bg-[var(--color-surface)]/90 backdrop-blur-sm sticky bottom-0 z-10 w-full">
+      <form onSubmit={handleSend} className="flex items-end gap-2 border-t border-[var(--color-border-light)] p-3 bg-[var(--whatsapp-bg)]/90 backdrop-blur-sm sticky bottom-0 z-10 w-full animate-fadeIn">
         <div className="flex-1 relative">
           <textarea
             ref={textareaRef}
-            className="input w-full min-h-[44px] max-h-[120px] rounded-[22px] py-2.5 px-4 resize-none leading-tight bg-[var(--color-bg)] border-[var(--color-border)] focus:border-[var(--color-primary)] focus:bg-[var(--color-surface)] transition-colors"
+            className="input w-full min-h-[44px] max-h-[120px] rounded-[24px] py-2.5 px-4 resize-none leading-tight bg-[var(--color-surface)] border-none shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:ring-0 focus:outline-none text-[var(--color-text)] transition-colors"
             placeholder="Type a message…"
             value={text}
             onChange={(e) => handleTextChange(e.target.value)}
@@ -610,7 +620,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
           {/* Character counter */}
           {text.length > 0 && (
             <span
-              className="absolute bottom-2 right-3 text-[10px] pointer-events-none"
+              className="absolute bottom-2.5 right-4 text-[10px] pointer-events-none"
               style={{ color: charsNearLimit ? "var(--color-error)" : "var(--color-text-tertiary)" }}
             >
               {charsLeft}
@@ -620,7 +630,11 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
         <button
           type="submit"
           disabled={!text.trim() || sending}
-          className="btn-icon btn-primary shrink-0 w-11 h-11 mb-0 flex items-center justify-center rounded-full transition-all active:scale-95 disabled:opacity-50 disabled:bg-[var(--color-border)] disabled:text-white disabled:active:scale-100"
+          className="btn-icon shrink-0 w-11 h-11 mb-0 flex items-center justify-center rounded-full transition-all active:scale-95 disabled:opacity-50 disabled:bg-gray-300 disabled:text-gray-500"
+          style={{
+            backgroundColor: text.trim() ? "#00a884" : "#cbd5e1",
+            color: "white",
+          }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 ml-0.5">
             <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />

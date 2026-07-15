@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { useTheme } from "./ThemeProvider";
 import { signOutAction } from "@/app/actions";
 import { useEffect, useRef, useState } from "react";
@@ -725,9 +726,12 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                 </div>
                 </>
               ) : (
-                <Link href="/login" className="btn btn-primary btn-sm">
+                <button
+                  onClick={() => signIn("linkedin", { callbackUrl: "/profile" })}
+                  className="btn btn-primary btn-sm"
+                >
                   Login
-                </Link>
+                </button>
               )}
             </div>
           </div>
@@ -819,9 +823,12 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                 </div>
                 </>
               ) : (
-                <Link href="/login" className="btn btn-primary btn-sm px-3 py-1">
+                <button
+                  onClick={() => signIn("linkedin", { callbackUrl: "/profile" })}
+                  className="btn btn-primary btn-sm px-3 py-1"
+                >
                   Login
-                </Link>
+                </button>
               )}
           </div>
         </header>

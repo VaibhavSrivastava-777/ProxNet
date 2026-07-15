@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 
+function formatAbsoluteTime(ts: string): string {
+  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 interface Message {
   id: string;
   body: string;
@@ -129,7 +133,7 @@ export function CarpoolChatRoom({ threadId }: { threadId: string }) {
       </div>
 
       {/* Message area */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-1 bg-[var(--color-bg)]">
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-1 whatsapp-chat-bg">
         {messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-4 text-[var(--color-text-secondary)]">
             <p>Say hello to arrange the carpool logistics!</p>
@@ -137,6 +141,7 @@ export function CarpoolChatRoom({ threadId }: { threadId: string }) {
         ) : (
           messages.map((m, i) => {
             const isFirstFromSender = i === 0 || messages[i - 1].isOwn !== m.isOwn;
+            const borderRadius = m.isOwn ? "8px 8px 0px 8px" : "8px 8px 8px 0px";
             return (
               <div
                 key={m.id}
@@ -150,19 +155,36 @@ export function CarpoolChatRoom({ threadId }: { threadId: string }) {
                   </span>
                 )}
                 <div
-                  className={`px-3 py-2 text-[15px] relative group select-none ${
+                  className={`px-3 py-1.5 text-[15px] relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] ${
                     m.isOwn
-                      ? "bg-[var(--color-primary)] text-white"
-                      : "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
+                      ? "bg-[var(--whatsapp-bubble-sent)] text-[var(--whatsapp-text)]"
+                      : "bg-[var(--whatsapp-bubble-received)] text-[var(--whatsapp-text)]"
                   }`}
                   style={{
-                    borderRadius: m.isOwn ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
+                    borderRadius,
+                    paddingRight: m.isOwn ? "62px" : "48px",
+                    paddingBottom: "8px",
                   }}
                 >
-                  <p className="pr-10">{m.body}</p>
-                  <span className={`text-[10px] absolute bottom-1 right-2 ${m.isOwn ? "text-white/70" : "text-[var(--color-text-tertiary)]"}`}>
-                    {formatRelative(m.created_at)}
-                  </span>
+                  <p className="whitespace-pre-wrap break-words m-0 leading-normal">{m.body}</p>
+                  
+                  {/* WhatsApp-like Inline Timestamp */}
+                  <div className="absolute bottom-[3px] right-[7px] flex items-center gap-0.5 text-[9px] text-gray-500/80 dark:text-gray-400/60 select-none">
+                    <span>{formatAbsoluteTime(m.created_at)}</span>
+                    {m.isOwn && (
+                      <span className="flex items-center ml-0.5">
+                        {/* Double Blue Ticks */}
+                        <div className="relative w-4 h-3 flex items-center justify-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-0 top-0.5 w-3 h-3 text-[#53bdeb]">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-[3px] top-0.5 w-3 h-3 text-[#53bdeb]">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        </div>
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -173,7 +195,7 @@ export function CarpoolChatRoom({ threadId }: { threadId: string }) {
 
       {/* Reveal overlay or action strip */}
       {threadStatus === "reveal_pending" && (
-        <div className="border-t border-[var(--color-warning)] bg-[var(--color-warning-bg)] p-4 shrink-0">
+        <div className="border-t border-[var(--color-warning)] bg-[var(--color-warning-bg)] p-4 shrink-0 animate-scaleIn">
           <p className="font-semibold text-[var(--color-warning)] mb-1 flex items-center gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
               <path fillRule="evenodd" d="M9 4.5a.75.75 0 0 1 .721.544l.813 2.846a3.75 3.75 0 0 0 2.576 2.576l2.846.813a.75.75 0 0 1 0 1.442l-2.846.813a3.75 3.75 0 0 0-2.576 2.576l-.813 2.846a.75.75 0 0 1-1.442 0l-.813-2.846a3.75 3.75 0 0 0-2.576-2.576l-2.846-.813a.75.75 0 0 1 0-1.442l2.846-.813A3.75 3.75 0 0 0 7.466 7.89l.813-2.846A.75.75 0 0 1 9 4.5ZM18 1.5a.75.75 0 0 1 .728.568l.258 1.036c.236.94.97 1.674 1.91 1.91l1.036.258a.75.75 0 0 1 0 1.456l-1.036.258c-.94.236-1.674.97-1.91 1.91l-.258 1.036a.75.75 0 0 1-1.456 0l-.258-1.036a2.625 2.625 0 0 0-1.91-1.91l-1.036-.258a.75.75 0 0 1 0-1.456l1.036-.258a2.625 2.625 0 0 0 1.91-1.91l.258-1.036A.75.75 0 0 1 18 1.5ZM16.5 15a.75.75 0 0 1 .712.513l.394 1.183c.15.447.5.799.948.948l1.183.395a.75.75 0 0 1 0 1.422l-1.183.395c-.447.15-.799.5-.948.948l-.395 1.183a.75.75 0 0 1-1.422 0l-.395-1.183a1.5 1.5 0 0 0-.948-.948l-1.183-.395a.75.75 0 0 1 0-1.422l1.183-.395c.447-.15.799-.5.948-.948l.395-1.183A.75.75 0 0 1 16.5 15Z" clipRule="evenodd" />
@@ -203,9 +225,9 @@ export function CarpoolChatRoom({ threadId }: { threadId: string }) {
 
       {/* Input bar */}
       {threadStatus !== "revealed" ? (
-        <form onSubmit={sendMessage} className="flex items-end gap-2 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] p-3 shrink-0">
+        <form onSubmit={sendMessage} className="flex items-end gap-2 border-t border-[var(--color-border-light)] bg-[var(--whatsapp-bg)]/90 backdrop-blur-sm p-3 shrink-0">
           <textarea
-            className="input flex-1 min-h-[44px] max-h-[120px] rounded-2xl py-2.5 px-4 resize-none leading-tight"
+            className="input flex-1 min-h-[44px] max-h-[120px] rounded-[24px] py-2.5 px-4 resize-none leading-tight bg-[var(--color-surface)] border-none shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:ring-0 focus:outline-none text-[var(--color-text)] transition-colors"
             placeholder="Type a message…"
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -214,7 +236,15 @@ export function CarpoolChatRoom({ threadId }: { threadId: string }) {
             }}
             rows={1}
           />
-          <button type="submit" disabled={!text.trim() || sending} className="btn-icon btn-primary shrink-0 w-11 h-11 flex items-center justify-center disabled:opacity-50">
+          <button
+            type="submit"
+            disabled={!text.trim() || sending}
+            className="btn-icon shrink-0 w-11 h-11 mb-0 flex items-center justify-center rounded-full transition-all active:scale-95 disabled:opacity-50 disabled:bg-gray-300 disabled:text-gray-500"
+            style={{
+              backgroundColor: text.trim() ? "#00a884" : "#cbd5e1",
+              color: "white",
+            }}
+          >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 ml-0.5">
               <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
             </svg>
