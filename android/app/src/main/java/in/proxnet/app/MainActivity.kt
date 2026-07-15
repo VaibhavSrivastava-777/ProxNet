@@ -1,9 +1,15 @@
 package `in`.proxnet.app
 
 import android.content.Intent
+import android.net.http.SslError
+import android.os.Build
 import android.os.Bundle
+import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
-import android.webkit.WebSettings
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
@@ -25,6 +31,11 @@ class MainActivity : AppCompatActivity() {
         setContentView(webView)
 
         configureWebView()
+
+        // Enable Chrome inspect debugging for WebView
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
 
         // Check if app was launched via notification click containing redirect URL
         val redirectUrl = intent?.getStringExtra("url")
@@ -64,11 +75,46 @@ class MainActivity : AppCompatActivity() {
         val customUA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
         settings.userAgentString = customUA
 
-        // Set WebViewClient to handle page navigation within the WebView
+        // Set WebViewClient with detailed error logging to Logcat
         webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                if (url != null) {
-                    view?.loadUrl(url)
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                // Return false so WebView handles the URL loading internally
+                return false
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                super.onReceivedError(view, request, error)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    android.util.Log.e(
+                        "ProxNetWebView",
+                        "Error loading page: ${error?.description} (Code: ${error?.errorCode}) at URL: ${request?.url}"
+                    )
+                }
+            }
+
+            override fun onReceivedSslError(
+                view: WebView?,
+                handler: SslErrorHandler?,
+                error: SslError?
+            ) {
+                // Log SSL errors (Common on emulators with wrong system date/time)
+                android.util.Log.e("ProxNetWebView", "SSL Error: ${error.toString()}")
+                super.onReceivedSslError(view, handler, error)
+            }
+        }
+
+        // Set WebChromeClient to output JavaScript logs to Android Logcat
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                if (consoleMessage != null) {
+                    android.util.Log.d(
+                        "ProxNetJS",
+                        "${consoleMessage.message()} -- From line ${consoleMessage.lineNumber()} of ${consoleMessage.sourceId()}"
+                    )
                 }
                 return true
             }
