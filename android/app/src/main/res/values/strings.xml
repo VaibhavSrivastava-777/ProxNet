@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">ProxNet</string>
+    <string name="google_web_client_id">1234567890-abcdef.apps.googleusercontent.com</string>
 </resources>

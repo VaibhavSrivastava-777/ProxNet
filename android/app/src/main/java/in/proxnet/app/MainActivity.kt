@@ -14,6 +14,10 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : AppCompatActivity() {
@@ -21,11 +25,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     @Volatile var fcmToken: String? = null
 
+    private lateinit var googleSignInClient: GoogleSignInClient
+    private val RC_SIGN_IN = 9001
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState);
+        super.onCreate(savedInstanceState)
 
         // Initialize Firebase and fetch FCM Token
         fetchFCMToken()
+
+        // Configure Google Sign-In options
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(getString(R.string.google_web_client_id))
+            .requestEmail()
+            .build()
+        googleSignInClient = GoogleSignIn.getClient(this, gso)
 
         // Create WebView programmatically
         webView = WebView(this)
@@ -81,11 +95,9 @@ class MainActivity : AppCompatActivity() {
         // Set WebViewClient with detailed error logging and page load indicators
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                // Return false so WebView handles the URL loading internally
                 return false
             }
 
-            // Fallback override for older Android API levels
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                 return false
             }
@@ -152,6 +164,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    fun launchGoogleSignIn() {
+        runOnUiThread {
+            googleSignInClient.signOut().addOnCompleteListener {
+                val signInIntent = googleSignInClient.signInIntent
+                startActivityForResult(signInIntent, RC_SIGN_IN)
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == RC_SIGN_IN) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                val idToken = account?.idToken
+                if (!idToken.isNullOrEmpty()) {
+                    android.util.Log.d("ProxNetAndroid", "Google Sign-In Token loaded successfully")
+                    // Pass token back to JS
+                    webView.post {
+                        webView.evaluateJavascript("javascript:window.onGoogleSignInSuccess('$idToken')", null)
+                    }
+                } else {
+                    android.util.Log.e("ProxNetAndroid", "Google Sign-In returned null idToken")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ProxNetAndroid", "Google Sign-In failed: ${e.message}")
+            }
+        }
+    }
+
     override fun onBackPressed() {
         if (webView.canGoBack()) {
             webView.goBack()
@@ -165,6 +208,11 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun getFCMToken(): String {
             return activity.fcmToken ?: ""
+        }
+
+        @JavascriptInterface
+        fun startGoogleSignIn() {
+            activity.launchGoogleSignIn()
         }
     }
 }

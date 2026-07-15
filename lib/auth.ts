@@ -1,5 +1,7 @@
 import NextAuth from "next-auth";
 import LinkedIn from "next-auth/providers/linkedin";
+import Google from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
 import { findUserByLinkedInSub, upsertOAuthUser } from "./users";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -69,11 +71,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         };
       },
     }),
+    Google({
+      clientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+    CredentialsProvider({
+      id: "google-native",
+      name: "Google Native Token",
+      credentials: {
+        idToken: { label: "ID Token", type: "text" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.idToken) return null;
+        try {
+          const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credentials.idToken}`);
+          if (!res.ok) return null;
+          const payload = await res.json();
+          return {
+            id: payload.sub,
+            name: payload.name,
+            email: payload.email,
+            image: payload.picture,
+          };
+        } catch (e) {
+          console.error("Error verifying native Google ID Token:", e);
+          return null;
+        }
+      },
+    }),
   ],
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "development-secret-key-for-nextauth-verification",
   callbacks: {
     async signIn({ account, user }) {
-      if (!account?.providerAccountId) return false;
+      const isCredentials = account?.provider === "credentials";
+      const sub = isCredentials ? user?.id : account?.providerAccountId;
+      if (!sub) return false;
+
       const u = user as {
         name?: string | null;
         email?: string | null;
@@ -82,7 +115,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         profileUrl?: string | null;
       };
       const dbUser = await upsertOAuthUser({
-        sub: account.providerAccountId,
+        sub: sub,
         email: u.email ?? null,
         name: u.name ?? null,
         picture: u.image ?? null,
@@ -91,8 +124,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       });
       return !!dbUser;
     },
-    async jwt({ token, account, profile }) {
-      if (account?.providerAccountId) {
+    async jwt({ token, account, user, profile }) {
+      if (account?.provider === "credentials" && user?.id) {
+        token.linkedinSub = user.id;
+      } else if (account?.providerAccountId) {
         token.linkedinSub = account.providerAccountId;
       }
       if (profile) {
@@ -100,8 +135,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (p.sub) token.linkedinSub = p.sub;
       }
       if (token.linkedinSub) {
-        const user = await findUserByLinkedInSub(token.linkedinSub as string);
-        if (user) token.userId = user.id;
+        const dbUser = await findUserByLinkedInSub(token.linkedinSub as string);
+        if (dbUser) token.userId = dbUser.id;
       }
       return token;
     },

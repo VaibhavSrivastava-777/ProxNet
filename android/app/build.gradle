@@ -41,4 +41,7 @@ dependencies {
     // Firebase Cloud Messaging (BOM specifies versioning)
     implementation platform('com.google.firebase:firebase-bom:32.7.2')
     implementation 'com.google.firebase:firebase-messaging'
+    
+    // Google Sign-In Play Services
+    implementation 'com.google.android.gms:play-services-auth:21.1.1'
 }
