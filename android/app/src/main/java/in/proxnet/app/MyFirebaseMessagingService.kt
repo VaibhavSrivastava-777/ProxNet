@@ -1,4 +1,4 @@
-package in.proxnet.app
+package `in`.proxnet.app
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

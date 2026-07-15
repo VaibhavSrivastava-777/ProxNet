@@ -43,3 +43,10 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# Android build outputs and caches
+android/.gradle/
+android/app/build/
+android/build/
+android/.idea/
+android/local.properties
