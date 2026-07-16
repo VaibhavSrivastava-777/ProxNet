@@ -114,7 +114,13 @@ export function LocationPickerMap({ lat, lng, onChange, radius, clusters, onComp
   const hasMarker = lat != null && lng != null;
 
   return (
-    <MapContainer center={position} zoom={hasMarker ? 16 : 12} className="h-full w-full">
+    <MapContainer
+      center={position}
+      zoom={hasMarker ? 16 : 12}
+      className="h-full w-full"
+      scrollWheelZoom={false}
+      dragging={false}
+    >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
