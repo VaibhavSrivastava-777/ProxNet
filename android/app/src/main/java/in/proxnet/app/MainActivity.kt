@@ -106,11 +106,13 @@ class MainActivity : AppCompatActivity() {
         // Set WebViewClient with detailed error logging and page load indicators
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                return false
+                val url = request?.url?.toString() ?: return false
+                return handleExternalIntent(url)
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                return false
+                if (url == null) return false
+                return handleExternalIntent(url)
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -217,6 +219,26 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 android.util.Log.e("ProxNetAndroid", "Google Sign-In failed: ${e.message}")
             }
+        }
+    }
+
+    private fun handleExternalIntent(url: String): Boolean {
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            return false
+        }
+        try {
+            val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+            if (intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
+                return true
+            }
+            val uri = android.net.Uri.parse(url)
+            val fallbackIntent = Intent(Intent.ACTION_VIEW, uri)
+            startActivity(fallbackIntent)
+            return true
+        } catch (e: Exception) {
+            android.util.Log.e("ProxNetAndroid", "Failed to launch external application: ${e.message}")
+            return true
         }
     }
 

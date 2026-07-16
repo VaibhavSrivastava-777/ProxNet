@@ -22,6 +22,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   const router = useRouter();
   const isChatRoom = pathname.startsWith("/chat/") || pathname === "/proxnet-ai";
   const { theme, resolved, setTheme } = useTheme();
+  const isIosUser = typeof window !== "undefined" && (/iphone|ipad|ipod/i.test(window.navigator.userAgent) || (window.navigator.userAgent.includes("Mac") && window.navigator.maxTouchPoints > 0));
 
   const isDark = resolved === "dark";
 
@@ -287,6 +288,11 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     // Dismiss the prompt banner and save state immediately on click
     setShowPushPrompt(false);
     localStorage.setItem("dismissed_push_prompt", "true");
+
+    if (isIosUser) {
+      router.push("/profile#notifications");
+      return;
+    }
 
     try {
       const permission = await Notification.requestPermission();

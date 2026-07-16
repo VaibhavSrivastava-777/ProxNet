@@ -17,11 +17,13 @@ function CollapsibleSection({
   title,
   defaultOpen = false,
   children,
+  id,
 }: {
   icon: ReactNode;
   title: string;
   defaultOpen?: boolean;
   children: ReactNode;
+  id?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -53,7 +55,7 @@ function CollapsibleSection({
   }, [open]);
 
   return (
-    <div className="card" style={{ overflow: "hidden" }}>
+    <div className="card" id={id} style={{ overflow: "hidden" }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -230,8 +232,20 @@ export function ProfileForm({ initialUser }: Props) {
       }
     }, 500);
 
-    return () => clearTimeout(timer);
   }, [user.anonymous_name, user.id, initialUser.anonymous_name]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#notifications") {
+      const element = document.getElementById("notification-settings");
+      if (element) {
+        // Delay slightly to ensure browser has completed initial layout/rendering
+        const timer = setTimeout(() => {
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, []);
 
   const showName = !initialUser.full_name?.trim();
   const showEmail = !initialUser.email?.trim();
@@ -969,13 +983,14 @@ export function ProfileForm({ initialUser }: Props) {
 
       {/* ---- Notification Settings ---- */}
       <CollapsibleSection
+        id="notification-settings"
         title="Notification Settings"
         icon={
           <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405C18.21 14.79 18 13.42 18 12V8a6 6 0 10-12 0v4c0 1.42-.21 2.79-.595 3.595L4 17h5m6 0a3 3 0 11-6 0m6 0H9" />
           </svg>
         }
-        defaultOpen={false}
+        defaultOpen={typeof window !== "undefined" && window.location.hash === "#notifications"}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
