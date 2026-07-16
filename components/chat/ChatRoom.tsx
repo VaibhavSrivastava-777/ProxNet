@@ -63,12 +63,45 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   const suggestionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const presenceChannelRef = useRef<any>(null);
   const mountTime = useRef(Date.now());
+  const [viewportHeight, setViewportHeight] = useState("100dvh");
 
   useEffect(() => {
     const originalPadding = document.body.style.paddingBottom;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    
     document.body.style.paddingBottom = "0px";
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    // Prevent window scrolling so keyboard focus doesn't pan the document body
+    const handleScroll = () => {
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener("scroll", handleScroll);
+
     return () => {
       document.body.style.paddingBottom = originalPadding;
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+
+    const handleViewportChange = () => {
+      setViewportHeight(`${window.visualViewport!.height}px`);
+    };
+
+    window.visualViewport.addEventListener("resize", handleViewportChange);
+    window.visualViewport.addEventListener("scroll", handleViewportChange);
+    handleViewportChange();
+
+    return () => {
+      window.visualViewport!.removeEventListener("resize", handleViewportChange);
+      window.visualViewport!.removeEventListener("scroll", handleViewportChange);
     };
   }, []);
 
@@ -323,7 +356,10 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   const charsNearLimit = charsLeft < 50;
 
   return (
-    <div className="flex flex-col h-[100dvh] w-full max-w-4xl mx-auto bg-[var(--color-surface)] md:border-x border-[var(--color-border-light)] relative shadow-md">
+    <div 
+      className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl bg-[var(--color-surface)] md:border-x border-[var(--color-border-light)] shadow-md flex flex-col overflow-hidden"
+      style={{ height: viewportHeight }}
+    >
 
       {/* Header bar */}
       <div 
