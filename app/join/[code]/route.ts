@@ -1,24 +1,15 @@
-import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-interface JoinPageProps {
-  params: Promise<{ code: string }>;
-}
-
-/**
- * Invite landing page: /join/[code]
- * 
- * 1. Validates the invite code
- * 2. Sets a proxnet_ref cookie for post-signup attribution
- * 3. Increments click tracking
- * 4. Redirects to the main landing page
- */
-export default async function JoinPage({ params }: JoinPageProps) {
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ code: string }> }
+) {
   const { code } = await params;
 
   if (!code || code.length < 3) {
-    redirect("/");
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   const supabase = createAdminClient();
@@ -32,7 +23,7 @@ export default async function JoinPage({ params }: JoinPageProps) {
 
   if (!inviter) {
     // Invalid code — just redirect to landing page
-    redirect("/");
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   // Set the referral cookie (30-day expiry)
@@ -55,5 +46,5 @@ export default async function JoinPage({ params }: JoinPageProps) {
   });
 
   // Redirect to the main landing page with a ref flag for the toast
-  redirect("/?ref=invite");
+  return NextResponse.redirect(new URL("/?ref=invite", request.url));
 }
