@@ -40,7 +40,7 @@ export async function GET(request: Request) {
   // Fetch all active users
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("*")
+    .select("id, company, job_title, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, embedding")
     .eq("is_active", true)
     .neq("id", user.id);
 

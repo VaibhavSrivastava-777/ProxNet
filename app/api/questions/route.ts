@@ -643,7 +643,11 @@ Never mention that you are an AI assistant or simulated user. Play your characte
         ]);
       }
     } else {
-      const { data: users } = await supabase.from("users").select("*").eq("is_active", true).neq("id", user.id);
+      const { data: users } = await supabase
+        .from("users")
+        .select("id, company, job_title, home_lat, home_lng, office_lat, office_lng, active_location")
+        .eq("is_active", true)
+        .neq("id", user.id);
       const { data: currentLocations } = await supabase.from("user_current_locations").select("*");
       const locationMap = new Map(
         (currentLocations ?? []).map((l) => [l.user_id, { lat: Number(l.lat), lng: Number(l.lng) }])
