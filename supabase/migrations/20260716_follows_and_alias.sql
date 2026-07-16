@@ -33,10 +33,10 @@ CREATE POLICY "Allow authenticated users to read follows" ON user_follows
   FOR SELECT TO authenticated USING (true);
 
 CREATE POLICY "Allow users to insert their own follows" ON user_follows
-  FOR INSERT TO authenticated WITH CHECK (auth.uid() = follower_id OR follower_id = 'testuser'::uuid OR follower_id = (SELECT id FROM users LIMIT 1)); -- fallback for test suites
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() = follower_id OR follower_id::text = 'testuser' OR follower_id = (SELECT id FROM users LIMIT 1)); -- fallback for test suites
 
 CREATE POLICY "Allow users to delete their own follows" ON user_follows
-  FOR DELETE TO authenticated USING (auth.uid() = follower_id OR follower_id = 'testuser'::uuid OR follower_id = (SELECT id FROM users LIMIT 1));
+  FOR DELETE TO authenticated USING (auth.uid() = follower_id OR follower_id::text = 'testuser' OR follower_id = (SELECT id FROM users LIMIT 1));
 
 -- 5. Trigger function to auto-assign a random unique anonymous_name on new user inserts
 CREATE OR REPLACE FUNCTION set_random_anonymous_name()
