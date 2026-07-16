@@ -16,4 +16,19 @@ export const isSupported = () =>
   "serviceWorker" in navigator && 
   "PushManager" in window;
 
+export async function getFcmRegistration(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return null;
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  let reg = registrations.find(r => r.active && r.active.scriptURL.includes("firebase-messaging-sw"));
+  if (!reg) {
+    try {
+      reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" });
+    } catch (e) {
+      console.error("FCM SW registration failed:", e);
+      return null;
+    }
+  }
+  return reg;
+}
+
 export { app, getMessaging, getToken };

@@ -924,9 +924,12 @@ export function ProfileForm({ initialUser }: Props) {
                     return;
                   }
 
-                  const { getMessaging, getToken } = await import("@/lib/firebase-client");
+                  const { getMessaging, getToken, getFcmRegistration } = await import("@/lib/firebase-client");
                   const messaging = getMessaging();
-                  const registration = await navigator.serviceWorker.ready;
+                  const registration = await getFcmRegistration();
+                  if (!registration) {
+                    throw new Error("Could not find FCM service worker registration.");
+                  }
                   
                   const token = await getToken(messaging, {
                     vapidKey: fcmVapidKey,
