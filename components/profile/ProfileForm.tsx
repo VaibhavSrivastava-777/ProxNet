@@ -985,57 +985,80 @@ export function ProfileForm({ initialUser }: Props) {
                 Receive notifications for local matches and chat answers on this device.
               </span>
             </div>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={async () => {
-                try {
-                  const permission = await Notification.requestPermission();
-                  if (permission !== "granted") {
-                    alert("Notification permission denied. Please enable them in your device settings.");
-                    return;
-                  }
-                  const fcmVapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
-                  if (!fcmVapidKey) {
-                    alert("Push notification key is not set. Please try again later.");
-                    return;
-                  }
+            {(() => {
+              const isAndroidApp = typeof window !== "undefined" && !!(window as any).AndroidBridge;
+              const isNotificationSupported = typeof window !== "undefined" && "Notification" in window;
 
-                  const { getMessaging, getToken, getFcmRegistration } = await import("@/lib/firebase-client");
-                  const messaging = getMessaging();
-                  const registration = await getFcmRegistration();
-                  if (!registration) {
-                    throw new Error("Could not find FCM service worker registration.");
-                  }
-                  
-                  const token = await getToken(messaging, {
-                    vapidKey: fcmVapidKey,
-                    serviceWorkerRegistration: registration
-                  });
+              if (isAndroidApp) {
+                return (
+                  <span className="text-xs text-green-500 font-semibold flex items-center gap-1">
+                    ✓ Enabled natively on Android
+                  </span>
+                );
+              }
 
-                  if (token) {
-                    await fetch("/api/fcm/register", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ token, platform: "web" }),
-                    });
-                    alert("Successfully subscribed to notifications on this device!");
-                  } else {
-                    throw new Error("No registration token received");
-                  }
-                } catch (error: any) {
-                  console.error("Subscription failed:", error);
-                  const isConfigMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
-                  if (isConfigMissing) {
-                    alert("Firebase config keys are missing in your local .env.local file. Please configure NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, etc. to enable push notifications.");
-                  } else {
-                    alert(`Failed to subscribe: ${error.message || "Are you in a supported browser?"}`);
-                  }
-                }
-              }}
-            >
-              Enable on this device
-            </button>
+              if (!isNotificationSupported) {
+                return (
+                  <span className="text-xs text-gray-400 font-medium">
+                    Unsupported browser/webview
+                  </span>
+                );
+              }
+
+              return (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={async () => {
+                    try {
+                      const permission = await Notification.requestPermission();
+                      if (permission !== "granted") {
+                        alert("Notification permission denied. Please enable them in your device settings.");
+                        return;
+                      }
+                      const fcmVapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+                      if (!fcmVapidKey) {
+                        alert("Push notification key is not set. Please try again later.");
+                        return;
+                      }
+
+                      const { getMessaging, getToken, getFcmRegistration } = await import("@/lib/firebase-client");
+                      const messaging = getMessaging();
+                      const registration = await getFcmRegistration();
+                      if (!registration) {
+                        throw new Error("Could not find FCM service worker registration.");
+                      }
+                      
+                      const token = await getToken(messaging, {
+                        vapidKey: fcmVapidKey,
+                        serviceWorkerRegistration: registration
+                      });
+
+                      if (token) {
+                        await fetch("/api/fcm/register", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ token, platform: "web" }),
+                        });
+                        alert("Successfully subscribed to notifications on this device!");
+                      } else {
+                        throw new Error("No registration token received");
+                      }
+                    } catch (error: any) {
+                      console.error("Subscription failed:", error);
+                      const isConfigMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
+                      if (isConfigMissing) {
+                        alert("Firebase config keys are missing in your local .env.local file. Please configure NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, etc. to enable push notifications.");
+                      } else {
+                        alert(`Failed to subscribe: ${error.message || "Are you in a supported browser?"}`);
+                      }
+                    }
+                  }}
+                >
+                  Enable on this device
+                </button>
+              );
+            })()}
           </div>
         </div>
       </CollapsibleSection>
