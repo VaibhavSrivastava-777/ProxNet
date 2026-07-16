@@ -231,6 +231,17 @@ export function ProfileForm({ initialUser }: Props) {
   const isHomeLocationValid = user.home_lat != null && user.home_lng != null;
   const isOfficeLocationValid = user.office_lat != null && user.office_lng != null;
 
+  const missingFields: string[] = [];
+  if (!isNameValid) missingFields.push("Full Name");
+  if (!isEmailValid) missingFields.push("Email Address");
+  if (!isCompanyValid) missingFields.push("Company");
+  if (!isJobTitleValid) missingFields.push("Designation");
+  if (!isHomeLocationValid) missingFields.push("Home Location");
+  if (!isOfficeLocationValid) missingFields.push("Office Location");
+  if (!isLinkedInValid) missingFields.push("LinkedIn Link");
+  if (!isPhotoValid) missingFields.push("Avatar Photo");
+  if (!isResumeValid) missingFields.push("Resume");
+
   const canSubmit =
     isNameValid &&
     isEmailValid &&
@@ -559,6 +570,29 @@ export function ProfileForm({ initialUser }: Props) {
           </button>
         </div>
       </div>
+
+      {/* Complete Profile Amber Zone Banner */}
+      {missingFields.length > 0 && (
+        <div className="card p-4 rounded-xl border border-amber-500/20 bg-amber-500/10 text-[var(--color-text)] flex flex-col gap-3 shadow-sm animate-fadeIn mb-6" style={{ display: "flex", flexDirection: "column" }}>
+          <div className="flex items-center gap-2" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+            <span style={{ fontSize: 18 }}>⚠️</span>
+            <span className="text-sm font-bold text-amber-700 dark:text-amber-400">Amber Zone: Complete Your Profile</span>
+          </div>
+          <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed">
+            Your profile is partially complete. To unlock all Proximity matching benefits, please fill in the following:
+          </p>
+          <div className="flex flex-wrap gap-2 mt-1" style={{ display: "flex", flexDirection: "row", flexWrap: "wrap" }}>
+            {missingFields.map((field) => (
+              <span 
+                key={field} 
+                className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30"
+              >
+                {field}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ---- Section: Personal Information ---- */}
       <CollapsibleSection icon={PersonIcon} title="Personal Information" defaultOpen>
