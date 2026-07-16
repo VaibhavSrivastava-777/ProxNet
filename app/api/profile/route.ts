@@ -121,7 +121,7 @@ export async function PATCH(request: Request) {
     const { data: existing } = await supabase
       .from("users")
       .select("id")
-      .eq("anonymous_name", cleanName)
+      .ilike("anonymous_name", cleanName)
       .neq("id", user.id)
       .maybeSingle();
 

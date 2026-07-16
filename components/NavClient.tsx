@@ -170,22 +170,31 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
     // 1. Check if running inside the native Android app (via bridge)
     if ((window as any).AndroidBridge) {
-      const registerNativeToken = async () => {
+      const registerNativeToken = async (token: string) => {
         try {
-          const nativeToken = (window as any).AndroidBridge.getFCMToken();
-          if (nativeToken) {
-            await fetch("/api/fcm/register", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ token: nativeToken, platform: "android" }),
-            });
-            console.log("FCM token registered natively for Android");
-          }
+          await fetch("/api/fcm/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, platform: "android" }),
+          });
+          console.log("FCM token registered natively for Android");
         } catch (e) {
-          console.error("Native JS Bridge token read failed:", e);
+          console.error("Native JS Bridge token registration failed:", e);
         }
       };
-      registerNativeToken();
+
+      // Expose callback for when Android loads the token asynchronously
+      (window as any).onAndroidFCMTokenReady = (token: string) => {
+        if (token) {
+          registerNativeToken(token);
+        }
+      };
+
+      // Check if it is already available on the bridge immediately
+      const currentToken = (window as any).AndroidBridge.getFCMToken();
+      if (currentToken) {
+        registerNativeToken(currentToken);
+      }
       return; // Skip normal PWA service worker setup
     }
 

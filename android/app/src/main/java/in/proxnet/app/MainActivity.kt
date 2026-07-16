@@ -110,6 +110,12 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 android.util.Log.d("ProxNetWebView", "Page load completed: $url")
+                val token = fcmToken
+                if (!token.isNullOrEmpty()) {
+                    webView.post {
+                        webView.evaluateJavascript("javascript:if(window.onAndroidFCMTokenReady) { window.onAndroidFCMTokenReady('$token'); }", null)
+                    }
+                }
             }
 
             override fun onReceivedError(
@@ -159,8 +165,16 @@ class MainActivity : AppCompatActivity() {
                 android.util.Log.w("ProxNetAndroid", "Fetching FCM registration token failed", task.exception)
                 return@addOnCompleteListener
             }
-            fcmToken = task.result
+            val token = task.result
+            fcmToken = token
             android.util.Log.d("ProxNetAndroid", "FCM token loaded: $fcmToken")
+            
+            // Dispatch token to web side if webView is initialized
+            if (::webView.isInitialized && !token.isNullOrEmpty()) {
+                webView.post {
+                    webView.evaluateJavascript("javascript:if(window.onAndroidFCMTokenReady) { window.onAndroidFCMTokenReady('$token'); }", null)
+                }
+            }
         }
     }
 

@@ -212,16 +212,14 @@ export function ProfileForm({ initialUser }: Props) {
     const timer = setTimeout(async () => {
       setCheckingAlias(true);
       try {
-        const supabase = createBrowserClient();
-        const { data } = await supabase
-          .from("users")
-          .select("id")
-          .eq("anonymous_name", nameToCheck)
-          .neq("id", user.id)
-          .maybeSingle();
-
-        if (data) {
-          setAliasError("This anonymous name is already taken. Please choose another one.");
+        const res = await fetch(`/api/profile/validate-alias?q=${encodeURIComponent(nameToCheck)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.available) {
+            setAliasError("This anonymous name is already taken. Please choose another one.");
+          } else {
+            setAliasError("");
+          }
         } else {
           setAliasError("");
         }
