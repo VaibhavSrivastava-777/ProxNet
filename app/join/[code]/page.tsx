@@ -39,7 +39,7 @@ export default async function JoinPage({ params }: JoinPageProps) {
   const cookieStore = await cookies();
   cookieStore.set("proxnet_ref", code, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: false, // Allow HTTP local testing, staging, and emulator routing
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 30, // 30 days
     path: "/",
