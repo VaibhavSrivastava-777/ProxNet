@@ -63,7 +63,12 @@ export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
       trackShare("contacts_native");
     } catch (err: any) {
       console.error("Contact picker error:", err);
-      setErrorMsg("Failed to import contacts: " + (err.message || "User cancelled"));
+      const isPlatformLimit = err.message?.includes("Unable to open a contact selector") || err.message?.includes("not supported");
+      if (isPlatformLimit) {
+        setErrorMsg("Contact selector is not fully supported on this device/platform. Please use manual input or Google Contacts import.");
+      } else {
+        setErrorMsg("Failed to import contacts: " + (err.message || "User cancelled"));
+      }
     } finally {
       setLoading(false);
     }
@@ -72,14 +77,25 @@ export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
   const handleGoogleImport = () => {
     setErrorMsg("");
     setLoading(true);
-    // Simulate OAuth and API fetch for demo purposes
+    // Simulate Google Contacts OAuth & API integration fetch
     setTimeout(() => {
       setLoading(false);
       setContacts([
         { name: "Rahul Sharma", phoneOrEmail: "rahul.sharma@gmail.com" },
-        { name: "Priya K.", phoneOrEmail: "+91 9876543210" },
+        { name: "Priya Krishna", phoneOrEmail: "+91 98765 43210" },
         { name: "Ankit Singh", phoneOrEmail: "ankit.singh@yahoo.com" },
-        { name: "Sneha Patel", phoneOrEmail: "+91 9812345678" }
+        { name: "Sneha Patel", phoneOrEmail: "+91 98123 45678" },
+        { name: "Amit Pachauri", phoneOrEmail: "amit.pach@gmail.com" },
+        { name: "Kallol Kundu", phoneOrEmail: "kallol.k@outlook.com" },
+        { name: "Deepthi B.", phoneOrEmail: "+91 94440 12345" },
+        { name: "Sachin N.", phoneOrEmail: "sachin.n@gmail.com" },
+        { name: "Ankita Malhotra", phoneOrEmail: "+91 99100 88234" },
+        { name: "Rohit Kumar", phoneOrEmail: "rohit.k@gmail.com" },
+        { name: "Siddhant Jain", phoneOrEmail: "sid.jain@iiml.org" },
+        { name: "Saranya J.", phoneOrEmail: "+91 98840 98765" },
+        { name: "Suyash Srivastava", phoneOrEmail: "suyash.sri@gmail.com" },
+        { name: "Stella Rani", phoneOrEmail: "+91 98450 11223" },
+        { name: "Varun Attrey", phoneOrEmail: "varun.attrey@gmail.com" }
       ]);
       setImported(true);
       trackShare("contacts_google");

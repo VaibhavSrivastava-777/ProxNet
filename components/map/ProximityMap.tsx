@@ -165,56 +165,56 @@ export function ProximityMap() {
               <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider">Search Scope</div>
               <div className="text-body font-bold text-[var(--color-primary)] flex items-center gap-2">
                 <span>{locationMode === "home" ? "Home" : "Office"} &bull; {radiusLabel}</span>
-                <button
-                  type="button"
-                  onClick={() => setFiltersExpanded(!filtersExpanded)}
-                  className={`p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer border-none flex items-center justify-center ${filtersExpanded ? 'text-[var(--color-primary)] bg-[var(--color-primary-subtle)]' : 'text-[var(--color-text-secondary)] bg-transparent'}`}
-                  title="Filter Search Scope"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                </button>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => setFiltersExpanded(!filtersExpanded)}
+                    className={`p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer border-none flex items-center justify-center ${filtersExpanded ? 'text-[var(--color-primary)] bg-[var(--color-primary-subtle)]' : 'text-[var(--color-text-secondary)] bg-transparent'}`}
+                    title="Filter Search Scope"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                  </button>
+
+                  {/* View Mode Toggle Buttons beside Filter */}
+                  <div className="flex items-center bg-[var(--color-surface-secondary)] p-0.5 rounded-lg border border-[var(--color-border-light)] shrink-0 shadow-inner">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("list")}
+                      className={`p-1 rounded-md flex items-center justify-center cursor-pointer transition-all border-none ${viewMode === "list" ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm' : 'text-[var(--color-text-secondary)] bg-transparent'}`}
+                      title="List View"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("map")}
+                      className={`p-1 rounded-md flex items-center justify-center cursor-pointer transition-all border-none ${viewMode === "map" ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm' : 'text-[var(--color-text-secondary)] bg-transparent'}`}
+                      title="Map View"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Toggle View Mode & AI Search */}
-          <div className="flex items-center gap-3 flex-1 max-w-md w-full justify-end sm:justify-start">
-            
-            {/* View Mode Toggle Buttons */}
-            <div className="flex items-center bg-[var(--color-surface-secondary)] p-1 rounded-lg border border-[var(--color-border-light)] shrink-0 shadow-inner">
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                className={`p-1.5 rounded-md flex items-center justify-center cursor-pointer transition-all border-none ${viewMode === "list" ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm' : 'text-[var(--color-text-secondary)] bg-transparent'}`}
-                title="List View"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("map")}
-                className={`p-1.5 rounded-md flex items-center justify-center cursor-pointer transition-all border-none ${viewMode === "map" ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm' : 'text-[var(--color-text-secondary)] bg-transparent'}`}
-                title="Map View"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
-              </button>
-            </div>
-
-            {/* AI Input */}
+          {/* Expanded AI Search Bar */}
+          <div className="w-full">
             <form 
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!aiQuery.trim()) return;
                 router.push(`/proxnet-ai?q=${encodeURIComponent(aiQuery.trim())}`);
               }} 
-              className="relative flex-grow"
+              className="relative w-full"
             >
               <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
                 <img src="/logo.png" alt="ProxNet AI" className="w-5 h-5 opacity-70 grayscale" />
               </div>
               <input
                 type="text"
-                className="w-full pl-10 pr-10 py-2 bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded-xl focus:outline-none focus:border-[var(--color-primary)] text-xs font-medium"
+                className="w-full pl-10 pr-10 py-2.5 bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded-xl focus:outline-none focus:border-[var(--color-primary)] text-xs font-medium"
                 placeholder={animatedPlaceholder}
                 value={aiQuery}
                 onChange={(e) => setAiQuery(e.target.value)}
@@ -222,9 +222,9 @@ export function ProximityMap() {
               <button
                 type="submit"
                 disabled={!aiQuery.trim()}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg bg-[var(--color-primary)] text-white disabled:opacity-50 border-none"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-lg bg-[var(--color-primary)] text-white disabled:opacity-50 border-none"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
                   <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
                 </svg>
               </button>
@@ -313,9 +313,12 @@ export function ProximityMap() {
                   <CompanyLogo company={p.company} size={40} />
                   <div className="flex flex-col min-w-0">
                     <span className="text-sm font-bold text-[var(--color-text)] truncate">
-                      {p.job_title} @ {p.company}
+                      {p.company}
                     </span>
-                    <span className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+                    <span className="text-xs text-[var(--color-text-secondary)] font-medium truncate mt-0.5">
+                      {p.job_title}
+                    </span>
+                    <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1">
                       📍 {p.distance >= 1000 ? `${(p.distance / 1000).toFixed(1)} km` : `${Math.round(p.distance)} m`} away
                     </span>
                   </div>
@@ -389,8 +392,11 @@ export function ProximityMap() {
                   <h4 className="text-body font-bold m-0 text-[var(--color-text)] truncate">
                     {selectedPerson.anonymous_name}
                   </h4>
-                  <span className="text-caption text-[var(--color-text-secondary)] mt-0.5 truncate">
-                    {selectedPerson.job_title} @ {selectedPerson.company}
+                  <span className="text-xs font-bold text-[var(--color-text-secondary)] mt-0.5 truncate">
+                    {selectedPerson.company}
+                  </span>
+                  <span className="text-[11px] text-[var(--color-text-tertiary)] mt-0.5 truncate">
+                    {selectedPerson.job_title}
                   </span>
                 </div>
               </div>

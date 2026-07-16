@@ -27,6 +27,14 @@ export async function GET(
 
   const supabase = createAdminClient();
 
+  // Mark incoming messages from other participant as read
+  await supabase
+    .from("chat_messages")
+    .update({ is_read: true })
+    .eq("session_id", sessionId)
+    .neq("sender_id", user.id)
+    .eq("is_read", false);
+
   // Fetch session details to get the question
   const { data: session } = await supabase
     .from("chat_sessions")
@@ -57,13 +65,14 @@ export async function GET(
         created_at: question.created_at,
         alias: askerParticipant?.alias ?? "Resident",
         isOwn: question.asker_id === user.id,
+        isRead: true,
       };
     }
   }
 
   const { data: messages, error } = await supabase
     .from("chat_messages")
-    .select("id, body, created_at, sender_id")
+    .select("id, body, created_at, sender_id, is_read")
     .eq("session_id", sessionId)
     .order("created_at", { ascending: true });
 
@@ -82,15 +91,20 @@ export async function GET(
     created_at: m.created_at,
     alias: aliasMap.get(m.sender_id) ?? "Anonymous",
     isOwn: m.sender_id === user.id,
+    isRead: m.is_read,
   }));
 
   if (questionMessage) {
     sanitized = [questionMessage, ...sanitized];
   }
 
+  const otherParticipant = (participants ?? []).find((p) => p.user_id !== user.id);
+  const otherAlias = otherParticipant?.alias ?? "Anonymous";
+
   return NextResponse.json({
     messages: sanitized,
     myAlias: participant.alias,
+    otherAlias,
   });
 }
 

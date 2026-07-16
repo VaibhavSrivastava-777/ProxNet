@@ -28,19 +28,10 @@ export async function GET(request: Request) {
 
   const supabase = createAdminClient();
 
-  // Fetch current user's embedding
-  const { data: meRecord } = await supabase
-    .from("users")
-    .select("embedding")
-    .eq("id", user.id)
-    .single();
-
-  const myEmbedding = meRecord?.embedding ? (meRecord.embedding as unknown as number[]) : null;
-
-  // Fetch all active users
+  // Fetch all active users (omit embedding completely)
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("id, company, job_title, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, embedding")
+    .select("id, company, job_title, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name")
     .eq("is_active", true)
     .neq("id", user.id);
 
@@ -82,9 +73,6 @@ export async function GET(request: Request) {
     }
 
     if (minDistance <= radius) {
-      const similarityVal = dotProduct(myEmbedding, u.embedding as unknown as number[]);
-      const similarityScore = myEmbedding && u.embedding ? Math.round(similarityVal * 100) : 50; // default to 50 if no embedding
-
       nearbyPeople.push({
         id: u.id,
         anonymous_name: u.anonymous_name || `Neighbour-${u.id.slice(0, 4)}`,
@@ -92,17 +80,15 @@ export async function GET(request: Request) {
         company: u.company.trim(),
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
         distance: minDistance,
-        similarity: similarityScore,
         is_followed: followingIds.has(u.id),
       });
     }
   }
 
-  // Sort by similarity descending, then by distance ascending
+  // Sort alphabetically by company name, then by distance ascending
   nearbyPeople.sort((a, b) => {
-    if (b.similarity !== a.similarity) {
-      return b.similarity - a.similarity;
-    }
+    const comp = a.company.localeCompare(b.company);
+    if (comp !== 0) return comp;
     return a.distance - b.distance;
   });
 

@@ -12,6 +12,7 @@ interface Message {
   created_at: string;
   alias: string;
   isOwn: boolean;
+  isRead?: boolean;
 }
 
 const MAX_CHARS = 500;
@@ -41,6 +42,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [myAlias, setMyAlias] = useState("");
+  const [otherAliasState, setOtherAliasState] = useState("");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [showScroll, setShowScroll] = useState(false);
@@ -106,6 +108,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
       const data = await res.json();
       setMessages(data.messages ?? []);
       setMyAlias(data.myAlias ?? "");
+      setOtherAliasState(data.otherAlias ?? "");
     }
   }, [sessionId]);
 
@@ -314,7 +317,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
     }
   }
 
-  const otherAlias = messages.find((m) => !m.isOwn)?.alias || "Anonymous";
+  const otherAlias = otherAliasState || messages.find((m) => !m.isOwn)?.alias || "Anonymous";
   const { jobTitle, company } = parseAlias(otherAlias);
   const charsLeft = MAX_CHARS - text.length;
   const charsNearLimit = charsLeft < 50;
@@ -323,7 +326,10 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
     <div className="flex flex-col h-[100dvh] w-full max-w-4xl mx-auto bg-[var(--color-surface)] md:border-x border-[var(--color-border-light)] relative shadow-md">
 
       {/* Header bar */}
-      <div className="flex items-center gap-3 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] px-4 py-3 shrink-0">
+      <div 
+        className="flex items-center gap-3 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] px-4 py-3 shrink-0"
+        style={{ paddingTop: "calc(12px + env(safe-area-inset-top))" }}
+      >
         <button
           onClick={() => router.push("/qa")}
           className="btn-icon text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] rounded-full p-1"
@@ -399,14 +405,8 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
             else if (isFirstFromSender && isLastFromSender) borderRadius = m.isOwn ? "8px 8px 0px 8px" : "8px 8px 8px 0px";
 
             const isPending = m.id.startsWith("temp-");
-            const age = currentTime - new Date(m.created_at).getTime();
-            const isRead = !isPending && (
-              // If the other user has replied after this message was sent
-              messages.some(o => !o.isOwn && new Date(o.created_at) > new Date(m.created_at)) ||
-              // Or simulate natural reading delay of 8 seconds
-              (age > 8000)
-            );
-            const isDelivered = !isPending && (age > 1500 || isRead);
+            const isRead = !isPending && !!m.isRead;
+            const isDelivered = !isPending;
 
             return (
               <div key={m.id} className="contents">
@@ -652,11 +652,15 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
       )}
 
       {/* Input bar */}
-      <form onSubmit={handleSend} className="flex items-end gap-2 border-t border-[var(--color-border-light)] p-3 bg-[var(--whatsapp-bg)]/90 backdrop-blur-sm sticky bottom-0 z-10 w-full animate-fadeIn">
+      <form 
+        onSubmit={handleSend} 
+        className="flex items-end gap-2 border-t border-[var(--color-border-light)] p-3 bg-[var(--whatsapp-bg)]/90 backdrop-blur-sm sticky bottom-0 z-10 w-full animate-fadeIn"
+        style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom))" }}
+      >
         <div className="flex-1 relative">
           <textarea
             ref={textareaRef}
-            className="input w-full min-h-[44px] max-h-[120px] rounded-[24px] py-2.5 px-4 resize-none leading-tight bg-[var(--color-surface)] border-none shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:ring-0 focus:outline-none text-[var(--color-text)] transition-colors"
+            className="input w-full min-h-[36px] max-h-[120px] rounded-[20px] py-2 px-4 resize-none leading-normal bg-[var(--color-surface)] border-none shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:ring-0 focus:outline-none text-[var(--color-text)] transition-colors text-sm"
             placeholder="Type a message…"
             value={text}
             onChange={(e) => handleTextChange(e.target.value)}

@@ -199,6 +199,42 @@ export function ProfileForm({ initialUser }: Props) {
 
   const visibility = user.visibility as UserVisibility;
 
+  const [aliasError, setAliasError] = useState("");
+  const [checkingAlias, setCheckingAlias] = useState(false);
+
+  useEffect(() => {
+    const nameToCheck = user.anonymous_name?.trim();
+    if (!nameToCheck || nameToCheck === initialUser.anonymous_name?.trim()) {
+      setAliasError("");
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setCheckingAlias(true);
+      try {
+        const supabase = createBrowserClient();
+        const { data } = await supabase
+          .from("users")
+          .select("id")
+          .eq("anonymous_name", nameToCheck)
+          .neq("id", user.id)
+          .maybeSingle();
+
+        if (data) {
+          setAliasError("This anonymous name is already taken. Please choose another one.");
+        } else {
+          setAliasError("");
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setCheckingAlias(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [user.anonymous_name, user.id, initialUser.anonymous_name]);
+
   const showName = !initialUser.full_name?.trim();
   const showEmail = !initialUser.email?.trim();
   const showCompany = !initialUser.company?.trim();
@@ -251,7 +287,8 @@ export function ProfileForm({ initialUser }: Props) {
     isPhotoValid &&
     isLinkedInValid &&
     isHomeLocationValid &&
-    isOfficeLocationValid;
+    isOfficeLocationValid &&
+    !aliasError;
 
   async function handleOnboardingComplete(e: React.MouseEvent) {
     e.preventDefault();
@@ -625,10 +662,16 @@ export function ProfileForm({ initialUser }: Props) {
             <label className="label">Anonymous Alias Name</label>
             <input
               className="input"
+              style={aliasError ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
               value={user.anonymous_name || ""}
               placeholder="e.g. Neighbour-1234"
               onChange={(e) => setUser({ ...user, anonymous_name: e.target.value })}
             />
+            {checkingAlias && <p className="text-[10px] text-gray-500 mt-1">Checking availability...</p>}
+            {aliasError && <p className="text-xs text-red-500 mt-1">{aliasError}</p>}
+            {!aliasError && user.anonymous_name?.trim() && user.anonymous_name?.trim() !== initialUser.anonymous_name?.trim() && !checkingAlias && (
+              <p className="text-xs text-green-500 mt-1">✓ Anonymous name is available</p>
+            )}
             <p className="text-[10px] text-[var(--color-text-secondary)] mt-1">
               Used anonymously on the local forum feed to protect your privacy.
             </p>
@@ -982,9 +1025,14 @@ export function ProfileForm({ initialUser }: Props) {
                   } else {
                     throw new Error("No registration token received");
                   }
-                } catch (error) {
+                } catch (error: any) {
                   console.error("Subscription failed:", error);
-                  alert("Failed to subscribe. Are you in a supported browser?");
+                  const isConfigMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
+                  if (isConfigMissing) {
+                    alert("Firebase config keys are missing in your local .env.local file. Please configure NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, etc. to enable push notifications.");
+                  } else {
+                    alert(`Failed to subscribe: ${error.message || "Are you in a supported browser?"}`);
+                  }
                 }
               }}
             >
