@@ -603,9 +603,10 @@ Never mention that you are an AI assistant or simulated user. Play your characte
             }
 
             if (isFollower || isNearby) {
-              const posterName = user.anonymous_name || "A neighbor";
+              const posterName = user.anonymous_name || "Neighbour";
+              const companyName = user.company || "Nearby";
               await sendNotification(u.id, {
-                title: isFollower ? `New post from ${posterName}` : "New Post in your Neighborhood",
+                title: isFollower ? `New post from ${posterName} @ ${companyName}` : "New Post in your Neighborhood",
                 body: `"${questionBody.trim().slice(0, 80)}${questionBody.trim().length > 80 ? "..." : ""}"`,
                 url: "/?tab=forum",
               });

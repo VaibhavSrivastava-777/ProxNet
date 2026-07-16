@@ -82,10 +82,11 @@ export async function POST(request: Request) {
     if (errIns) return NextResponse.json({ error: errIns.message }, { status: 500 });
 
     // Send follower notification
-    const followerName = user.anonymous_name || "A neighbor";
+    const followerName = user.anonymous_name || "Neighbour";
+    const companyName = user.company || "Nearby";
     sendNotification(targetUserId, {
       title: "New Follower",
-      body: `${followerName} is now following you.`,
+      body: `${followerName} @ ${companyName} is now following you.`,
       url: "/profile",
     }).catch((e) => console.error("Failed to send follow notification:", e));
 
