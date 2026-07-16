@@ -7,6 +7,7 @@ import { QuestionForm } from "@/components/qa/QuestionForm";
 import useSWR, { mutate } from "swr";
 import { useRouter } from "next/navigation";
 import { useAnimatedPlaceholder } from "@/lib/hooks/useAnimatedPlaceholder";
+import { CompanyLogo } from "@/components/qa/QuestionList";
 
 const ProximityMapInner = dynamic(
   () => import("./ProximityMapInner").then((m) => m.ProximityMapInner),
@@ -309,15 +310,13 @@ export function ProximityMap() {
                 className="card p-3 sm:p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)] transition-all cursor-pointer flex items-center justify-between gap-4"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-[var(--color-primary-subtle)] text-[var(--color-primary)] flex items-center justify-center font-bold text-sm shrink-0 border border-[var(--color-primary)]/10 shadow-sm">
-                    {p.anonymous_name.slice(12, 14).toUpperCase() || "N"}
-                  </div>
+                  <CompanyLogo company={p.company} size={40} />
                   <div className="flex flex-col min-w-0">
                     <span className="text-sm font-bold text-[var(--color-text)] truncate">
                       {p.job_title} @ {p.company}
                     </span>
                     <span className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
-                      📍 {p.distance >= 1000 ? `${(p.distance / 1000).toFixed(1)} km` : `${Math.round(p.distance)} m`} away &bull; <span className="text-[var(--color-accent)] font-semibold">{p.similarity}% match</span>
+                      📍 {p.distance >= 1000 ? `${(p.distance / 1000).toFixed(1)} km` : `${Math.round(p.distance)} m`} away
                     </span>
                   </div>
                 </div>
@@ -385,14 +384,12 @@ export function ProximityMap() {
           >
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-[var(--color-primary-subtle)] text-[var(--color-primary)] flex items-center justify-center font-bold text-lg border border-[var(--color-primary)]/10">
-                  🏡
-                </div>
-                <div className="flex flex-col">
-                  <h4 className="text-body font-bold m-0 text-[var(--color-text)]">
+                <CompanyLogo company={selectedPerson.company} size={48} />
+                <div className="flex flex-col min-w-0">
+                  <h4 className="text-body font-bold m-0 text-[var(--color-text)] truncate">
                     {selectedPerson.anonymous_name}
                   </h4>
-                  <span className="text-caption text-[var(--color-text-secondary)] mt-0.5">
+                  <span className="text-caption text-[var(--color-text-secondary)] mt-0.5 truncate">
                     {selectedPerson.job_title} @ {selectedPerson.company}
                   </span>
                 </div>
@@ -411,10 +408,6 @@ export function ProximityMap() {
                 <span className="font-semibold text-[var(--color-text)]">
                   {selectedPerson.distance >= 1000 ? `${(selectedPerson.distance / 1000).toFixed(1)} km` : `${Math.round(selectedPerson.distance)} m`}
                 </span>
-              </div>
-              <div className="flex justify-between text-xs mt-1">
-                <span className="text-[var(--color-text-secondary)]">Compatibility:</span>
-                <span className="font-semibold text-[var(--color-accent)]">{selectedPerson.similarity}% match</span>
               </div>
             </div>
 

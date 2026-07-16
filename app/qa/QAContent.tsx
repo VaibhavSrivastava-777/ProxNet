@@ -68,11 +68,11 @@ export function QAContent() {
   return (
     <div className="w-full">
       {/* ── 1. Proximity Map Tab ── */}
-      {activeTab === "/proximity" && (
+      <div className={activeTab === "/proximity" ? "block" : "hidden"}>
         <div className="mx-auto max-w-6xl p-4 md:p-8 animate-fadeIn" style={{ paddingBottom: "3rem" }}>
           <ProximityMap />
         </div>
-      )}
+      </div>
 
       {/* ── 2. Chats (Q&A) List Tab ── */}
       <div className={activeTab === "/qa" ? "block" : "hidden"}>
