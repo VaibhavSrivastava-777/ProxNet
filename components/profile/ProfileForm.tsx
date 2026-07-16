@@ -166,6 +166,8 @@ export function ProfileForm({ initialUser }: Props) {
 
   const [showErrors, setShowErrors] = useState(false);
   const [followStats, setFollowStats] = useState({ followerCount: 0, followingCount: 0 });
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetch("/api/follow")
@@ -975,6 +977,105 @@ export function ProfileForm({ initialUser }: Props) {
         )}
       </button>
       </form>
+
+      {/* Danger Zone: Account Deletion */}
+      <div className="mt-8 border-t border-[var(--color-border-light)] pt-6">
+        <h3 className="text-body font-bold text-red-500 mb-2">Danger Zone</h3>
+        <p className="text-caption text-[var(--color-text-secondary)] mb-4">
+          Permanently remove your account and purge all associated data from ProxNet.
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowDeleteConfirm(true)}
+          className="btn btn-outline btn-sm text-red-500 border-red-500/20 hover:bg-red-500 hover:text-white"
+          style={{ cursor: "pointer" }}
+        >
+          Remove me from ProxNet
+        </button>
+      </div>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-2xl max-w-md w-full p-6 text-[var(--color-text)] animate-scaleIn flex flex-col gap-5">
+            <div className="text-center">
+              <div className="w-14 h-14 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
+                ⚠️
+              </div>
+              <h3 className="text-h2 font-bold text-[var(--color-text)] m-0">Are you absolutely sure?</h3>
+              <p className="text-body-sm text-[var(--color-text-secondary)] mt-2 m-0">
+                Removing your account is permanent. If you delete your profile today, you will lose:
+              </p>
+            </div>
+
+            <div className="bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-2.5 text-xs text-[var(--color-text-secondary)]">
+              <div className="flex gap-2.5 items-start">
+                <span className="text-sm shrink-0">💎</span>
+                <p className="m-0 leading-normal">
+                  <strong>All referral reward points:</strong> You will lose your invite progress, points balances, and status in the local network forever.
+                </p>
+              </div>
+              <div className="flex gap-2.5 items-start">
+                <span className="text-sm shrink-0">🤝</span>
+                <p className="m-0 leading-normal">
+                  <strong>Your followers and connections:</strong> The {followStats.followerCount} professional neighbors following your posts will no longer see your feed updates.
+                </p>
+              </div>
+              <div className="flex gap-2.5 items-start">
+                <span className="text-sm shrink-0">💬</span>
+                <p className="m-0 leading-normal">
+                  <strong>Chat thread history:</strong> All ongoing direct messaging threads, questions, and replies will be permanently deleted.
+                </p>
+              </div>
+              <div className="flex gap-2.5 items-start">
+                <span className="text-sm shrink-0">📍</span>
+                <p className="m-0 leading-normal">
+                  <strong>Local Forum contributions:</strong> Your neighborhood presence and forum interactions will be completely wiped out.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-caption text-red-500/80 font-medium text-center m-0">
+              There is no way to undo this action.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="flex-1 py-2.5 text-xs font-semibold rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] cursor-pointer"
+              >
+                Keep my account
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    const res = await fetch("/api/profile/delete", { method: "POST" });
+                    if (res.ok) {
+                      const { signOut } = await import("next-auth/react");
+                      await signOut({ callbackUrl: "/" });
+                    } else {
+                      const data = await res.json();
+                      alert(`Failed to delete account: ${data.error || "unknown error"}`);
+                      setDeleting(false);
+                    }
+                  } catch (e) {
+                    alert("An error occurred. Please try again.");
+                    setDeleting(false);
+                  }
+                }}
+                className="flex-1 py-2.5 text-xs font-semibold rounded-lg bg-red-600 text-white border-0 hover:bg-red-700 cursor-pointer flex items-center justify-center gap-1.5"
+                style={{ backgroundColor: "#dc2626" }}
+              >
+                {deleting ? "Removing..." : "Yes, remove me"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fadeIn">

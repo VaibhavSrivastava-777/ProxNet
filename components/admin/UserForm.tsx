@@ -474,14 +474,44 @@ export function UserForm({ user, onSuccess }: Props) {
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div className="flex justify-end gap-3 pt-4 border-t border-[var(--color-border-light)] mt-6">
-        <button
-          type="submit"
-          disabled={saving}
-          className="btn btn-primary"
-        >
-          {saving ? "Saving..." : user ? "Update user" : "Create user"}
-        </button>
+      <div className="flex justify-between items-center pt-4 border-t border-[var(--color-border-light)] mt-6">
+        <div>
+          {user && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (confirm(`Are you sure you want to permanently delete user "${user.full_name}"? This will purge all of their messages, follows, posts, and location details.`)) {
+                  try {
+                    const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+                    if (res.ok) {
+                      alert("User deleted successfully.");
+                      if (onSuccess) onSuccess();
+                      else router.push("/admin");
+                      router.refresh();
+                    } else {
+                      const data = await res.json();
+                      alert(`Error deleting user: ${data.error || "unknown"}`);
+                    }
+                  } catch (e) {
+                    alert("Failed to delete user.");
+                  }
+                }
+              }}
+              style={{ backgroundColor: "transparent", color: "var(--color-error, #dc2626)", border: "1px solid var(--color-error, #dc2626)", cursor: "pointer", padding: "8px 16px", borderRadius: "var(--radius-md, 8px)", fontSize: "14px" }}
+            >
+              Delete user
+            </button>
+          )}
+        </div>
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            disabled={saving}
+            className="btn btn-primary"
+          >
+            {saving ? "Saving..." : user ? "Update user" : "Create user"}
+          </button>
+        </div>
       </div>
     </form>
   );

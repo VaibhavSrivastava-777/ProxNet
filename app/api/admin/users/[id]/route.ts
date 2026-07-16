@@ -79,7 +79,29 @@ export async function DELETE(
 
   const { id } = await params;
   const supabase = createAdminClient();
-  const { error } = await supabase.from("users").delete().eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+
+  try {
+    // Purge dependencies in sequence to satisfy foreign key constraints
+    await supabase.from("fcm_tokens").delete().eq("user_id", id);
+    await supabase.from("user_follows").delete().or(`follower_id.eq.${id},following_id.eq.${id}`);
+    await supabase.from("referral_relationships").delete().or(`inviter_id.eq.${id},invitee_id.eq.${id}`);
+    await supabase.from("points_log").delete().eq("user_id", id);
+    await supabase.from("in_app_notifications").delete().eq("user_id", id);
+    await supabase.from("question_likes").delete().eq("user_id", id);
+    await supabase.from("question_comments").delete().eq("user_id", id);
+    await supabase.from("chat_messages").delete().eq("sender_id", id);
+    await supabase.from("chat_participants").delete().eq("user_id", id);
+    await supabase.from("question_targets").delete().eq("professional_id", id);
+    await supabase.from("questions").delete().eq("asker_id", id);
+    await supabase.from("carpool_posts").delete().eq("user_id", id);
+    await supabase.from("job_posts").delete().eq("user_id", id);
+    await supabase.from("user_current_locations").delete().eq("user_id", id);
+
+    const { error } = await supabase.from("users").delete().eq("id", id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  } catch (error: any) {
+    console.error("Admin user delete failed:", error);
+    return NextResponse.json({ error: error.message || "Deletion failed" }, { status: 500 });
+  }
 }
