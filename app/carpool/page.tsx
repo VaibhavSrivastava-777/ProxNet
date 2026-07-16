@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { CarpoolClient } from "@/components/carpool/CarpoolClient";
 import { CarpoolGatekeeper } from "@/components/carpool/CarpoolGatekeeper";
 import { HowItWorksModal } from "@/components/HowItWorksModal";
-import { isProfileIncomplete } from "@/lib/profile-validation";
+import { isOnboardingIncomplete } from "@/lib/profile-validation";
 
 export const metadata = {
   title: "Carpool - ProxNet",
@@ -17,8 +17,8 @@ export default async function CarpoolPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const profileIncomplete = isProfileIncomplete(user);
-  if (profileIncomplete) {
+  const onboardingIncomplete = isOnboardingIncomplete(user);
+  if (onboardingIncomplete) {
     redirect("/profile?onboarding=true");
   }
 

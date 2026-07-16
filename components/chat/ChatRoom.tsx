@@ -52,6 +52,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [openMenuMessageId, setOpenMenuMessageId] = useState<string | null>(null);
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -66,6 +67,19 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
     document.body.style.paddingBottom = "0px";
     return () => {
       document.body.style.paddingBottom = originalPadding;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".message-menu-container")) {
+        setOpenMenuMessageId(null);
+      }
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => {
+      document.removeEventListener("click", handleOutsideClick);
     };
   }, []);
 
@@ -370,17 +384,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
             const showDaySeparator = currentDay !== prevMsgDay;
             const todayStr = new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 
-            if (m.id.startsWith("q-")) {
-              return (
-                <div key={m.id} className="w-full flex justify-center my-6 animate-scaleIn">
-                  <div className="bg-[var(--color-primary-light)]/10 border border-[var(--color-primary)]/20 rounded-xl p-4 max-w-[85%] sm:max-w-[400px] text-center shadow-sm">
-                    <p className="text-[11px] font-semibold text-[var(--color-primary)] mb-1 uppercase tracking-wider">Original Question</p>
-                    <p className="text-[15px] text-[var(--color-text)] font-medium">"{m.body}"</p>
-                    <p className="text-[11px] text-[var(--color-text-tertiary)] mt-2">Asked by {m.alias}</p>
-                  </div>
-                </div>
-              );
-            }
+
 
             const isFirstFromSender = !prevMsg || prevMsg.isOwn !== m.isOwn || prevMsg.id.startsWith("q-") || showDaySeparator;
             const isLastFromSender = !nextMsg || nextMsg.isOwn !== m.isOwn || nextMsg.id.startsWith("q-");
@@ -395,7 +399,14 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
             else if (isFirstFromSender && isLastFromSender) borderRadius = m.isOwn ? "8px 8px 0px 8px" : "8px 8px 8px 0px";
 
             const isPending = m.id.startsWith("temp-");
-            const isRead = !isPending && (currentTime - new Date(m.created_at).getTime() > 2000);
+            const age = currentTime - new Date(m.created_at).getTime();
+            const isRead = !isPending && (
+              // If the other user has replied after this message was sent
+              messages.some(o => !o.isOwn && new Date(o.created_at) > new Date(m.created_at)) ||
+              // Or simulate natural reading delay of 8 seconds
+              (age > 8000)
+            );
+            const isDelivered = !isPending && (age > 1500 || isRead);
 
             return (
               <div key={m.id} className="contents">
@@ -418,32 +429,6 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
                   )}
 
                   <div className="flex items-center gap-2 w-full max-w-full">
-                    {m.isOwn && !isPending && (
-                      <div className="flex gap-1 shrink-0 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          onClick={() => startEditing(m.id, m.body)}
-                          className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] rounded-md transition-colors"
-                          title="Edit Message"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMessage(m.id)}
-                          className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-error)] hover:bg-[var(--color-surface-hover)] rounded-md transition-colors"
-                          title="Delete Message"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
-
                     <div
                       className={`px-3 py-1.5 text-[15px] relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-full ${
                         m.isOwn
@@ -465,7 +450,68 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
                         if (longPressTimer.current) clearTimeout(longPressTimer.current);
                       }}
                     >
+                      {m.id.startsWith("q-") && (
+                        <span className="block text-[10px] font-bold text-[var(--color-primary)] uppercase tracking-wider mb-1">
+                          Original Question
+                        </span>
+                      )}
                       <p className="whitespace-pre-wrap break-words m-0 leading-normal">{m.body}</p>
+
+                      {/* Three dots / WhatsApp-like menu button */}
+                      {m.isOwn && !isPending && !m.id.startsWith("q-") && (
+                        <div className="absolute top-1 right-1 message-menu-container">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenuMessageId(openMenuMessageId === m.id ? null : m.id);
+                            }}
+                            className="w-6 h-6 flex items-center justify-center rounded-full text-gray-500 hover:text-gray-800 hover:bg-black/5 opacity-50 md:opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 cursor-pointer"
+                            title="Message options"
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="1.2" />
+                              <circle cx="12" cy="5" r="1.2" />
+                              <circle cx="12" cy="19" r="1.2" />
+                            </svg>
+                          </button>
+                          
+                          {/* Dropdown Menu */}
+                          {openMenuMessageId === m.id && (
+                            <div className="absolute right-0 mt-1 w-24 bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-lg shadow-lg py-1 z-30 animate-scaleIn">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuMessageId(null);
+                                  startEditing(m.id, m.body);
+                                }}
+                                className="w-full px-3 py-1.5 text-left text-xs font-semibold text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] flex items-center gap-2 cursor-pointer"
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                </svg>
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuMessageId(null);
+                                  handleDeleteMessage(m.id);
+                                }}
+                                className="w-full px-3 py-1.5 text-left text-xs font-semibold text-[var(--color-error)] hover:bg-[var(--color-error-bg)] flex items-center gap-2 cursor-pointer"
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                </svg>
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* WhatsApp-like Inline Timestamp & Ticks */}
                       <div className="absolute bottom-[3px] right-[7px] flex items-center gap-0.5 text-[9px] text-gray-500/80 dark:text-gray-400/60 select-none">
@@ -473,6 +519,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
                         {m.isOwn && (
                           <span className="flex items-center ml-0.5">
                             {isPending ? (
+                              /* Pending / Clock */
                               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3 text-gray-400 opacity-60">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                               </svg>
@@ -486,7 +533,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
                                   <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                                 </svg>
                               </div>
-                            ) : (
+                            ) : isDelivered ? (
                               /* Double Gray Ticks */
                               <div className="relative w-4 h-3 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-0 top-0.5 w-3 h-3 text-gray-400/80">
@@ -496,6 +543,11 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
                                   <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                                 </svg>
                               </div>
+                            ) : (
+                              /* Single Gray Tick */
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 text-gray-400/80">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                              </svg>
                             )}
                           </span>
                         )}

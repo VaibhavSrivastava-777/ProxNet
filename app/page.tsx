@@ -5,17 +5,23 @@ import { getCurrentUser } from "@/lib/session";
 import { AnimatedStats, TypewriterText } from "@/components/home/AnimatedStats";
 import { LoginButton } from "@/components/auth/LoginButton";
 import { HomeWidgets } from "@/components/home/HomeWidgets";
-import { isProfileIncomplete } from "@/lib/profile-validation";
+import { isOnboardingIncomplete } from "@/lib/profile-validation";
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ref?: string }>;
+}) {
+  const params = await searchParams;
+  const isInvite = params.ref === "invite";
   const session = await auth();
 
   if (session) {
     // Fetch profile to check completion
     const user = await getCurrentUser();
-    const profileIncomplete = isProfileIncomplete(user);
+    const onboardingIncomplete = isOnboardingIncomplete(user);
 
-    if (profileIncomplete) {
+    if (onboardingIncomplete) {
       redirect("/profile?onboarding=true");
     }
 
@@ -24,6 +30,22 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen">
+      {isInvite && (
+        <div 
+          style={{
+            background: "var(--color-accent-subtle)",
+            color: "var(--color-accent)",
+            padding: "12px 16px",
+            textAlign: "center",
+            fontWeight: 600,
+            fontSize: 14,
+            borderBottom: "1px solid var(--color-accent)",
+          }}
+          className="animate-fadeIn"
+        >
+          👋 A professional neighbor invited you to ProxNet! Sign in below to unlock your neighborhood.
+        </div>
+      )}
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-br from-[var(--color-primary)] to-[#004182] px-4 py-24 text-center text-white sm:py-32">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iLjE1Ii8+PC9zdmc+')] bg-[length:24px_24px] opacity-20" />

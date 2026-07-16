@@ -32,6 +32,9 @@ export interface User {
   office_lng: number | null;
   active_location: ActiveLocation;
   is_active: boolean;
+  invite_code: string | null;
+  invited_by: string | null;
+  network_points: number;
   created_at: string;
   updated_at: string;
 }

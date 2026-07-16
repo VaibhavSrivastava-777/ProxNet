@@ -5,7 +5,7 @@
     ],
     "target": {
       "namespace": "android_app",
-      "package_name": "in.proxnet.app",
+      "package_name": "in.proxnet.www.twa",
       "sha256_cert_fingerprints": [
         "E6:8B:11:DC:C8:25:49:F2:C9:5B:9F:AE:4C:0F:91:53:B4:7A:DC:03:DE:3E:B0:44:81:6E:41:68:32:D4:B0:A3"
       ],

@@ -78,16 +78,26 @@ export async function GET(
     })
     .join("\n");
 
-  const prompt = isResident
-    ? `You are a helpful assistant for an anonymous professional networking chat. The user ("Me") previously asked a professional this question: "${originalQuestion}".
-${messages && messages.length > 0 ? `Here is the current conversation transcript so far:\n${transcript}\n` : ""}
-Suggest 3 short, natural follow-up questions the user ("Me") could ask next related to their original question or the current conversation. Keep suggestions concise (under 15 words each) and professional. Do NOT suggest replies to the other person's messages, only suggest potential follow-up questions the user could ask. Return ONLY a JSON array of 3 strings, no other text.
+  const myRole = isResident ? "Asker / Job Seeker (Resident)" : "Professional / Responder / Recruiter";
+  const otherRole = isResident ? "Professional / Responder / Recruiter" : "Asker / Job Seeker (Resident)";
 
-Follow-up questions JSON array:`
-    : `You are a helpful assistant for an anonymous professional networking chat. A user asked this question: "${originalQuestion}".
-${messages && messages.length > 0 ? `Here is the current conversation transcript so far:\n${transcript}\nSuggest 3 short, natural reply options` : "This is the start of the chat. Suggest 3 short, natural icebreakers"} the current user ("Me", who is the professional responding) could send next. Keep suggestions concise (under 15 words each), friendly, and professional. Return ONLY a JSON array of 3 strings, no other text.
+  const prompt = `You are an AI assistant helping a user ("Me") write replies in an anonymous professional networking chat on a platform called ProxNet.
 
-Reply suggestions JSON array:`;
+CONTEXT:
+- Original question that started this chat: "${originalQuestion}"
+- Current user ("Me") role: ${myRole}
+- The other participant's role: ${otherRole}
+
+CONVERSATION TRANSCRIPT SO FAR:
+${messages && messages.length > 0 ? transcript : "(No messages yet)"}
+
+YOUR TASK:
+Suggest exactly 3 short, natural, and professional next messages that the current user ("Me") could send next.
+- Crucial: The suggestions must be written strictly from the perspective of "Me" (${myRole}).
+- If the other participant sent the last message, suggest direct answers or responses to their message.
+- If "Me" sent the last message (or if the transcript is empty), suggest follow-up questions, icebreakers, or additional context related to the original question and previous messages.
+- Keep suggestions concise (under 15 words each), friendly, and conversational.
+- Return ONLY a JSON array of 3 strings (e.g., ["option 1", "option 2", "option 3"]), with no markdown formatting or extra text.`;
 
   try {
     let modelName = "claude-haiku-4-5-20251001";

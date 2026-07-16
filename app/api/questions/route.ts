@@ -5,6 +5,7 @@ import { haversineDistanceMeters } from "@/lib/geo/haversine";
 import { resolveUserLocation, generateAlias } from "@/lib/anonymize";
 import type { User } from "@/lib/types";
 import { sendNotification } from "@/lib/notifications";
+import { awardPoints } from "@/lib/award-points";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -514,6 +515,21 @@ Never mention that you are an AI assistant or simulated user. Play your characte
     .single();
 
   if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
+
+  // Award points to the inviter if this is the invitee's first question
+  if (user.invited_by) {
+    const { count } = await supabase
+      .from("questions")
+      .select("id", { count: "exact", head: true })
+      .eq("asker_id", user.id)
+      .neq("id", question.id); // exclude current question
+    
+    if (count === 0) {
+      await awardPoints(user.invited_by, "INVITEE_FIRST_POST", question.id).catch((e) =>
+        console.error("Failed to award points for invitee first post:", e)
+      );
+    }
+  }
 
   if (!isForum) {
     let targets: { question_id: string; professional_id: string }[] = [];

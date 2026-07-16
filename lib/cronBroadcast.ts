@@ -143,7 +143,20 @@ export async function handleBroadcast(request: Request) {
 
       // 3. Fallback: Proximity Awareness
       if (!message) {
-        message = "👋 Good morning! There are verified tech professionals currently active in your neighborhood. Say hi on the local forum!";
+        let nearbyCount = 0;
+        if (user.home_lat && user.home_lng) {
+          nearbyCount = users.filter((u: any) => {
+            if (!u.home_lat || !u.home_lng || u.id === user.id) return false;
+            const dist = haversineDistanceMeters(Number(user.home_lat), Number(user.home_lng), Number(u.home_lat), Number(u.home_lng));
+            return dist <= 2000;
+          }).length;
+        }
+
+        if (nearbyCount < 3) {
+          message = `🏘️ Only ${nearbyCount + 1} professional(s) are mapped in your 2km radius. Invite a neighbor to unlock your local network!`;
+        } else {
+          message = "👋 Good morning! There are verified tech professionals currently active in your neighborhood. Say hi on the local forum!";
+        }
       }
     } else {
       // PM Broadcast
@@ -176,7 +189,20 @@ export async function handleBroadcast(request: Request) {
 
       // 3. Fallback
       if (!message) {
-        message = "🏢 Want to find mentors in your apartment building? Update your professional profile to unlock precise local matches.";
+        let nearbyCount = 0;
+        if (user.home_lat && user.home_lng) {
+          nearbyCount = users.filter((u: any) => {
+            if (!u.home_lat || !u.home_lng || u.id === user.id) return false;
+            const dist = haversineDistanceMeters(Number(user.home_lat), Number(user.home_lng), Number(u.home_lat), Number(u.home_lng));
+            return dist <= 2000;
+          }).length;
+        }
+
+        if (nearbyCount < 3) {
+          message = "🌐 Your neighborhood is quiet tonight. Strengthen your local network by sharing an anonymous invite.";
+        } else {
+          message = "🏢 Want to find mentors in your apartment building? Update your professional profile to unlock precise local matches.";
+        }
       }
     }
 

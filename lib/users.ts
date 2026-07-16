@@ -1,7 +1,21 @@
 import { createAdminClient } from "./supabase/admin";
 import { normalizeLinkedInUrl } from "./linkedin/normalize-url";
 import { isSupabaseConfigured } from "./supabase/is-configured";
+import { awardPoints } from "./award-points";
 import type { User, UserVisibility } from "./types";
+
+/**
+ * Generate a unique 8-character invite code prefixed with "PX-".
+ * Format: PX-XXXXXX (6 alphanumeric chars = 2.1B combinations).
+ */
+function generateInviteCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `PX-${code}`;
+}
 
 const defaultVisibility: UserVisibility = {
   showCompany: true,
@@ -55,6 +69,7 @@ export async function upsertOAuthUser(params: {
   picture?: string | null;
   linkedinProfileUrl?: string | null;
   headline?: string | null;
+  referrerCode?: string | null;
 }) {
   const supabase = createAdminClient();
   const normalizedUrl = normalizeLinkedInUrl(params.linkedinProfileUrl);
@@ -79,6 +94,21 @@ export async function upsertOAuthUser(params: {
     if (existing.source === "admin") {
       updates.source = "admin";
     }
+    // Generate invite code if missing (for pre-existing users)
+    if (!existing.invite_code) {
+      let code = generateInviteCode();
+      // Ensure uniqueness (collision extremely unlikely but handled)
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const { data: collision } = await supabase
+          .from("users")
+          .select("id")
+          .eq("invite_code", code)
+          .maybeSingle();
+        if (!collision) break;
+        code = generateInviteCode();
+      }
+      updates.invite_code = code;
+    }
 
     const { data, error } = await supabase
       .from("users")
@@ -88,6 +118,31 @@ export async function upsertOAuthUser(params: {
       .single();
     if (error) throw error;
     return data as User;
+  }
+
+  // Generate a unique invite code for the new user
+  let inviteCode = generateInviteCode();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data: collision } = await supabase
+      .from("users")
+      .select("id")
+      .eq("invite_code", inviteCode)
+      .maybeSingle();
+    if (!collision) break;
+    inviteCode = generateInviteCode();
+  }
+
+  // Resolve referrer if invite code was provided
+  let invitedBy: string | null = null;
+  if (params.referrerCode) {
+    const { data: referrer } = await supabase
+      .from("users")
+      .select("id")
+      .eq("invite_code", params.referrerCode)
+      .maybeSingle();
+    if (referrer) {
+      invitedBy = referrer.id;
+    }
   }
 
   const { data, error } = await supabase
@@ -103,12 +158,46 @@ export async function upsertOAuthUser(params: {
       visibility: defaultVisibility,
       active_location: "home",
       is_active: true,
+      invite_code: inviteCode,
+      invited_by: invitedBy,
+      network_points: 0,
       created_at: now,
       updated_at: now,
     })
     .select("*")
     .single();
   if (error) throw error;
+
+  // Post-signup: award points to the inviter & update invite_events
+  if (invitedBy && data) {
+    // Award 100 points to inviter
+    awardPoints(invitedBy, "INVITE_SIGNUP", data.id).catch((e) =>
+      console.error("Failed to award invite signup points:", e)
+    );
+
+    // Mark matching invite_events as signed_up
+    supabase
+      .from("invite_events")
+      .update({ signed_up: true, invitee_id: data.id })
+      .eq("invite_code", params.referrerCode!)
+      .eq("signed_up", false)
+      .then(({ error: evtErr }) => {
+        if (evtErr) console.error("Failed to update invite_events:", evtErr);
+      });
+
+    // Check for 2nd-degree: if the inviter was themselves invited, award SECOND_DEGREE_SIGNUP
+    const { data: inviterUser } = await supabase
+      .from("users")
+      .select("invited_by")
+      .eq("id", invitedBy)
+      .maybeSingle();
+    if (inviterUser?.invited_by) {
+      awardPoints(inviterUser.invited_by, "SECOND_DEGREE_SIGNUP", data.id).catch((e) =>
+        console.error("Failed to award 2nd-degree points:", e)
+      );
+    }
+  }
+
   return data as User;
 }
 

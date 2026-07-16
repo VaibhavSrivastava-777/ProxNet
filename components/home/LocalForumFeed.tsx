@@ -160,7 +160,7 @@ export function LocalForumFeed() {
             <p className="text-caption text-[var(--color-text-tertiary)] mt-1">Be the first to start a conversation in your neighborhood!</p>
           </div>
         ) : (
-          forum.map((q: any) => {
+          forum.map((q: any, index: number) => {
             // Extract category and raw body
             let displayBody = q.body;
             let displayCategory = "General";
@@ -171,11 +171,11 @@ export function LocalForumFeed() {
             }
 
             return (
-              <div
-                key={q.id}
-                className="card p-4 sm:p-5 flex flex-col gap-3 bg-[var(--color-surface)] border hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => router.push(`/qa/forum/${q.id}`)}
-              >
+              <div key={q.id} className="flex flex-col gap-4">
+                <div
+                  className="card p-4 sm:p-5 flex flex-col gap-3 bg-[var(--color-surface)] border hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => router.push(`/qa/forum/${q.id}`)}
+                >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-[var(--color-primary-subtle)] text-[var(--color-primary)] flex items-center justify-center font-bold text-sm">
                     {q.asker_alias.slice(0, 2).toUpperCase()}
@@ -226,6 +226,34 @@ export function LocalForumFeed() {
                     <span className="font-medium">Share</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Inline Invite card after every 5th post */}
+              {(index + 1) % 5 === 0 && (
+                  <div
+                    className="card p-4 flex items-center justify-between gap-4 bg-[var(--color-accent-subtle)] border border-[var(--color-accent)]/20 cursor-pointer"
+                    style={{ borderRadius: "var(--radius-lg)" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push("/grow");
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <h4 className="text-body font-semibold m-0" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--color-text)" }}>
+                        <span>💡</span> Strengthen Your Local Network
+                      </h4>
+                      <p className="text-caption m-0 mt-1" style={{ color: "var(--color-text-secondary)", lineHeight: 1.4 }}>
+                        Know a professional neighbor who should be in this conversation? Invite them to ProxNet and unlock more local opportunities together.
+                      </p>
+                    </div>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      style={{ padding: "8px 16px", fontSize: 12, whiteSpace: "nowrap" }}
+                    >
+                      Invite &rarr;
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })

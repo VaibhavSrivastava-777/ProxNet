@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { JobsClient } from "@/components/jobs/JobsClient";
 import { HowItWorksModal } from "@/components/HowItWorksModal";
-import { isProfileIncomplete } from "@/lib/profile-validation";
+import { isOnboardingIncomplete } from "@/lib/profile-validation";
 
 export default async function JobsPage() {
   const user = await getCurrentUser();
@@ -10,8 +10,8 @@ export default async function JobsPage() {
     redirect("/login");
   }
 
-  const profileIncomplete = isProfileIncomplete(user);
-  if (profileIncomplete) {
+  const onboardingIncomplete = isOnboardingIncomplete(user);
+  if (onboardingIncomplete) {
     redirect("/profile?onboarding=true");
   }
 

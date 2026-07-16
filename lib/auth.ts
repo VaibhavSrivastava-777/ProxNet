@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import LinkedIn from "next-auth/providers/linkedin";
 import Google from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { cookies } from "next/headers";
 import { findUserByLinkedInSub, upsertOAuthUser } from "./users";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -107,6 +108,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const sub = isCredentials ? user?.id : account?.providerAccountId;
       if (!sub) return false;
 
+      // Read referrer code from cookie (set by /join/[code] invite landing page)
+      let referrerCode: string | null = null;
+      try {
+        const cookieStore = await cookies();
+        referrerCode = cookieStore.get("proxnet_ref")?.value ?? null;
+      } catch {
+        // cookies() may not be available in all contexts
+      }
+
       const u = user as {
         name?: string | null;
         email?: string | null;
@@ -121,6 +131,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         picture: u.image ?? null,
         linkedinProfileUrl: u.profileUrl ?? null,
         headline: u.headline ?? null,
+        referrerCode,
       });
       return !!dbUser;
     },

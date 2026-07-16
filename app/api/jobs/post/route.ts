@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { awardPoints } from "@/lib/award-points";
 
 function extractTop5Skills(skills: string): string {
   if (!skills) return "";
@@ -53,6 +54,21 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Award points to the inviter if this is the invitee's first job post
+  if (user.invited_by) {
+    const { count } = await supabase
+      .from("job_posts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .neq("id", data.id); // exclude current job post
+    
+    if (count === 0) {
+      await awardPoints(user.invited_by, "INVITEE_FIRST_REFERRAL", data.id).catch((e) =>
+        console.error("Failed to award points for invitee first referral:", e)
+      );
+    }
+  }
 
   // --- ProxNet AI Matchmaking (Embedding-based) ---
   try {

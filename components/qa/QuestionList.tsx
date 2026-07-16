@@ -45,7 +45,7 @@ interface AskedQuestion {
 
 interface Props {
   refreshKey?: number;
-  onOpenDirectQuestion?: (target: { id: string; job_title: string; company: string }) => void;
+  onOpenDirectQuestion?: (target?: { id: string; job_title: string; company: string }) => void;
 }
 
 function getInitials(name: string): string {
@@ -412,7 +412,7 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
       <div className="flex justify-between items-center mb-2 px-1">
         <h1 className="text-h1 m-0 text-[var(--color-text)]">Chats</h1>
         <button
-          onClick={() => onOpenDirectQuestion?.({ id: "", job_title: "", company: "" })}
+          onClick={() => onOpenDirectQuestion?.(undefined)}
           className="w-10 h-10 rounded-full bg-[var(--color-primary)] text-white shadow-md hover:bg-[var(--color-primary-hover)] transition-all flex items-center justify-center shrink-0"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

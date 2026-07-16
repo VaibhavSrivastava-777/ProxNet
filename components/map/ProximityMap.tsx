@@ -217,6 +217,29 @@ export function ProximityMap() {
                 ? "No companies found in this area"
                 : "Waiting for location…"}
           </div>
+
+          {/* Low density invite nudge */}
+          {!loading && clusters.length < 3 && (
+            <div 
+              className="mt-3 p-3 flex flex-col gap-2 bg-[var(--color-accent-subtle)] border border-[var(--color-accent)]/20"
+              style={{ borderRadius: "var(--radius-md)" }}
+            >
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: 18 }}>🏘️</span>
+                <span className="text-body-sm font-semibold">Your area is quiet</span>
+              </div>
+              <p className="text-caption m-0" style={{ color: "var(--color-text-secondary)", lineHeight: 1.4 }}>
+                Only {clusters.length} {clusters.length === 1 ? "company is" : "companies are"} represented near you. Be the one who brings your professional neighbors here!
+              </p>
+              <button 
+                onClick={() => router.push("/grow")}
+                className="btn btn-sm btn-primary mt-1"
+                style={{ fontSize: 11, padding: "6px 12px", alignSelf: "flex-start" }}
+              >
+                Invite Neighbors &rarr;
+              </button>
+            </div>
+          )}
         </div>
       )}
 
