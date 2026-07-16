@@ -47,7 +47,7 @@ export function QAContent() {
               </button>
             </div>
             
-            <div className="p-0 overflow-hidden flex-1 flex flex-col">
+            <div className="p-0 overflow-y-auto flex-1 flex flex-col">
               <QuestionForm
                 targetUser={directTarget || undefined}
                 onPosted={() => {

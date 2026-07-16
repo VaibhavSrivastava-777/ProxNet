@@ -190,7 +190,7 @@ export function QuestionForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col h-full bg-[var(--color-surface)] p-6">
+    <form onSubmit={handleSubmit} className="flex flex-col min-h-full bg-[var(--color-surface)] p-6">
 
       <div className="flex flex-col gap-4 mb-4 shrink-0">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
