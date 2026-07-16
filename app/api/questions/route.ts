@@ -567,6 +567,57 @@ Never mention that you are an AI assistant or simulated user. Play your characte
     }
   }
 
+  if (isForum) {
+    // Notify nearby users or followers
+    (async () => {
+      try {
+        const { data: activeUsers } = await supabase
+          .from("users")
+          .select("id, home_lat, home_lng, office_lat, office_lng")
+          .eq("is_active", true)
+          .neq("id", user.id);
+
+        const { data: followers } = await supabase
+          .from("user_follows")
+          .select("follower_id")
+          .eq("following_id", user.id);
+        const followerIds = new Set((followers ?? []).map((f) => f.follower_id));
+
+        if (activeUsers) {
+          for (const u of activeUsers) {
+            const isFollower = followerIds.has(u.id);
+            let isNearby = false;
+
+            if (!isFollower && lat != null && lng != null) {
+              const locsToCheck = [];
+              if (u.home_lat != null && u.home_lng != null) locsToCheck.push({ lat: Number(u.home_lat), lng: Number(u.home_lng) });
+              if (u.office_lat != null && u.office_lng != null) locsToCheck.push({ lat: Number(u.office_lat), lng: Number(u.office_lng) });
+
+              for (const loc of locsToCheck) {
+                const distance = haversineDistanceMeters(Number(lat), Number(lng), loc.lat, loc.lng);
+                if (distance <= 2000) {
+                  isNearby = true;
+                  break;
+                }
+              }
+            }
+
+            if (isFollower || isNearby) {
+              const posterName = user.anonymous_name || "A neighbor";
+              await sendNotification(u.id, {
+                title: isFollower ? `New post from ${posterName}` : "New Post in your Neighborhood",
+                body: `"${questionBody.trim().slice(0, 80)}${questionBody.trim().length > 80 ? "..." : ""}"`,
+                url: "/?tab=forum",
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to notify users of new forum post:", e);
+      }
+    })();
+  }
+
   if (!isForum) {
     let targets: { question_id: string; professional_id: string }[] = [];
 

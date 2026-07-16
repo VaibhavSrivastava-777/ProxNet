@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendNotification } from "@/lib/notifications";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -79,6 +80,15 @@ export async function POST(request: Request) {
       });
 
     if (errIns) return NextResponse.json({ error: errIns.message }, { status: 500 });
+
+    // Send follower notification
+    const followerName = user.anonymous_name || "A neighbor";
+    sendNotification(targetUserId, {
+      title: "New Follower",
+      body: `${followerName} is now following you.`,
+      url: "/profile",
+    }).catch((e) => console.error("Failed to send follow notification:", e));
+
     return NextResponse.json({ followed: true });
   }
 }
