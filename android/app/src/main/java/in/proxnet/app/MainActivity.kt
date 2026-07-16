@@ -23,6 +23,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import android.provider.ContactsContract
 
 class MainActivity : AppCompatActivity() {
 
@@ -222,6 +223,81 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val PERMISSIONS_REQUEST_READ_CONTACTS = 100
+
+    fun requestContactsPermissionAndFetch() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_CONTACTS), PERMISSIONS_REQUEST_READ_CONTACTS)
+            } else {
+                fetchAndSendContacts()
+            }
+        } else {
+            fetchAndSendContacts()
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 101) {
+            return
+        }
+        if (requestCode == PERMISSIONS_REQUEST_READ_CONTACTS) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                fetchAndSendContacts()
+            } else {
+                webView.post {
+                    webView.evaluateJavascript("javascript:if(window.onAndroidContactsError){ window.onAndroidContactsError('Permission denied'); }", null)
+                }
+            }
+        }
+    }
+
+    private fun fetchAndSendContacts() {
+        Thread {
+            try {
+                val contactsList = mutableListOf<String>()
+                val resolver = contentResolver
+                val cursor = resolver.query(
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    arrayOf(
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                        ContactsContract.CommonDataKinds.Phone.NUMBER
+                    ),
+                    null, null,
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
+                )
+                
+                cursor?.use {
+                    val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                    val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                    
+                    while (it.moveToNext()) {
+                        if (nameIndex >= 0 && numberIndex >= 0) {
+                            val name = it.getString(nameIndex) ?: ""
+                            val number = it.getString(numberIndex) ?: ""
+                            if (name.isNotEmpty() && number.isNotEmpty()) {
+                                val escapedName = name.replace("\"", "\\\"").replace("\n", " ")
+                                val escapedNumber = number.replace("\"", "\\\"").replace("\n", " ")
+                                contactsList.add("{\"name\":\"$escapedName\",\"phoneOrEmail\":\"$escapedNumber\"}")
+                            }
+                        }
+                    }
+                }
+                
+                val jsonArrayString = "[" + contactsList.joinToString(",") + "]"
+                webView.post {
+                    webView.evaluateJavascript("javascript:if(window.onAndroidContactsReady){ window.onAndroidContactsReady('$jsonArrayString'); }", null)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ProxNetAndroid", "Error querying contacts: ${e.message}")
+                webView.post {
+                    webView.evaluateJavascript("javascript:if(window.onAndroidContactsError){ window.onAndroidContactsError('${e.message}'); }", null)
+                }
+            }
+        }.start()
+    }
+
     private fun handleExternalIntent(url: String): Boolean {
         if (url.startsWith("http://") || url.startsWith("https://")) {
             return false
@@ -260,6 +336,13 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun startGoogleSignIn() {
             activity.launchGoogleSignIn()
+        }
+
+        @JavascriptInterface
+        fun startContactsImport() {
+            activity.runOnUiThread {
+                activity.requestContactsPermissionAndFetch()
+            }
         }
     }
 }

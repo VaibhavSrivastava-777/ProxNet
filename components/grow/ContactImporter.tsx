@@ -34,10 +34,52 @@ export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
     }
   };
 
+  const loadGoogleScript = (): Promise<void> => {
+    return new Promise((resolve) => {
+      if ((window as any).google?.accounts?.oauth2) {
+        resolve();
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.onload = () => resolve();
+      document.head.appendChild(script);
+    });
+  };
+
   const handleNativeImport = async () => {
     setErrorMsg("");
-    // Check for navigator.contacts support
     const nav = navigator as any;
+
+    // 1. Check if running inside native Android App (via bridge)
+    if ((window as any).AndroidBridge && (window as any).AndroidBridge.startContactsImport) {
+      setLoading(true);
+
+      (window as any).onAndroidContactsReady = (jsonString: string) => {
+        try {
+          const parsed = JSON.parse(jsonString);
+          setContacts(parsed);
+          setImported(true);
+          trackShare("contacts_native");
+        } catch (e: any) {
+          setErrorMsg("Failed to parse device contacts.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      (window as any).onAndroidContactsError = (errMessage: string) => {
+        setErrorMsg("Failed to import contacts: " + errMessage);
+        setLoading(false);
+      };
+
+      (window as any).AndroidBridge.startContactsImport();
+      return;
+    }
+
+    // 2. Fallback to browser W3C Contact Picker API
     if (!nav.contacts || !nav.contacts.select) {
       setErrorMsg("Contact Picker API is not supported on this browser. Try manual input or Google Contacts.");
       return;
@@ -74,32 +116,66 @@ export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
     }
   };
 
-  const handleGoogleImport = () => {
+  const handleGoogleImport = async () => {
     setErrorMsg("");
     setLoading(true);
-    // Simulate Google Contacts OAuth & API integration fetch
-    setTimeout(() => {
+    try {
+      await loadGoogleScript();
+      
+      const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "901915190293-u5g61v30p01epas6vtr3pdt5v5q9bmbd.apps.googleusercontent.com";
+      if (!clientId) {
+        throw new Error("Google Client ID is not configured.");
+      }
+
+      const client = (window as any).google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: "https://www.googleapis.com/auth/contacts.readonly",
+        callback: async (tokenResponse: any) => {
+          if (tokenResponse.error) {
+            setErrorMsg("Google login failed: " + tokenResponse.error_description);
+            setLoading(false);
+            return;
+          }
+          
+          try {
+            const res = await fetch(
+              "https://people.googleapis.com/v1/people/me/connections?personFields=names,emailAddresses,phoneNumbers&pageSize=150",
+              {
+                headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+              }
+            );
+            if (!res.ok) {
+              throw new Error("Failed to load Google Contacts list.");
+            }
+            const body = await res.json();
+            const connections = body.connections || [];
+            
+            const formatted: Contact[] = connections.map((person: any) => {
+              const name = person.names?.[0]?.displayName || "Unnamed";
+              const email = person.emailAddresses?.[0]?.value || "";
+              const phone = person.phoneNumbers?.[0]?.value || "";
+              return {
+                name,
+                phoneOrEmail: phone || email || "N/A"
+              };
+            }).filter((c: Contact) => c.phoneOrEmail !== "N/A");
+
+            setContacts(formatted);
+            setImported(true);
+            trackShare("contacts_google");
+          } catch (err: any) {
+            setErrorMsg(err.message || "Failed to retrieve contacts from Google.");
+          } finally {
+            setLoading(false);
+          }
+        }
+      });
+
+      client.requestAccessToken();
+    } catch (e: any) {
+      setErrorMsg(e.message || "Failed to initialize Google authentication.");
       setLoading(false);
-      setContacts([
-        { name: "Rahul Sharma", phoneOrEmail: "rahul.sharma@gmail.com" },
-        { name: "Priya Krishna", phoneOrEmail: "+91 98765 43210" },
-        { name: "Ankit Singh", phoneOrEmail: "ankit.singh@yahoo.com" },
-        { name: "Sneha Patel", phoneOrEmail: "+91 98123 45678" },
-        { name: "Amit Pachauri", phoneOrEmail: "amit.pach@gmail.com" },
-        { name: "Kallol Kundu", phoneOrEmail: "kallol.k@outlook.com" },
-        { name: "Deepthi B.", phoneOrEmail: "+91 94440 12345" },
-        { name: "Sachin N.", phoneOrEmail: "sachin.n@gmail.com" },
-        { name: "Ankita Malhotra", phoneOrEmail: "+91 99100 88234" },
-        { name: "Rohit Kumar", phoneOrEmail: "rohit.k@gmail.com" },
-        { name: "Siddhant Jain", phoneOrEmail: "sid.jain@iiml.org" },
-        { name: "Saranya J.", phoneOrEmail: "+91 98840 98765" },
-        { name: "Suyash Srivastava", phoneOrEmail: "suyash.sri@gmail.com" },
-        { name: "Stella Rani", phoneOrEmail: "+91 98450 11223" },
-        { name: "Varun Attrey", phoneOrEmail: "varun.attrey@gmail.com" }
-      ]);
-      setImported(true);
-      trackShare("contacts_google");
-    }, 1500);
+    }
   };
 
   const handleManualAdd = (e: React.FormEvent) => {
