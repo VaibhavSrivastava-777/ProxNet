@@ -318,7 +318,16 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     }
   };
 
-  const handleTabClick = async (tabHref: string) => {
+  const handleTabClick = async (e: React.MouseEvent, tabHref: string) => {
+    const tabPaths = ["/proximity", "/qa", "/forum", "/grow"];
+    const isOnTabRoute = tabPaths.includes(pathname);
+
+    if (isOnTabRoute && tabPaths.includes(tabHref)) {
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent("tabchange", { detail: tabHref }));
+      window.history.pushState(null, "", tabHref);
+    }
+
     let targetNotifs = [];
     if (tabHref === "/qa") {
       targetNotifs = inAppNotifications.filter(
@@ -341,8 +350,8 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ids }),
         });
-      } catch (e) {
-        console.error("Failed to mark notifications as read", e);
+      } catch (err) {
+        console.error("Failed to mark notifications as read", err);
       }
     }
   };
@@ -666,7 +675,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                     <Link
                       key={l.href}
                       href={l.href}
-                      onClick={() => handleTabClick(l.href)}
+                      onClick={(e) => handleTabClick(e, l.href)}
                       className="flex h-full items-center gap-2 px-4 text-sm font-medium transition-colors hover:bg-[var(--color-surface-hover)] relative"
                       style={{
                         color: active ? "var(--color-primary)" : "var(--color-text-secondary)",
@@ -898,7 +907,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
               <Link
                 key={l.href}
                 href={l.href}
-                onClick={() => handleTabClick(l.href)}
+                onClick={(e) => handleTabClick(e, l.href)}
                 className="flex flex-1 flex-col items-center justify-center gap-1 h-full transition-colors relative"
                 style={{
                   color: active ? "var(--color-primary)" : "var(--color-text-tertiary)",

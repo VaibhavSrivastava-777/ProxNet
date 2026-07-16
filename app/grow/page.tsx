@@ -14,5 +14,5 @@ export default async function GrowPage() {
     redirect("/profile?onboarding=true");
   }
 
-  return <GrowClient />;
+  redirect("/qa?tab=grow");
 }

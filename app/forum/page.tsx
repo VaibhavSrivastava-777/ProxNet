@@ -16,9 +16,5 @@ export default async function ForumPage() {
     redirect("/profile?onboarding=true");
   }
 
-  return (
-    <div className="mx-auto max-w-4xl p-4 md:p-8 animate-fadeIn" style={{ paddingBottom: "3rem" }}>
-      <LocalForumFeed />
-    </div>
-  );
+  redirect("/qa?tab=forum");
 }
