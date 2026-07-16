@@ -45,12 +45,12 @@ export function ProximityMap() {
 
   // Typewriter animated search placeholder
   const placeholderPhrases = [
-    "anyone from Google?",
-    "anyone working in Banking domain?",
-    "anyone having office in Manyata?",
-    "anyone from Amazon?",
-    "anyone working in Fintech?",
-    "anyone with office in Indiranagar?",
+    "Google folks?",
+    "Banking roles?",
+    "Manyata offices?",
+    "Amazon workers?",
+    "Fintech developers?",
+    "Indiranagar neighbors?",
   ];
   const animatedPlaceholder = useAnimatedPlaceholder(placeholderPhrases, "Ask ProxNet for ");
 

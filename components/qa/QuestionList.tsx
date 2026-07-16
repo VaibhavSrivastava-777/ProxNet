@@ -184,12 +184,12 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   const [isNavigating, setIsNavigating] = useState(false);
 
   const phrases = [
-    "anyone from Google?",
-    "anyone working in Banking domain?",
-    "anyone having office in Manyata?",
-    "anyone from Amazon?",
-    "anyone working in Fintech?",
-    "anyone with office in Indiranagar?",
+    "Google folks?",
+    "Banking roles?",
+    "Manyata offices?",
+    "Amazon workers?",
+    "Fintech developers?",
+    "Indiranagar neighbors?",
   ];
   const animatedPlaceholder = useAnimatedPlaceholder(phrases, "Ask ProxNet for ");
 
