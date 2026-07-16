@@ -113,6 +113,24 @@ export async function PATCH(request: Request) {
   if (body.active_location !== undefined) updates.active_location = body.active_location;
   if (body.visibility !== undefined) updates.visibility = body.visibility;
 
+  if (body.anonymous_name !== undefined) {
+    const cleanName = body.anonymous_name?.trim();
+    if (!cleanName) {
+      return NextResponse.json({ error: "Anonymous name cannot be blank." }, { status: 400 });
+    }
+    const { data: existing } = await supabase
+      .from("users")
+      .select("id")
+      .eq("anonymous_name", cleanName)
+      .neq("id", user.id)
+      .maybeSingle();
+
+    if (existing) {
+      return NextResponse.json({ error: "This anonymous name is already taken. Please choose another one." }, { status: 400 });
+    }
+    updates.anonymous_name = cleanName;
+  }
+
   if (body.company !== undefined || body.job_title !== undefined || body.about !== undefined || body.resume_text !== undefined) {
     const finalCompany = body.company !== undefined ? body.company : currentUser?.company;
     const finalTitle = body.job_title !== undefined ? body.job_title : currentUser?.job_title;

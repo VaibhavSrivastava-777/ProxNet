@@ -165,6 +165,35 @@ export function ProfileForm({ initialUser }: Props) {
   const [uploadingResume, setUploadingResume] = useState(false);
 
   const [showErrors, setShowErrors] = useState(false);
+  const [followStats, setFollowStats] = useState({ followerCount: 0, followingCount: 0 });
+
+  useEffect(() => {
+    fetch("/api/follow")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.followerCount !== undefined) {
+          setFollowStats({
+            followerCount: data.followerCount,
+            followingCount: data.followingCount,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleShareInvite = () => {
+    const inviteLink = `${window.location.origin}/join/${user.invite_code || ""}`;
+    if (navigator.share) {
+      navigator.share({
+        title: "Join me on ProxNet",
+        text: "Connect with professional neighbors near you on ProxNet!",
+        url: inviteLink,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(inviteLink);
+      alert("Invite link copied to clipboard: " + inviteLink);
+    }
+  };
 
   const visibility = user.visibility as UserVisibility;
 
@@ -238,6 +267,7 @@ export function ProfileForm({ initialUser }: Props) {
         office_lat: user.office_lat ? Number(user.office_lat) : null,
         office_lng: user.office_lng ? Number(user.office_lng) : null,
         office_name: user.office_name,
+        anonymous_name: user.anonymous_name,
         active_location: "home",
         visibility,
       }),
@@ -250,7 +280,8 @@ export function ProfileForm({ initialUser }: Props) {
       setEditing(false);
       router.push("/");
     } else {
-      setMessage("Failed to save profile.");
+      const errData = await res.json().catch(() => ({}));
+      setMessage(errData.error || "Failed to save profile.");
     }
   }
 
@@ -318,6 +349,7 @@ export function ProfileForm({ initialUser }: Props) {
         office_name: user.office_name,
         office_lat: user.office_lat ? Number(user.office_lat) : null,
         office_lng: user.office_lng ? Number(user.office_lng) : null,
+        anonymous_name: user.anonymous_name,
         active_location: "home",
         visibility,
       }),
@@ -330,7 +362,8 @@ export function ProfileForm({ initialUser }: Props) {
       setEditing(false);
       router.push("/");
     } else {
-      setMessage("Failed to save profile.");
+      const errData = await res.json().catch(() => ({}));
+      setMessage(errData.error || "Failed to save profile.");
     }
   }
 
@@ -490,6 +523,41 @@ export function ProfileForm({ initialUser }: Props) {
         </div>
       </div>
 
+      {/* Network Stats & Grow Nudge */}
+      <div className="flex flex-col gap-3 mb-6 animate-fadeInUp">
+        {/* Follow Stats Grid */}
+        <div className="card p-4 bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-xl shadow-sm flex items-center justify-around text-center divide-x divide-[var(--color-border-light)]" style={{ display: "flex", flexDirection: "row" }}>
+          <div className="flex-1">
+            <div className="text-xl font-extrabold text-[var(--color-primary)]">{followStats.followingCount}</div>
+            <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider mt-0.5">Following</div>
+          </div>
+          <div className="flex-grow flex-shrink flex-basis-0">
+            <div className="text-xl font-extrabold text-[var(--color-primary)]">{followStats.followerCount}</div>
+            <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider mt-0.5">Followers</div>
+          </div>
+        </div>
+
+        {/* Grow Nudge Card */}
+        <div className="card p-4 bg-[var(--color-accent-subtle)] border border-[var(--color-accent)]/20 rounded-xl shadow-sm flex flex-col gap-2">
+          <div className="flex items-center gap-2" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+            <span style={{ fontSize: 18 }}>🌱</span>
+            <span className="text-sm font-bold text-[var(--color-text)]">Grow your professional neighborhood</span>
+          </div>
+          <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed">
+            Invite colleagues and neighbors to join ProxNet to unlock more job referrals, carpools, and discussions near you!
+          </p>
+          <button
+            type="button"
+            onClick={handleShareInvite}
+            className="btn btn-sm btn-primary self-start mt-1 flex items-center gap-1.5 cursor-pointer border-none"
+            style={{ fontSize: 11, padding: "6px 14px", display: "inline-flex", alignItems: "center", width: "fit-content" }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 6 }}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            Share Invite Link
+          </button>
+        </div>
+      </div>
+
       {/* ---- Section: Personal Information ---- */}
       <CollapsibleSection icon={PersonIcon} title="Personal Information" defaultOpen>
         <div
@@ -515,6 +583,19 @@ export function ProfileForm({ initialUser }: Props) {
           <div>
             <label className="label">Email</label>
             <input className="input" value={user.email ?? ""} disabled />
+          </div>
+
+          <div>
+            <label className="label">Anonymous Alias Name</label>
+            <input
+              className="input"
+              value={user.anonymous_name || ""}
+              placeholder="e.g. Neighbour-1234"
+              onChange={(e) => setUser({ ...user, anonymous_name: e.target.value })}
+            />
+            <p className="text-[10px] text-[var(--color-text-secondary)] mt-1">
+              Used anonymously on the local forum feed to protect your privacy.
+            </p>
           </div>
 
           <div>

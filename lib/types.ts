@@ -35,6 +35,8 @@ export interface User {
   invite_code: string | null;
   invited_by: string | null;
   network_points: number;
+  anonymous_name: string | null;
+  embedding: number[] | null;
   created_at: string;
   updated_at: string;
 }

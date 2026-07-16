@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { companyLogoUrl } from "@/lib/anonymize";
+import { useAnimatedPlaceholder } from "@/lib/hooks/useAnimatedPlaceholder";
 
 interface IncomingQuestion {
   id: string;
@@ -181,6 +182,16 @@ const fetcher = (url: string) => fetch(url).then((res) => {
 export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   const router = useRouter();
   const [isNavigating, setIsNavigating] = useState(false);
+
+  const phrases = [
+    "anyone from Google?",
+    "anyone working in Banking domain?",
+    "anyone having office in Manyata?",
+    "anyone from Amazon?",
+    "anyone working in Fintech?",
+    "anyone with office in Indiranagar?",
+  ];
+  const animatedPlaceholder = useAnimatedPlaceholder(phrases, "Ask ProxNet for ");
 
   useEffect(() => {
     setIsNavigating(false);
@@ -408,17 +419,6 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
         </div>
       )}
 
-      {/* Page Title & FAB */}
-      <div className="flex justify-between items-center mb-2 px-1">
-        <h1 className="text-h1 m-0 text-[var(--color-text)]">Chats</h1>
-        <button
-          onClick={() => onOpenDirectQuestion?.(undefined)}
-          className="w-10 h-10 rounded-full bg-[var(--color-primary)] text-white shadow-md hover:bg-[var(--color-primary-hover)] transition-all flex items-center justify-center shrink-0"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-      </div>
-
       {/* WhatsApp Style Search Bar */}
       <div className="relative mb-2 shrink-0">
         <span className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-[var(--color-text-secondary)]">
@@ -431,7 +431,7 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Ask ProxNetAI or Search"
+          placeholder={animatedPlaceholder}
           className="w-full pl-11 pr-4 py-3 rounded-full bg-[var(--color-surface-secondary)] border-0 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] placeholder-[var(--color-text-tertiary)] text-[var(--color-text)] shadow-inner transition-all"
         />
       </div>
@@ -690,6 +690,19 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
           </div>
         )}
       </div>
+
+      {/* Floating bottom pencil write icon to create new chat */}
+      <button
+        onClick={() => onOpenDirectQuestion?.(undefined)}
+        className="fixed bottom-24 right-6 w-14 h-14 bg-gradient-to-tr from-[var(--color-primary)] to-[#0077ff] text-white rounded-full shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center z-40 border-none cursor-pointer"
+        aria-label="New Chat"
+        style={{ boxShadow: "0 4px 16px rgba(0,101,191,0.4)" }}
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
+        </svg>
+      </button>
     </div>
   );
 }

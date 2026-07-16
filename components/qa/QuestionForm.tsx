@@ -15,6 +15,7 @@ interface Props {
     job_title: string;
     company: string;
   };
+  initialMsg?: string;
   onPosted?: () => void;
 }
 
@@ -24,10 +25,11 @@ export function QuestionForm({
   defaultRadius = 5000,
   fixedCompany,
   targetUser,
+  initialMsg,
   onPosted,
 }: Props) {
   const router = useRouter();
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(initialMsg || "");
   const [companyFilter, setCompanyFilter] = useState(fixedCompany || "");
   const [titleFilter, setTitleFilter] = useState("");
   const [radius, setRadius] = useState(defaultRadius);

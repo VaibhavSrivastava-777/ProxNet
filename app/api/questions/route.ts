@@ -7,9 +7,12 @@ import type { User } from "@/lib/types";
 import { sendNotification } from "@/lib/notifications";
 import { awardPoints } from "@/lib/award-points";
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const locationMode = searchParams.get("locationMode") || "home";
 
   const supabase = createAdminClient();
 
@@ -128,10 +131,17 @@ export async function GET() {
   });
   incomingWithActivity.sort((a, b) => new Date(b.latest_activity_at).getTime() - new Date(a.latest_activity_at).getTime());
 
-  // Fetch forum questions
+  // Fetch follows for current user
+  const { data: userFollows } = await supabase
+    .from("user_follows")
+    .select("following_id")
+    .eq("follower_id", user.id);
+  const followedUserIds = (userFollows ?? []).map((f) => f.following_id);
+
+  // Fetch forum questions with poster details
   const { data: allForumQuestions } = await supabase
     .from("questions")
-    .select("*, question_comments(id)")
+    .select("*, users(anonymous_name, job_title, company), question_comments(id)")
     .eq("type", "forum")
     .eq("status", "open")
     .order("created_at", { ascending: false })
@@ -142,21 +152,47 @@ export async function GET() {
     (currentLocations ?? []).map((l) => [l.user_id, { lat: Number(l.lat), lng: Number(l.lng) }])
   );
   
-  const myCurrent = locationMap.get(user.id);
-  const myLoc = resolveUserLocation(user as User, myCurrent?.lat, myCurrent?.lng);
+  // Resolve user target location based on locationMode
+  let myLoc: { lat: number; lng: number } | null = null;
+  if (locationMode === "office") {
+    if (user.office_lat != null && user.office_lng != null) {
+      myLoc = { lat: Number(user.office_lat), lng: Number(user.office_lng) };
+    }
+  } else if (locationMode === "current") {
+    const cur = locationMap.get(user.id);
+    if (cur) {
+      myLoc = { lat: cur.lat, lng: cur.lng };
+    }
+  }
+  
+  // Default to home if office/current not set or home selected
+  if (!myLoc && user.home_lat != null && user.home_lng != null) {
+    myLoc = { lat: Number(user.home_lat), lng: Number(user.home_lng) };
+  }
 
-  const forumWithActivity = (allForumQuestions ?? []).filter(q => {
-    if (!myLoc) return false;
-    const dist = haversineDistanceMeters(q.center_lat, q.center_lng, myLoc.lat, myLoc.lng);
-    return dist <= q.radius_meters;
-  }).map(q => ({
-    id: q.id,
-    body: q.body,
-    asker_alias: `Neighbor-${q.asker_id.slice(0, 4)}`,
-    created_at: q.created_at,
-    likes_count: q.likes_count || 0,
-    comments_count: q.question_comments?.length || 0,
-  }));
+  const forumWithActivity = (allForumQuestions ?? [])
+    .filter((q) => {
+      // Always show posts from users the current user follows
+      if (followedUserIds.includes(q.asker_id)) return true;
+
+      // Otherwise filter posts within 2km (2000m)
+      if (!myLoc) return false;
+      const dist = haversineDistanceMeters(Number(q.center_lat), Number(q.center_lng), myLoc.lat, myLoc.lng);
+      return dist <= 2000;
+    })
+    .map((q) => {
+      const u = q.users as any;
+      return {
+        id: q.id,
+        body: q.body,
+        anonymous_name: u?.anonymous_name || `Neighbour-${q.asker_id.slice(0, 4)}`,
+        poster_title: u?.job_title || "Professional",
+        poster_company: u?.company || "Nearby",
+        created_at: q.created_at,
+        likes_count: q.likes_count || 0,
+        comments_count: q.question_comments?.length || 0,
+      };
+    });
 
   let suggestions: any[] = [];
   if (myLoc && user.job_title) {
