@@ -1,10 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export function useAnimatedPlaceholder(phrases: string[], prefix: string = "Ask ProxNet for ") {
   const [placeholder, setPlaceholder] = useState("");
+  const phrasesRef = useRef(phrases);
+  phrasesRef.current = phrases;
 
   useEffect(() => {
-    if (!phrases || phrases.length === 0) return;
+    const phrasesList = phrasesRef.current;
+    if (!phrasesList || phrasesList.length === 0) return;
     
     let phraseIndex = 0;
     let charIndex = 0;
@@ -12,7 +15,8 @@ export function useAnimatedPlaceholder(phrases: string[], prefix: string = "Ask 
     let timeout: NodeJS.Timeout;
 
     const tick = () => {
-      const currentPhrase = phrases[phraseIndex];
+      const currentPhrase = phrasesList[phraseIndex];
+      if (!currentPhrase) return;
       const fullText = prefix + currentPhrase;
 
       if (!isDeleting) {
@@ -32,7 +36,7 @@ export function useAnimatedPlaceholder(phrases: string[], prefix: string = "Ask 
 
         if (charIndex === 0) {
           isDeleting = false;
-          phraseIndex = (phraseIndex + 1) % phrases.length;
+          phraseIndex = (phraseIndex + 1) % phrasesList.length;
         }
       }
 
@@ -42,7 +46,7 @@ export function useAnimatedPlaceholder(phrases: string[], prefix: string = "Ask 
 
     tick();
     return () => clearTimeout(timeout);
-  }, [phrases, prefix]);
+  }, [prefix]);
 
   return placeholder;
 }
