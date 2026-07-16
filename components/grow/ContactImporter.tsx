@@ -119,6 +119,32 @@ export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
   const handleGoogleImport = async () => {
     setErrorMsg("");
     setLoading(true);
+
+    // 1. Check if running inside native Android App (via bridge)
+    if ((window as any).AndroidBridge && (window as any).AndroidBridge.startGoogleContactsImport) {
+      (window as any).onAndroidContactsReady = (jsonString: string) => {
+        try {
+          const parsed = JSON.parse(jsonString);
+          setContacts(parsed);
+          setImported(true);
+          trackShare("contacts_google");
+        } catch (e: any) {
+          setErrorMsg("Failed to parse Google contacts.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      (window as any).onAndroidContactsError = (errMessage: string) => {
+        setErrorMsg("Failed to import Google contacts: " + errMessage);
+        setLoading(false);
+      };
+
+      (window as any).AndroidBridge.startGoogleContactsImport();
+      return;
+    }
+
+    // 2. Fallback to client-side Google API OAuth GIS flow in browser
     try {
       await loadGoogleScript();
       

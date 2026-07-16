@@ -24,6 +24,8 @@ import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.provider.ContactsContract
+import com.google.android.gms.common.api.Scope
+import com.google.android.gms.auth.GoogleAuthUtil
 
 class MainActivity : AppCompatActivity() {
 
@@ -32,6 +34,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var googleSignInClient: GoogleSignInClient
     private val RC_SIGN_IN = 9001
+    private val RC_CONTACTS_SIGN_IN = 9002
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -220,6 +223,22 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 android.util.Log.e("ProxNetAndroid", "Google Sign-In failed: ${e.message}")
             }
+        } else if (requestCode == RC_CONTACTS_SIGN_IN) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                val googleAccount = account?.account
+                if (googleAccount != null) {
+                    fetchGoogleContactsNatively(googleAccount)
+                } else {
+                    throw Exception("Google account is null")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ProxNetAndroid", "Google Contacts Sign-In failed: ${e.message}")
+                webView.post {
+                    webView.evaluateJavascript("javascript:if(window.onAndroidContactsError){ window.onAndroidContactsError('${e.message}'); }", null)
+                }
+            }
         }
     }
 
@@ -298,6 +317,92 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
+    fun launchGoogleContactsSignIn() {
+        runOnUiThread {
+            val contactsScope = Scope("https://www.googleapis.com/auth/contacts.readonly")
+            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .requestScopes(contactsScope)
+                .build()
+            val signInClient = GoogleSignIn.getClient(this, gso)
+            signInClient.signOut().addOnCompleteListener {
+                val intent = signInClient.signInIntent
+                startActivityForResult(intent, RC_CONTACTS_SIGN_IN)
+            }
+        }
+    }
+
+    private fun fetchGoogleContactsNatively(account: android.accounts.Account) {
+        Thread {
+            try {
+                val token = GoogleAuthUtil.getToken(this, account, "oauth2:https://www.googleapis.com/auth/contacts.readonly")
+                if (token.isNullOrEmpty()) {
+                    throw Exception("Failed to retrieve Google OAuth access token")
+                }
+                
+                val url = java.net.URL("https://people.googleapis.com/v1/people/me/connections?personFields=names,emailAddresses,phoneNumbers&pageSize=150")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.setRequestProperty("Accept", "application/json")
+                
+                if (conn.responseCode == 200) {
+                    val response = conn.inputStream.bufferedReader().use { it.readText() }
+                    val jsonResponse = org.json.JSONObject(response)
+                    val connections = jsonResponse.optJSONArray("connections")
+                    val contactsList = mutableListOf<String>()
+                    
+                    if (connections != null) {
+                        for (i in 0 until connections.length()) {
+                            val person = connections.getJSONObject(i)
+                            
+                            val names = person.optJSONArray("names")
+                            val displayName = if (names != null && names.length() > 0) {
+                                names.getJSONObject(0).optString("displayName", "Unnamed")
+                            } else {
+                                "Unnamed"
+                            }
+                            
+                            val emails = person.optJSONArray("emailAddresses")
+                            val emailVal = if (emails != null && emails.length() > 0) {
+                                emails.getJSONObject(0).optString("value", "")
+                            } else {
+                                ""
+                            }
+                            
+                            val phones = person.optJSONArray("phoneNumbers")
+                            val phoneVal = if (phones != null && phones.length() > 0) {
+                                phones.getJSONObject(0).optString("value", "")
+                            } else {
+                                ""
+                            }
+                            
+                            val contactVal = if (phoneVal.isNotEmpty()) phoneVal else emailVal
+                            if (contactVal.isNotEmpty()) {
+                                val escapedName = displayName.replace("\"", "\\\"").replace("\n", " ")
+                                val escapedContact = contactVal.replace("\"", "\\\"").replace("\n", " ")
+                                contactsList.add("{\"name\":\"$escapedName\",\"phoneOrEmail\":\"$escapedContact\"}")
+                            }
+                        }
+                    }
+                    
+                    val jsonArrayString = "[" + contactsList.joinToString(",") + "]"
+                    webView.post {
+                        webView.evaluateJavascript("javascript:if(window.onAndroidContactsReady){ window.onAndroidContactsReady('$jsonArrayString'); }", null)
+                    }
+                } else {
+                    val errorMsg = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP ${conn.responseCode}"
+                    throw Exception("Google People API returned: $errorMsg")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ProxNetAndroid", "Failed to fetch Google contacts natively: ${e.message}")
+                webView.post {
+                    webView.evaluateJavascript("javascript:if(window.onAndroidContactsError){ window.onAndroidContactsError('${e.message}'); }", null)
+                }
+            }
+        }.start()
+    }
+
     private fun handleExternalIntent(url: String): Boolean {
         if (url.startsWith("http://") || url.startsWith("https://")) {
             return false
@@ -342,6 +447,13 @@ class MainActivity : AppCompatActivity() {
         fun startContactsImport() {
             activity.runOnUiThread {
                 activity.requestContactsPermissionAndFetch()
+            }
+        }
+
+        @JavascriptInterface
+        fun startGoogleContactsImport() {
+            activity.runOnUiThread {
+                activity.launchGoogleContactsSignIn()
             }
         }
     }
