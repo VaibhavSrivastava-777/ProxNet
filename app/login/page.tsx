@@ -87,6 +87,22 @@ export default function LoginPage() {
           }}>®</sup>
         </h2>
 
+        {/* Tagline */}
+        <p
+          className="text-caption"
+          style={{
+            margin: "6px 0 0 0",
+            fontSize: "0.75rem",
+            color: "var(--color-text-secondary)",
+            fontWeight: 600,
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            opacity: 0.75
+          }}
+        >
+          Connect Anonymously
+        </p>
+
         {/* Divider */}
         <hr
           className="divider"

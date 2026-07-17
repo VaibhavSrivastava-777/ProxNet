@@ -25,9 +25,14 @@ export default function Loading() {
             <span className="w-2 h-2 rounded-full bg-[var(--color-primary)] animate-bounce" style={{ animationDelay: '150ms' }} />
             <span className="w-2 h-2 rounded-full bg-[var(--color-primary)] animate-bounce" style={{ animationDelay: '300ms' }} />
           </div>
-          <span className="text-xs font-bold tracking-widest text-[var(--color-primary)] uppercase opacity-80">
-            ProxNet
-          </span>
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-xs font-bold tracking-widest text-[var(--color-primary)] uppercase opacity-80">
+              ProxNet
+            </span>
+            <span className="text-[10px] tracking-wide text-[var(--color-text-secondary)] font-semibold uppercase opacity-65">
+              Connect Anonymously
+            </span>
+          </div>
         </div>
       </div>
     </div>
