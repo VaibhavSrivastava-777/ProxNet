@@ -170,6 +170,98 @@ export function ProfileForm({ initialUser }: Props) {
   const [followStats, setFollowStats] = useState({ followerCount: 0, followingCount: 0 });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [fetchingLinkedInDetails, setFetchingLinkedInDetails] = useState(false);
+  const [fetchingGeoAddress, setFetchingGeoAddress] = useState(false);
+
+  const showName = !initialUser.full_name?.trim();
+  const showEmail = !initialUser.email?.trim();
+  const showCompany = !initialUser.company?.trim();
+  const showJobTitle = !initialUser.job_title?.trim();
+  const showPhoto = !initialUser.profile_photo_url?.trim();
+  const showLinkedIn = !initialUser.linkedin_profile_url?.trim();
+  const showHomeLocation = initialUser.home_lat == null || initialUser.home_lng == null;
+
+  const hasMissingFields =
+    showName ||
+    showEmail ||
+    showCompany ||
+    showJobTitle ||
+    showPhoto ||
+    showLinkedIn ||
+    showHomeLocation;
+  const showModal = hasMissingFields;
+
+  useEffect(() => {
+    // If onboarding modal is shown and home location is not set, request coordinates & format name
+    if (showModal && user.home_lat == null && user.home_lng == null) {
+      if (navigator.geolocation) {
+        setFetchingGeoAddress(true);
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            
+            setUser((prev) => ({
+              ...prev,
+              home_lat: lat,
+              home_lng: lng,
+            }));
+
+            const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+            if (apiKey) {
+              try {
+                const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`);
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data.results && data.results.length > 0) {
+                    const formatted = data.results[0].formatted_address;
+                    setUser((prev) => ({
+                      ...prev,
+                      home_name: formatted,
+                    }));
+                  }
+                }
+              } catch (err) {
+                console.error("Google reverse geocode failed:", err);
+              } finally {
+                setFetchingGeoAddress(false);
+              }
+            } else {
+              setFetchingGeoAddress(false);
+            }
+          },
+          (err) => {
+            console.warn("Geolocation request failed or denied:", err);
+            setFetchingGeoAddress(false);
+          }
+        );
+      }
+    }
+  }, [showModal]);
+
+  const handleLinkedInBlur = async (url: string) => {
+    if (!url || !url.includes("linkedin.com")) return;
+    setFetchingLinkedInDetails(true);
+    try {
+      const res = await fetch(`/api/profile/parse-linkedin?url=${encodeURIComponent(url)}`);
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success && result.data) {
+          const { full_name, company, job_title } = result.data;
+          setUser((prev) => ({
+            ...prev,
+            full_name: prev.full_name || full_name || "",
+            company: prev.company || company || "",
+            job_title: prev.job_title || job_title || "",
+          }));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to parse LinkedIn URL:", err);
+    } finally {
+      setFetchingLinkedInDetails(false);
+    }
+  };
 
   useEffect(() => {
     fetch("/api/follow")
@@ -247,37 +339,15 @@ export function ProfileForm({ initialUser }: Props) {
     }
   }, []);
 
-  const showName = !initialUser.full_name?.trim();
-  const showEmail = !initialUser.email?.trim();
-  const showCompany = !initialUser.company?.trim();
-  const showJobTitle = !initialUser.job_title?.trim();
-  const showResume = !initialUser.resume_url?.trim();
-  const showPhoto = !initialUser.profile_photo_url?.trim();
-  const showLinkedIn = !initialUser.linkedin_profile_url?.trim();
-  const showHomeLocation = initialUser.home_lat == null || initialUser.home_lng == null;
-  const showOfficeLocation = initialUser.office_lat == null || initialUser.office_lng == null;
 
-  const hasMissingFields =
-    showName ||
-    showEmail ||
-    showCompany ||
-    showJobTitle ||
-    showResume ||
-    showPhoto ||
-    showLinkedIn ||
-    showHomeLocation ||
-    showOfficeLocation;
-  const showModal = hasMissingFields;
 
   const isNameValid = !!user.full_name?.trim();
   const isEmailValid = !!user.email?.trim();
   const isCompanyValid = !!user.company?.trim();
   const isJobTitleValid = !!user.job_title?.trim();
-  const isResumeValid = !!user.resume_url?.trim();
   const isPhotoValid = !!user.profile_photo_url?.trim();
   const isLinkedInValid = !!user.linkedin_profile_url?.trim();
   const isHomeLocationValid = user.home_lat != null && user.home_lng != null;
-  const isOfficeLocationValid = user.office_lat != null && user.office_lng != null;
 
   const missingFields: string[] = [];
   if (!isNameValid) missingFields.push("Full Name");
@@ -285,21 +355,17 @@ export function ProfileForm({ initialUser }: Props) {
   if (!isCompanyValid) missingFields.push("Company");
   if (!isJobTitleValid) missingFields.push("Designation");
   if (!isHomeLocationValid) missingFields.push("Home Location");
-  if (!isOfficeLocationValid) missingFields.push("Office Location");
   if (!isLinkedInValid) missingFields.push("LinkedIn Link");
   if (!isPhotoValid) missingFields.push("Avatar Photo");
-  if (!isResumeValid) missingFields.push("Resume");
 
   const canSubmit =
     isNameValid &&
     isEmailValid &&
     isCompanyValid &&
     isJobTitleValid &&
-    isResumeValid &&
     isPhotoValid &&
     isLinkedInValid &&
     isHomeLocationValid &&
-    isOfficeLocationValid &&
     !aliasError;
 
   async function handleOnboardingComplete(e: React.MouseEvent) {
@@ -1197,7 +1263,7 @@ export function ProfileForm({ initialUser }: Props) {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto animate-scaleIn flex flex-col p-6 text-[var(--color-text)]">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-2xl max-w-lg w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden animate-scaleIn flex flex-col p-6 text-[var(--color-text)]">
             
             {/* Header */}
             <div className="flex items-center justify-between border-b border-[var(--color-border-light)] pb-4 mb-4">
@@ -1223,14 +1289,64 @@ export function ProfileForm({ initialUser }: Props) {
               <div>
                 <h4 className="font-semibold text-sm">{user.full_name}</h4>
                 <p className="text-xs text-[var(--color-text-secondary)]">{user.email}</p>
-                <span className="inline-block bg-[var(--color-success-bg)] text-[var(--color-success)] text-[10px] font-bold px-2 py-0.5 rounded-full mt-1.5 uppercase tracking-wider">
-                  LinkedIn Connected
-                </span>
+                {(() => {
+                  const isGoogle = user.linkedin_sub ? /^\d+$/.test(user.linkedin_sub) : false;
+                  return (
+                    <span className="inline-block bg-[var(--color-success-bg)] text-[var(--color-success)] text-[10px] font-bold px-2 py-0.5 rounded-full mt-1.5 uppercase tracking-wider">
+                      {isGoogle ? "Google Connected" : "LinkedIn Connected"}
+                    </span>
+                  );
+                })()}
               </div>
             </div>
 
             <div className="flex flex-col gap-5 flex-1 overflow-y-auto pr-1">
               
+              {/* Profile & Links Section (if photo or linkedin is missing) */}
+              {(showPhoto || showLinkedIn) && (
+                <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-4">
+                  <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5">
+                    🔗 Profile & Links
+                  </h4>
+                  {showLinkedIn && (
+                    <div>
+                      <label className="label font-semibold text-xs mb-1 flex items-center justify-between">
+                        <span>LinkedIn Profile URL <span className="text-red-500">*</span></span>
+                        {fetchingLinkedInDetails && <span className="text-[10px] text-[var(--color-primary)] animate-pulse">Parsing URL details...</span>}
+                      </label>
+                      <input
+                        className="input w-full"
+                        style={showErrors && !user.linkedin_profile_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
+                        value={user.linkedin_profile_url ?? ""}
+                        placeholder="https://linkedin.com/in/username"
+                        required
+                        onChange={(e) => setUser({ ...user, linkedin_profile_url: e.target.value })}
+                        onBlur={() => handleLinkedInBlur(user.linkedin_profile_url ?? "")}
+                      />
+                      {showErrors && !user.linkedin_profile_url?.trim() && (
+                        <p className="text-xs text-red-500 mt-1">LinkedIn profile URL is required</p>
+                      )}
+                    </div>
+                  )}
+                  {showPhoto && (
+                    <div>
+                      <label className="label font-semibold text-xs mb-1">Profile Photo URL <span className="text-red-500">*</span></label>
+                      <input
+                        className="input w-full"
+                        style={showErrors && !user.profile_photo_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
+                        value={user.profile_photo_url ?? ""}
+                        placeholder="https://example.com/photo.jpg"
+                        required
+                        onChange={(e) => setUser({ ...user, profile_photo_url: e.target.value })}
+                      />
+                      {showErrors && !user.profile_photo_url?.trim() && (
+                        <p className="text-xs text-red-500 mt-1">Profile photo URL is required</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Professional & Personal Details Section (if name, company or designation is missing) */}
               {(showName || showCompany || showJobTitle) && (
                 <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-4">
@@ -1288,193 +1404,65 @@ export function ProfileForm({ initialUser }: Props) {
                 </div>
               )}
 
-              {/* Profile & Links Section (if photo or linkedin is missing) */}
-              {(showPhoto || showLinkedIn) && (
-                <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-4">
-                  <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5">
-                    🔗 Profile & Links
-                  </h4>
-                  {showPhoto && (
-                    <div>
-                      <label className="label font-semibold text-xs mb-1">Profile Photo URL <span className="text-red-500">*</span></label>
-                      <input
-                        className="input w-full"
-                        style={showErrors && !user.profile_photo_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-                        value={user.profile_photo_url ?? ""}
-                        placeholder="https://example.com/photo.jpg"
-                        required
-                        onChange={(e) => setUser({ ...user, profile_photo_url: e.target.value })}
-                      />
-                      {showErrors && !user.profile_photo_url?.trim() && (
-                        <p className="text-xs text-red-500 mt-1">Profile photo URL is required</p>
-                      )}
-                    </div>
-                  )}
-                  {showLinkedIn && (
-                    <div>
-                      <label className="label font-semibold text-xs mb-1">LinkedIn Profile URL <span className="text-red-500">*</span></label>
-                      <input
-                        className="input w-full"
-                        style={showErrors && !user.linkedin_profile_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-                        value={user.linkedin_profile_url ?? ""}
-                        placeholder="https://linkedin.com/in/username"
-                        required
-                        onChange={(e) => setUser({ ...user, linkedin_profile_url: e.target.value })}
-                      />
-                      {showErrors && !user.linkedin_profile_url?.trim() && (
-                        <p className="text-xs text-red-500 mt-1">LinkedIn profile URL is required</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Location Settings Section (if home or office is missing) */}
-              {(showHomeLocation || showOfficeLocation) && (
+              {/* Location Settings Section (if home location is missing) */}
+              {showHomeLocation && (
                 <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-4">
                   <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5">
                     📍 Location Settings
                   </h4>
                   <p className="text-xs text-[var(--color-text-secondary)]">
-                    Provide both Home and Office locations to appear on the local proximity map. <span className="text-red-500">*</span>
+                    Provide your Home location to appear on the local proximity map. <span className="text-red-500">*</span>
                   </p>
                   
                   {/* Home Location */}
-                  {showHomeLocation && (
-                    <div className="border border-[var(--color-border-light)]/60 rounded-lg p-3 flex flex-col gap-3">
-                      <h5 className="font-semibold text-xs text-[var(--color-primary)] flex items-center gap-1">
-                        🏠 Home Location
-                      </h5>
-                      <div>
-                        <label className="label text-[11px] mb-1">Area / Apartment Complex Name</label>
-                        <LocationAutocomplete
-                          className="input w-full text-sm py-1.5"
-                          style={showErrors && !user.home_name?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-                          value={user.home_name ?? ""}
-                          placeholder="e.g. L&T South City"
-                          onChange={(val) => setUser({ ...user, home_name: val })}
-                          onSelect={({ name, lat, lng }) =>
-                            setUser({
-                              ...user,
-                              home_name: name,
-                              home_lat: lat,
-                              home_lng: lng,
-                            })
-                          }
-                        />
-                        {showErrors && !user.home_name?.trim() && (
-                          <p className="text-xs text-red-500 mt-1">Home location name is required</p>
-                        )}
-                      </div>
-                      <LocationPicker
-                        legend="Pin Home Position"
-                        lat={user.home_lat?.toString() ?? ""}
-                        lng={user.home_lng?.toString() ?? ""}
-                        defaultShowMap={false}
-                        onChange={(home_lat, home_lng) =>
+                  <div className="border border-[var(--color-border-light)]/60 rounded-lg p-3 flex flex-col gap-3">
+                    <h5 className="font-semibold text-xs text-[var(--color-primary)] flex items-center gap-1">
+                      🏠 Home Location {fetchingGeoAddress && <span className="text-[10px] text-[var(--color-primary)] animate-pulse font-normal">(Auto-fetching coordinates...)</span>}
+                    </h5>
+                    <div>
+                      <label className="label text-[11px] mb-1">Area / Apartment Complex Name</label>
+                      <LocationAutocomplete
+                        className="input w-full text-sm py-1.5"
+                        style={showErrors && !user.home_name?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
+                        value={user.home_name ?? ""}
+                        placeholder="e.g. L&T South City"
+                        onChange={(val) => setUser({ ...user, home_name: val })}
+                        onSelect={({ name, lat, lng }) =>
                           setUser({
                             ...user,
-                            home_lat: home_lat ? Number(home_lat) : null,
-                            home_lng: home_lng ? Number(home_lng) : null,
+                            home_name: name,
+                            home_lat: lat,
+                            home_lng: lng,
                           })
                         }
                       />
-                      {user.home_lat ? (
-                        <span className="text-[11px] text-[var(--color-success)] font-medium flex items-center gap-1">
-                          ✓ Home Coordinates Set ({user.home_lat.toFixed(4)}, {user.home_lng?.toFixed(4)})
-                        </span>
-                      ) : (
-                        showErrors && (
-                          <p className="text-xs text-red-500 mt-1">Please select and place a pin for your Home location</p>
-                        )
+                      {showErrors && !user.home_name?.trim() && (
+                        <p className="text-xs text-red-500 mt-1">Home location name is required</p>
                       )}
                     </div>
-                  )}
-
-                  {/* Office Location */}
-                  {showOfficeLocation && (
-                    <div className="border border-[var(--color-border-light)]/60 rounded-lg p-3 flex flex-col gap-3">
-                      <h5 className="font-semibold text-xs text-[var(--color-accent)] flex items-center gap-1">
-                        🏢 Office Location
-                      </h5>
-                      <div>
-                        <label className="label text-[11px] mb-1">Office Building / Business Park</label>
-                        <LocationAutocomplete
-                          className="input w-full text-sm py-1.5"
-                          style={showErrors && !user.office_name?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-                          value={user.office_name ?? ""}
-                          placeholder="e.g. Manyata Tech Park"
-                          onChange={(val) => setUser({ ...user, office_name: val })}
-                          onSelect={({ name, lat, lng }) =>
-                            setUser({
-                              ...user,
-                              office_name: name,
-                              office_lat: lat,
-                              office_lng: lng,
-                            })
-                          }
-                        />
-                        {showErrors && !user.office_name?.trim() && (
-                          <p className="text-xs text-red-500 mt-1">Office location name is required</p>
-                        )}
-                      </div>
-                      <LocationPicker
-                        legend="Pin Office Position"
-                        lat={user.office_lat?.toString() ?? ""}
-                        lng={user.office_lng?.toString() ?? ""}
-                        defaultShowMap={false}
-                        onChange={(office_lat, office_lng) =>
-                          setUser({
-                            ...user,
-                            office_lat: office_lat ? Number(office_lat) : null,
-                            office_lng: office_lng ? Number(office_lng) : null,
-                          })
-                        }
-                      />
-                      {user.office_lat ? (
-                        <span className="text-[11px] text-[var(--color-success)] font-medium flex items-center gap-1">
-                          ✓ Office Coordinates Set ({user.office_lat.toFixed(4)}, {user.office_lng?.toFixed(4)})
-                        </span>
-                      ) : (
-                        showErrors && (
-                          <p className="text-xs text-red-500 mt-1">Please select and place a pin for your Office location</p>
-                        )
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Resume Upload Section (if resume is missing) */}
-              {showResume && (
-                <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-3">
-                  <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5">
-                    📄 Resume Upload
-                  </h4>
-                  <p className="text-xs text-[var(--color-text-secondary)]">
-                    Upload your resume (PDF) to auto-fill your profile and dramatically improve your AI job matches.
-                  </p>
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-1 bg-[var(--color-surface-hover)] p-3 rounded-lg border border-[var(--color-primary-subtle)]">
-                    <input
-                      id="onboarding-resume-upload"
-                      type="file"
-                      accept="application/pdf"
-                      onChange={handleResumeUpload}
-                      disabled={uploadingResume}
-                      className="file-input file-input-primary file-input-bordered file-input-sm w-full max-w-xs shadow-sm text-xs"
-                      title="Upload Resume (PDF)"
-                      aria-label="Upload Resume (PDF)"
+                    <LocationPicker
+                      legend="Pin Home Position"
+                      lat={user.home_lat?.toString() ?? ""}
+                      lng={user.home_lng?.toString() ?? ""}
+                      defaultShowMap={false}
+                      onChange={(home_lat, home_lng) =>
+                        setUser({
+                          ...user,
+                          home_lat: home_lat ? Number(home_lat) : null,
+                          home_lng: home_lng ? Number(home_lng) : null,
+                        })
+                      }
                     />
-                    {uploadingResume && <span className="text-xs text-text-tertiary">Extracting text...</span>}
-                    {user.resume_url && !uploadingResume && (
-                      <span className="text-[var(--color-success)] text-xs font-semibold flex items-center gap-1">
-                        ✓ Uploaded successfully!
+                    {user.home_lat ? (
+                      <span className="text-[11px] text-[var(--color-success)] font-medium flex items-center gap-1">
+                        ✓ Home Coordinates Set ({user.home_lat.toFixed(4)}, {user.home_lng?.toFixed(4)})
                       </span>
+                    ) : (
+                      showErrors && (
+                        <p className="text-xs text-red-500 mt-1">Please select and place a pin for your Home location</p>
+                      )
                     )}
                   </div>
-                  {showErrors && !user.resume_url?.trim() && (
-                    <p className="text-xs text-red-500 mt-1">Resume PDF upload is required</p>
-                  )}
                 </div>
               )}
 

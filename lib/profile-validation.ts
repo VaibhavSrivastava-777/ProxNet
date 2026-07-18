@@ -18,22 +18,18 @@ export function isProfileIncomplete(user: any): boolean {
   const hasEmail = !!user.email?.trim();
   const hasCompany = !!user.company?.trim();
   const hasJobTitle = !!user.job_title?.trim();
-  const hasResume = !!user.resume_url?.trim();
   const hasPhoto = !!user.profile_photo_url?.trim();
   const hasLinkedIn = !!user.linkedin_profile_url?.trim();
   const hasHomeLocation = user.home_lat != null && user.home_lng != null;
-  const hasOfficeLocation = user.office_lat != null && user.office_lng != null;
 
   return !(
     hasName &&
     hasEmail &&
     hasCompany &&
     hasJobTitle &&
-    hasResume &&
     hasPhoto &&
     hasLinkedIn &&
-    hasHomeLocation &&
-    hasOfficeLocation
+    hasHomeLocation
   );
 }
 
