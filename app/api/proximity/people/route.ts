@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   // Fetch all active users (omit embedding completely)
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("id, company, job_title, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility")
+    .select("id, company, job_title, professional_bio, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility")
     .eq("is_active", true)
     .neq("id", user.id);
 
@@ -79,6 +79,7 @@ export async function GET(request: Request) {
         anonymous_name: u.anonymous_name || `Neighbour-${u.id.slice(0, 4)}`,
         job_title: u.job_title.trim(),
         company: u.company.trim(),
+        professional_bio: (u as any).professional_bio || null,
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
         distance: minDistance === Infinity ? null : minDistance,
         is_followed: followingIds.has(u.id),

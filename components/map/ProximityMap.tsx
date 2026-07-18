@@ -436,6 +436,21 @@ export function ProximityMap() {
               </div>
             </div>
 
+            {/* Professional Bio */}
+            {selectedPerson.professional_bio && (
+              <div className="p-3 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)]">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-[var(--color-primary)]">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                  </svg>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">Professional Bio</span>
+                </div>
+                <p className="text-xs text-[var(--color-text)] leading-relaxed m-0">
+                  {selectedPerson.professional_bio}
+                </p>
+              </div>
+            )}
+
             <div className="flex items-center gap-3 mt-1">
               <button
                 onClick={(e) => handleFollowToggle(e, selectedPerson)}

@@ -247,12 +247,13 @@ export function ProfileForm({ initialUser }: Props) {
       if (res.ok) {
         const result = await res.json();
         if (result.success && result.data) {
-          const { full_name, company, job_title } = result.data;
+          const { full_name, company, job_title, professional_bio } = result.data;
           setUser((prev) => ({
             ...prev,
             full_name: prev.full_name || full_name || "",
             company: prev.company || company || "",
             job_title: prev.job_title || job_title || "",
+            professional_bio: prev.professional_bio || professional_bio || "",
           }));
         }
       }
@@ -384,6 +385,7 @@ export function ProfileForm({ initialUser }: Props) {
         company: user.company,
         job_title: user.job_title,
         about: user.about,
+        professional_bio: user.professional_bio,
         resume_url: user.resume_url,
         resume_text: user.resume_text,
         phone_number: user.phone_number,
@@ -466,6 +468,7 @@ export function ProfileForm({ initialUser }: Props) {
         company: user.company,
         job_title: user.job_title,
         about: user.about,
+        professional_bio: user.professional_bio,
         resume_url: user.resume_url,
         resume_text: user.resume_text,
         phone_number: user.phone_number,

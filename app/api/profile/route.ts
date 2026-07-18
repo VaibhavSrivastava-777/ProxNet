@@ -70,6 +70,7 @@ export async function PATCH(request: Request) {
   if (body.company !== undefined) updates.company = body.company;
   if (body.job_title !== undefined) updates.job_title = body.job_title;
   if (body.about !== undefined) updates.about = body.about;
+  if (body.professional_bio !== undefined) updates.professional_bio = body.professional_bio;
   if (body.resume_url !== undefined) updates.resume_url = body.resume_url;
   if (body.resume_text !== undefined) updates.resume_text = body.resume_text;
   if (body.profile_photo_url !== undefined) updates.profile_photo_url = body.profile_photo_url;

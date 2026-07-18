@@ -18,6 +18,7 @@ export interface User {
   company: string | null;
   job_title: string | null;
   about: string | null;
+  professional_bio: string | null;
   resume_url: string | null;
   resume_text: string | null;
   profile_photo_url: string | null;
