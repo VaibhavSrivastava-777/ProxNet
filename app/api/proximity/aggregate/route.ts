@@ -13,8 +13,9 @@ export async function GET(request: Request) {
   const lat = parseFloat(searchParams.get("lat") ?? "");
   const lng = parseFloat(searchParams.get("lng") ?? "");
   const radius = parseInt(searchParams.get("radius") ?? "100", 10);
+  const unfiltered = searchParams.get("unfiltered") === "true";
 
-  if (Number.isNaN(lat) || Number.isNaN(lng) || Number.isNaN(radius)) {
+  if (Number.isNaN(lat) || Number.isNaN(lng) || (Number.isNaN(radius) && !unfiltered)) {
     return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
   }
 
@@ -58,13 +59,14 @@ export async function GET(request: Request) {
 
     for (const loc of locsToCheck) {
       const distance = haversineDistanceMeters(lat, lng, loc.lat, loc.lng);
-      if (distance <= radius && distance < minDistance) {
+      if (distance < minDistance) {
         minDistance = distance;
         bestLoc = loc;
       }
     }
 
     if (!bestLoc) continue;
+    if (!unfiltered && minDistance > radius) continue;
     const loc = bestLoc;
 
     const key = u.company.trim();

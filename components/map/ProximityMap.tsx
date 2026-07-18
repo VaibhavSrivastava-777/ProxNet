@@ -31,7 +31,7 @@ export function ProximityMap() {
   const router = useRouter();
   const [aiQuery, setAiQuery] = useState("");
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
-  const [radius, setRadius] = useState(5000);
+  const [filter2km, setFilter2km] = useState(false);
   const [localError, setLocalError] = useState("");
   const [locationMode, setLocationMode] = useState<"home" | "office">("home");
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
@@ -90,8 +90,16 @@ export function ProximityMap() {
     }
   }, [locationMode, profile]);
 
-  const aggregateApiUrl = center ? `/api/proximity/aggregate?lat=${center.lat}&lng=${center.lng}&radius=${radius}` : null;
-  const peopleApiUrl = center ? `/api/proximity/people?lat=${center.lat}&lng=${center.lng}&radius=${radius}` : null;
+  const aggregateApiUrl = center
+    ? (filter2km 
+        ? `/api/proximity/aggregate?lat=${center.lat}&lng=${center.lng}&radius=2000` 
+        : `/api/proximity/aggregate?lat=${center.lat}&lng=${center.lng}&unfiltered=true`)
+    : null;
+  const peopleApiUrl = center
+    ? (filter2km 
+        ? `/api/proximity/people?lat=${center.lat}&lng=${center.lng}&radius=2000` 
+        : `/api/proximity/people?lat=${center.lat}&lng=${center.lng}&unfiltered=true`)
+    : null;
 
   const { data: clusterData, isLoading: clustersLoading, mutate: mutateClusters } = useSWR<{ clusters: CompanyCluster[] }>(aggregateApiUrl, fetcher);
   const { data: peopleData, isLoading: peopleLoading, mutate: mutatePeople } = useSWR<{ people: any[] }>(peopleApiUrl, fetcher);
@@ -144,7 +152,7 @@ export function ProximityMap() {
     return `Hi! I noticed we're professional neighbors in the area and you work as a ${p.job_title} at ${p.company}. Would love to connect and chat!`;
   };
 
-  const radiusLabel = radius >= 1000 ? `${(radius / 1000).toFixed(1)}km` : `${radius}m`;
+  const radiusLabel = filter2km ? "2.0km" : "Unfiltered";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -248,20 +256,21 @@ export function ProximityMap() {
               </select>
             </div>
 
-            <div style={{ flex: "2 1 200px" }}>
-              <label className="label text-[10px] font-bold uppercase tracking-wider mb-1 block">
-                Radius: <span className="text-[var(--color-primary)] font-bold">{radiusLabel}</span>
+            <div style={{ flex: "1 1 200px", display: "flex", alignItems: "center", height: "38px" }}>
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-[var(--color-text)]">
+                <input
+                  type="checkbox"
+                  checked={filter2km}
+                  onChange={(e) => setFilter2km(e.target.checked)}
+                  style={{
+                    width: "16px",
+                    height: "16px",
+                    accentColor: "var(--color-primary)",
+                    cursor: "pointer",
+                  }}
+                />
+                <span>Limit search scope to 2 km</span>
               </label>
-              <input
-                type="range"
-                min={100}
-                max={100000}
-                step={100}
-                value={radius}
-                onChange={(e) => setRadius(Number(e.target.value))}
-                className="w-full h-1.5 bg-[var(--color-surface-secondary)] rounded-lg appearance-none cursor-pointer"
-                style={{ accentColor: "var(--color-primary)" }}
-              />
             </div>
 
             <button
@@ -359,7 +368,7 @@ export function ProximityMap() {
           {center ? (
             <ProximityMapInner
               center={center}
-              radius={radius}
+              radius={filter2km ? 2000 : 100000}
               clusters={clusters}
               onMoveCenter={(lat, lng) => setCenter({ lat, lng })}
               onCompanyClick={(company) => setSelectedCompany(company)}
@@ -471,7 +480,7 @@ export function ProximityMap() {
             <QuestionForm
               defaultLat={center.lat}
               defaultLng={center.lng}
-              defaultRadius={radius}
+              defaultRadius={filter2km ? 2000 : 100000}
               targetUser={{
                 id: chatTarget.id,
                 job_title: chatTarget.job_title,
@@ -521,7 +530,7 @@ export function ProximityMap() {
             <QuestionForm
               defaultLat={center.lat}
               defaultLng={center.lng}
-              defaultRadius={radius}
+              defaultRadius={filter2km ? 2000 : 100000}
               fixedCompany={selectedCompany}
               onPosted={() => {
                 setTimeout(() => setSelectedCompany(null), 1500);

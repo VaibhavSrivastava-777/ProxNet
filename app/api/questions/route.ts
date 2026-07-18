@@ -16,6 +16,45 @@ export async function GET(request: Request) {
 
   const supabase = createAdminClient();
 
+  // Load locations and coordinates first
+  const { data: currentLocations } = await supabase.from("user_current_locations").select("*");
+  const locationMap = new Map(
+    (currentLocations ?? []).map((l) => [l.user_id, { lat: Number(l.lat), lng: Number(l.lng) }])
+  );
+
+  const { data: activeUsers } = await supabase
+    .from("users")
+    .select("id, home_lat, home_lng, office_lat, office_lng")
+    .eq("is_active", true);
+
+  const userCoordsMap = new Map(
+    (activeUsers ?? []).map((u) => [
+      u.id,
+      {
+        home: u.home_lat != null && u.home_lng != null ? { lat: Number(u.home_lat), lng: Number(u.home_lng) } : null,
+        office: u.office_lat != null && u.office_lng != null ? { lat: Number(u.office_lat), lng: Number(u.office_lng) } : null,
+      }
+    ])
+  );
+
+  // Resolve user target location based on locationMode
+  let myLoc: { lat: number; lng: number } | null = null;
+  if (locationMode === "office") {
+    if (user.office_lat != null && user.office_lng != null) {
+      myLoc = { lat: Number(user.office_lat), lng: Number(user.office_lng) };
+    }
+  } else if (locationMode === "current") {
+    const cur = locationMap.get(user.id);
+    if (cur) {
+      myLoc = { lat: cur.lat, lng: cur.lng };
+    }
+  }
+  
+  // Default to home if office/current not set or home selected
+  if (!myLoc && user.home_lat != null && user.home_lng != null) {
+    myLoc = { lat: Number(user.home_lat), lng: Number(user.home_lng) };
+  }
+
   const { data: asked } = await supabase
     .from("questions")
     .select("*, question_targets(status, professional_id)")
@@ -86,6 +125,28 @@ export async function GET(request: Request) {
     if (activity?.sender_id) {
       sender = activity.sender_id === user.id ? "asker" : "responder";
     }
+
+    // Resolve other participant distance
+    let dist = null;
+    const session = sessions?.find(s => s.question_id === q.id);
+    const otherParticipant = session?.chat_participants?.find((p: any) => p.user_id !== user.id);
+    const otherUserId = otherParticipant?.user_id;
+    if (otherUserId && myLoc) {
+      const coords = userCoordsMap.get(otherUserId);
+      const current = locationMap.get(otherUserId);
+      const locs = [];
+      if (coords?.home) locs.push(coords.home);
+      if (coords?.office) locs.push(coords.office);
+      if (current) locs.push(current);
+
+      let minDist = Infinity;
+      for (const loc of locs) {
+        const d = haversineDistanceMeters(myLoc.lat, myLoc.lng, loc.lat, loc.lng);
+        if (d < minDist) minDist = d;
+      }
+      dist = minDist === Infinity ? null : minDist;
+    }
+
     return { 
       ...q, 
       latest_activity_at: activity?.time || q.created_at,
@@ -93,6 +154,7 @@ export async function GET(request: Request) {
       latest_message_sender: sender,
       target_alias: activity?.target_alias || null,
       session_id: activity?.sessionId || null,
+      distance: dist,
     };
   });
   askedWithActivity.sort((a, b) => new Date(b.latest_activity_at).getTime() - new Date(a.latest_activity_at).getTime());
@@ -113,6 +175,12 @@ export async function GET(request: Request) {
     if (activity?.sender_id) {
       sender = activity.sender_id === user.id ? "responder" : "asker";
     }
+
+    // Resolve asker distance relative to myLoc
+    const dist = (q.center_lat != null && q.center_lng != null && myLoc)
+      ? haversineDistanceMeters(Number(q.center_lat), Number(q.center_lng), myLoc.lat, myLoc.lng)
+      : null;
+
     return {
       id: q.id,
       body: q.body,
@@ -127,6 +195,7 @@ export async function GET(request: Request) {
       latest_message_body: activity?.body || null,
       latest_message_sender: sender,
       session_id: activity?.sessionId || null,
+      distance: dist,
     };
   });
   incomingWithActivity.sort((a, b) => new Date(b.latest_activity_at).getTime() - new Date(a.latest_activity_at).getTime());
@@ -147,41 +216,13 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .limit(50);
 
-  const { data: currentLocations } = await supabase.from("user_current_locations").select("*");
-  const locationMap = new Map(
-    (currentLocations ?? []).map((l) => [l.user_id, { lat: Number(l.lat), lng: Number(l.lng) }])
-  );
-  
-  // Resolve user target location based on locationMode
-  let myLoc: { lat: number; lng: number } | null = null;
-  if (locationMode === "office") {
-    if (user.office_lat != null && user.office_lng != null) {
-      myLoc = { lat: Number(user.office_lat), lng: Number(user.office_lng) };
-    }
-  } else if (locationMode === "current") {
-    const cur = locationMap.get(user.id);
-    if (cur) {
-      myLoc = { lat: cur.lat, lng: cur.lng };
-    }
-  }
-  
-  // Default to home if office/current not set or home selected
-  if (!myLoc && user.home_lat != null && user.home_lng != null) {
-    myLoc = { lat: Number(user.home_lat), lng: Number(user.home_lng) };
-  }
-
   const forumWithActivity = (allForumQuestions ?? [])
-    .filter((q) => {
-      // Always show posts from users the current user follows
-      if (followedUserIds.includes(q.asker_id)) return true;
-
-      // Otherwise filter posts within 2km (2000m)
-      if (!myLoc) return false;
-      const dist = haversineDistanceMeters(Number(q.center_lat), Number(q.center_lng), myLoc.lat, myLoc.lng);
-      return dist <= 2000;
-    })
     .map((q) => {
       const u = q.users as any;
+      const dist = (myLoc && q.center_lat != null && q.center_lng != null)
+        ? haversineDistanceMeters(Number(q.center_lat), Number(q.center_lng), myLoc.lat, myLoc.lng)
+        : null;
+
       return {
         id: q.id,
         body: q.body,
@@ -191,6 +232,7 @@ export async function GET(request: Request) {
         created_at: q.created_at,
         likes_count: q.likes_count || 0,
         comments_count: q.question_comments?.length || 0,
+        distance: dist,
       };
     });
 

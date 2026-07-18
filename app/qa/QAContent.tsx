@@ -12,7 +12,7 @@ export function QAContent() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [directTarget, setDirectTarget] = useState<{ id: string; job_title: string; company: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("/qa");
+  const [activeTab, setActiveTab] = useState<string>("/proximity");
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -20,7 +20,13 @@ export function QAContent() {
   // Tab state listener and initial sync
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    const initialTab = tabParam ? `/${tabParam}` : window.location.pathname;
+    let initialTab = tabParam ? `/${tabParam}` : window.location.pathname;
+    
+    // Default to /proximity if landing directly on /qa
+    if (initialTab === "/qa" && !tabParam) {
+      initialTab = "/proximity";
+    }
+
     const tabPaths = ["/proximity", "/qa", "/forum", "/grow"];
     
     if (tabPaths.includes(initialTab)) {

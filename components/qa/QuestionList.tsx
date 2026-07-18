@@ -19,6 +19,7 @@ interface IncomingQuestion {
   latest_message_body: string | null;
   latest_message_sender: string | null;
   session_id?: string | null;
+  distance?: number | null;
 }
 
 interface ForumQuestion {
@@ -28,6 +29,7 @@ interface ForumQuestion {
   created_at: string;
   likes_count: number;
   comments_count: number;
+  distance?: number | null;
 }
 
 interface AskedQuestion {
@@ -42,6 +44,7 @@ interface AskedQuestion {
   latest_message_sender: string | null;
   target_alias?: string | null;
   session_id?: string | null;
+  distance?: number | null;
 }
 
 interface Props {
@@ -203,6 +206,9 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [aiSearchSuggestions, setAiSearchSuggestions] = useState<any[]>([]);
   const [searchingAI, setSearchingAI] = useState(false);
+  const [filter2km, setFilter2km] = useState(false);
+  const [locationMode, setLocationMode] = useState<"home" | "office">("home");
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
 
   useEffect(() => {
     if (!searchQuery?.trim()) {
@@ -228,7 +234,7 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[], aiSession?: any }>(`/api/questions?_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000 });
+  const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[], aiSession?: any }>(`/api/questions?locationMode=${locationMode}&_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000 });
   const { data: notificationsData, mutate: mutateNotifications } = useSWR<{ notifications: any[] }>("/api/notifications", fetcher, { refreshInterval: 5000 });
 
   const asked = data?.asked || [];
@@ -377,6 +383,11 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   });
 
   const unreadCount = unified.filter(item => {
+    if (filter2km) {
+      if (item.data.distance === null || item.data.distance === undefined || item.data.distance > 2000) {
+        return false;
+      }
+    }
     if (item.type === "asked") {
       const q = item.data;
       return q.latest_message_body && q.latest_message_sender !== "asker";
@@ -388,6 +399,11 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   }).length;
 
   const displayedUnified = filteredUnified.filter(item => {
+    if (filter2km) {
+      if (item.data.distance === null || item.data.distance === undefined || item.data.distance > 2000) {
+        return false;
+      }
+    }
     if (activeTab === "unread") {
       if (item.type === "asked") {
         return item.data.latest_message_body && item.data.latest_message_sender !== "asker";
@@ -419,22 +435,70 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
         </div>
       )}
 
-      {/* WhatsApp Style Search Bar */}
-      <div className="relative mb-2 shrink-0">
-        <span className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-[var(--color-text-secondary)]">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      {/* WhatsApp Style Search Bar & Filter */}
+      <div className="flex gap-2 mb-2 items-center shrink-0">
+        <div className="relative flex-1">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-[var(--color-text-secondary)]">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={animatedPlaceholder}
+            className="w-full pl-11 pr-4 py-3 rounded-full bg-[var(--color-surface-secondary)] border-0 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] placeholder-[var(--color-text-tertiary)] text-[var(--color-text)] shadow-inner transition-all"
+          />
+        </div>
+        <button
+          onClick={() => setFiltersExpanded(!filtersExpanded)}
+          className={`p-3 rounded-full hover:bg-[var(--color-surface-hover)] transition-all cursor-pointer border border-[var(--color-border-light)] flex items-center justify-center shrink-0 ${
+            filtersExpanded
+              ? "bg-[var(--color-primary-subtle)] text-[var(--color-primary)] border-[var(--color-primary)]"
+              : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]"
+          }`}
+          style={{ width: "42px", height: "42px" }}
+          title="Filter Chats"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
           </svg>
-        </span>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={animatedPlaceholder}
-          className="w-full pl-11 pr-4 py-3 rounded-full bg-[var(--color-surface-secondary)] border-0 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] placeholder-[var(--color-text-tertiary)] text-[var(--color-text)] shadow-inner transition-all"
-        />
+        </button>
       </div>
+
+      {filtersExpanded && (
+        <div className="card p-4 mb-3 border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-md rounded-xl animate-fadeInDown flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="chat-filter-2km"
+                checked={filter2km}
+                onChange={(e) => setFilter2km(e.target.checked)}
+                style={{ width: "16px", height: "16px", accentColor: "var(--color-primary)", cursor: "pointer" }}
+              />
+              <label htmlFor="chat-filter-2km" className="text-xs font-bold text-[var(--color-text)] cursor-pointer select-none">
+                Limit chats to 2 km radius
+              </label>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--color-text-secondary)] font-medium">Near:</span>
+              <select
+                value={locationMode}
+                onChange={(e) => setLocationMode(e.target.value as any)}
+                className="input py-1 px-2 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)]"
+                style={{ color: "var(--color-text)" }}
+              >
+                <option value="home">Home Location</option>
+                <option value="office">Office Location</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* WhatsApp Capsule Pills Tabs */}
       <div className="flex items-center gap-2 mb-2 flex-wrap px-1">

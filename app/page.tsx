@@ -25,7 +25,7 @@ export default async function HomePage({
       redirect("/profile?onboarding=true");
     }
 
-    redirect("/qa");
+    redirect("/qa?tab=proximity");
   }
 
   return (

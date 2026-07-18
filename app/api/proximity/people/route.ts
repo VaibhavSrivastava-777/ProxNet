@@ -21,6 +21,7 @@ export async function GET(request: Request) {
   const lat = parseFloat(searchParams.get("lat") ?? "");
   const lng = parseFloat(searchParams.get("lng") ?? "");
   const radius = parseInt(searchParams.get("radius") ?? "5000", 10);
+  const unfiltered = searchParams.get("unfiltered") === "true";
 
   if (Number.isNaN(lat) || Number.isNaN(lng)) {
     return NextResponse.json({ error: "Invalid location parameters" }, { status: 400 });
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
   // Fetch all active users (omit embedding completely)
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("id, company, job_title, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name")
+    .select("id, company, job_title, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility")
     .eq("is_active", true)
     .neq("id", user.id);
 
@@ -67,29 +68,32 @@ export async function GET(request: Request) {
 
     for (const loc of locsToCheck) {
       const distance = haversineDistanceMeters(lat, lng, loc.lat, loc.lng);
-      if (distance <= radius && distance < minDistance) {
+      if (distance < minDistance) {
         minDistance = distance;
       }
     }
 
-    if (minDistance <= radius) {
+    if (unfiltered || minDistance <= radius) {
       nearbyPeople.push({
         id: u.id,
         anonymous_name: u.anonymous_name || `Neighbour-${u.id.slice(0, 4)}`,
         job_title: u.job_title.trim(),
         company: u.company.trim(),
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
-        distance: minDistance,
+        distance: minDistance === Infinity ? null : minDistance,
         is_followed: followingIds.has(u.id),
       });
     }
   }
 
-  // Sort alphabetically by company name, then by distance ascending
+  // Sort by distance ascending, then by company name alphabetically
   nearbyPeople.sort((a, b) => {
-    const comp = a.company.localeCompare(b.company);
-    if (comp !== 0) return comp;
-    return a.distance - b.distance;
+    const distA = a.distance === null ? Infinity : a.distance;
+    const distB = b.distance === null ? Infinity : b.distance;
+    if (distA !== distB) {
+      return distA - distB;
+    }
+    return a.company.localeCompare(b.company);
   });
 
   return NextResponse.json({ people: nearbyPeople });

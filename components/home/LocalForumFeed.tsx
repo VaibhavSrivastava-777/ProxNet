@@ -40,6 +40,8 @@ export function LocalForumFeed() {
   const [postBody, setPostBody] = useState("");
   const [postCategory, setPostCategory] = useState("General");
   const [isPosting, setIsPosting] = useState(false);
+  const [filter2km, setFilter2km] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
 
   const toggleExpand = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -131,6 +133,11 @@ export function LocalForumFeed() {
     : "ME";
 
   const forum = data?.forum || [];
+  const filteredForum = forum.filter((q: any) => {
+    if (!filter2km) return true;
+    if (q.distance === null) return false;
+    return q.distance <= 2000;
+  });
 
   return (
     <div className="flex flex-col gap-4 mt-6 animate-fadeInUp relative min-h-screen pb-20">
@@ -172,24 +179,59 @@ export function LocalForumFeed() {
         </div>
       </div>
 
-      {/* Feed Location Header Bar */}
+      {/* Feed Location Header Bar & Filter */}
       <div className="flex justify-between items-center px-2 py-1 mt-2">
         <span className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">
-          Neighborhood Feed (2km)
+          Neighborhood Feed {filter2km ? "(2km)" : "(Unfiltered)"}
         </span>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-[var(--color-text-tertiary)]">Viewing near:</span>
-          <select
-            value={locationMode}
-            onChange={(e) => handleLocationChange(e.target.value as any)}
-            className="text-xs font-semibold bg-transparent border-0 text-[var(--color-primary)] focus:outline-none cursor-pointer"
-          >
-            <option value="home">Home Address</option>
-            <option value="office">Office Address</option>
-            <option value="current">Current Location</option>
-          </select>
-        </div>
+        <button
+          onClick={() => setFiltersExpanded(!filtersExpanded)}
+          className={`p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-all cursor-pointer border border-[var(--color-border-light)] flex items-center justify-center shrink-0 ${
+            filtersExpanded
+              ? "bg-[var(--color-primary-subtle)] text-[var(--color-primary)] border-[var(--color-primary)]"
+              : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]"
+          }`}
+          style={{ width: "32px", height: "32px" }}
+          title="Filter neighborhood feed"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+          </svg>
+        </button>
       </div>
+
+      {filtersExpanded && (
+        <div className="card p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-md animate-fadeInDown flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="forum-filter-2km"
+                checked={filter2km}
+                onChange={(e) => setFilter2km(e.target.checked)}
+                style={{ width: "16px", height: "16px", accentColor: "var(--color-primary)", cursor: "pointer" }}
+              />
+              <label htmlFor="forum-filter-2km" className="text-xs font-bold text-[var(--color-text)] cursor-pointer select-none">
+                Limit feed to 2 km radius
+              </label>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--color-text-secondary)] font-medium">Near:</span>
+              <select
+                value={locationMode}
+                onChange={(e) => handleLocationChange(e.target.value as any)}
+                className="input py-1 px-2 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-secondary)]"
+                style={{ color: "var(--color-text)" }}
+              >
+                <option value="home">Home Address</option>
+                <option value="office">Office Address</option>
+                <option value="current">Current Location</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Loader */}
       {isLoading ? (
@@ -199,13 +241,13 @@ export function LocalForumFeed() {
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          {forum.length === 0 ? (
+          {filteredForum.length === 0 ? (
             <div className="card p-8 text-center border border-dashed border-[var(--color-border)] flex flex-col items-center justify-center min-h-[200px] bg-[var(--color-surface)]/50 rounded-xl">
               <p className="text-body text-[var(--color-text-secondary)] font-medium">No posts found near this location.</p>
               <p className="text-caption text-[var(--color-text-tertiary)] mt-1">Be the first to share an update with your neighbors!</p>
             </div>
           ) : (
-            forum.map((q: any, index: number) => {
+            filteredForum.map((q: any, index: number) => {
               // Extract category and raw body
               let displayBody = q.body;
               let displayCategory = "General";
