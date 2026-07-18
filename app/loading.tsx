@@ -29,9 +29,14 @@ export default function Loading() {
             <span className="text-xs font-bold tracking-widest text-[var(--color-primary)] uppercase opacity-80">
               ProxNet
             </span>
-            <span className="text-[10px] tracking-wide text-[var(--color-text-secondary)] font-semibold uppercase opacity-65">
+            <span className="text-[10px] tracking-wide text-[var(--color-text-secondary)] font-semibold uppercase opacity-75 animate-tagline">
               Connect Anonymously
             </span>
+          </div>
+
+          {/* Loading progress bar */}
+          <div className="w-28 h-1 bg-[var(--color-primary)]/10 rounded-full overflow-hidden mt-2">
+            <div className="h-full bg-[var(--color-primary)] rounded-full animate-progress" />
           </div>
         </div>
       </div>

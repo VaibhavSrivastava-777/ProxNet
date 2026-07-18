@@ -73,10 +73,15 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
           console.error("Native Google sign-in verification failed:", e);
         }
       };
+      (window as any).onGoogleSignInError = (message: string) => {
+        console.error("Native Google sign-in failed:", message);
+        alert("Google Sign-in failed: " + message);
+      };
     }
     return () => {
       if (typeof window !== "undefined") {
         delete (window as any).onGoogleSignInSuccess;
+        delete (window as any).onGoogleSignInError;
       }
     };
   }, []);

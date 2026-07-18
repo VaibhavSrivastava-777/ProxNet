@@ -7,28 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:901915190293:android:f58303725f35b469415a1c",
-        "android_client_info": {
-          "package_name": "in.proxnet.app"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyCayA-xdQOaRVrUJQc1mjbe58iYpIHOgOE"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
         "mobilesdk_app_id": "1:901915190293:android:df2c0d7514025182415a1c",
         "android_client_info": {
-          "package_name": "in.proxnet.www.twa"
+          "package_name": "in.proxnet.app"
         }
       },
       "oauth_client": [],

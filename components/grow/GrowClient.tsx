@@ -41,6 +41,7 @@ export function GrowClient() {
   const { data, isLoading, mutate } = useSWR<InviteData>("/api/invite", fetcher);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
+  const [importMode, setImportMode] = useState<"phone" | "google" | undefined>(undefined);
 
   if (isLoading || !data) {
     return (
@@ -258,7 +259,10 @@ export function GrowClient() {
             <button
               className="btn btn-primary"
               style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-              onClick={() => setShowContacts(true)}
+              onClick={() => {
+                setImportMode("phone");
+                setShowContacts(true);
+              }}
             >
               <span>📱</span> Phone Contacts
             </button>
@@ -273,7 +277,10 @@ export function GrowClient() {
                 border: "1px solid var(--color-border)",
                 background: "var(--color-surface)",
               }}
-              onClick={() => setShowContacts(true)}
+              onClick={() => {
+                setImportMode("google");
+                setShowContacts(true);
+              }}
             >
               <span>📧</span> Google Contacts
             </button>
@@ -281,7 +288,11 @@ export function GrowClient() {
         ) : (
           <ContactImporter
             inviteCode={data.inviteCode}
-            onClose={() => setShowContacts(false)}
+            defaultMode={importMode}
+            onClose={() => {
+              setShowContacts(false);
+              setImportMode(undefined);
+            }}
           />
         )}
       </div>

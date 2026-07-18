@@ -149,6 +149,19 @@ export default function LoginPage() {
         >
           🔒 Your identity remains anonymous to other users
         </p>
+
+        {/* App Version Info */}
+        <p
+          className="text-caption"
+          style={{
+            margin: "12px 0 0 0",
+            fontSize: "10px",
+            color: "var(--color-text-tertiary)",
+            textAlign: "center",
+          }}
+        >
+          v1.0.7
+        </p>
       </div>
     </div>
   );

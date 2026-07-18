@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Contact {
   name: string;
@@ -10,14 +10,17 @@ interface Contact {
 interface ContactImporterProps {
   inviteCode: string;
   onClose: () => void;
+  defaultMode?: "phone" | "google";
 }
 
-export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
+export function ContactImporter({ inviteCode, onClose, defaultMode }: ContactImporterProps) {
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [manualInput, setManualInput] = useState("");
   const [manualName, setManualName] = useState("");
   const [imported, setImported] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
   const inviteUrl = `${window.location.origin}/join/${inviteCode}`;
@@ -57,9 +60,10 @@ export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
     if ((window as any).AndroidBridge && (window as any).AndroidBridge.startContactsImport) {
       setLoading(true);
 
-      (window as any).onAndroidContactsReady = (jsonString: string) => {
+      (window as any).onAndroidContactsReady = (jsonStringOrBase64: string, isBase64?: boolean) => {
         try {
-          const parsed = JSON.parse(jsonString);
+          const decoded = isBase64 ? atob(jsonStringOrBase64) : jsonStringOrBase64;
+          const parsed = JSON.parse(decoded);
           setContacts(parsed);
           setImported(true);
           trackShare("contacts_native");
@@ -122,9 +126,10 @@ export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
 
     // 1. Check if running inside native Android App (via bridge)
     if ((window as any).AndroidBridge && (window as any).AndroidBridge.startGoogleContactsImport) {
-      (window as any).onAndroidContactsReady = (jsonString: string) => {
+      (window as any).onAndroidContactsReady = (jsonStringOrBase64: string, isBase64?: boolean) => {
         try {
-          const parsed = JSON.parse(jsonString);
+          const decoded = isBase64 ? atob(jsonStringOrBase64) : jsonStringOrBase64;
+          const parsed = JSON.parse(decoded);
           setContacts(parsed);
           setImported(true);
           trackShare("contacts_google");
@@ -215,22 +220,36 @@ export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
     setManualInput("");
     setManualName("");
     setImported(true);
+    setShowManualForm(false);
   };
 
   const handleSendInvite = (contact: Contact) => {
-    // Open whatsapp or sms automatically based on phone vs email
     const isEmail = contact.phoneOrEmail.includes("@");
     const text = `Hey ${contact.name}! Check out ProxNet. It connects professionals in our apartment complex/vicinity anonymously to share carpools, job referrals, and local recommendations. Join here: ${inviteUrl}`;
     
     if (isEmail) {
       window.open(`mailto:${contact.phoneOrEmail}?subject=Join%20our%20local%20professional%20network&body=${encodeURIComponent(text)}`);
     } else {
-      // Clean up phone number
       const cleanPhone = contact.phoneOrEmail.replace(/[^0-9+]/g, "");
       window.open(`https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}&text=${encodeURIComponent(text)}`);
     }
     trackShare("contact_invite");
   };
+
+  // Trigger automatically if defaultMode is provided
+  useEffect(() => {
+    if (defaultMode === "phone") {
+      handleNativeImport();
+    } else if (defaultMode === "google") {
+      handleGoogleImport();
+    }
+  }, [defaultMode]);
+
+  // Live filter contacts based on query
+  const filteredContacts = contacts.filter((c) =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.phoneOrEmail.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div style={{ marginTop: 12 }} className="animate-fadeIn">
@@ -241,77 +260,112 @@ export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
       )}
 
       {loading ? (
-        <div style={{ textAlign: "center", padding: "20px 0" }}>
-          <div className="spinner mb-2" />
+        <div style={{ textAlign: "center", padding: "24px 0" }}>
+          <div className="spinner mb-2 animate-spin" />
           <p className="text-body-sm m-0" style={{ color: "var(--color-text-secondary)" }}>
-            Importing contacts...
+            Importing your contacts...
           </p>
         </div>
-      ) : !imported ? (
+      ) : !imported && !showManualForm ? (
         <div className="flex flex-col gap-4">
-          <div className="flex gap-2">
-            <button
-              onClick={handleNativeImport}
-              className="btn btn-primary"
-              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-            >
-              <span>📱</span> Import Phone List
-            </button>
-            <button
-              onClick={handleGoogleImport}
-              className="btn"
-              style={{
-                flex: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                border: "1px solid var(--color-border)",
-                background: "var(--color-surface)",
-              }}
-            >
-              <span>📧</span> Connect Google
-            </button>
+          <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-secondary)", marginBottom: 4 }}>
+            Choose how you want to invite neighbors:
           </div>
-
-          <form onSubmit={handleManualAdd} className="flex flex-col gap-2 mt-2">
-            <div style={{ fontWeight: 600, fontSize: 13, color: "var(--color-text-secondary)" }}>
-              Or add a friend manually:
+          
+          {/* Facebook-style Card Options */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div 
+              onClick={handleNativeImport}
+              className="card flex items-center gap-4 p-4 cursor-pointer hover:bg-[var(--color-surface-secondary)] transition-all"
+              style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-light)" }}
+            >
+              <div style={{ fontSize: 28 }}>📱</div>
+              <div style={{ flex: 1 }}>
+                <h4 style={{ margin: "0 0 2px 0", fontSize: 15, fontWeight: 700 }}>Device Contact List</h4>
+                <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  Import display names and numbers from your address book.
+                </p>
+              </div>
             </div>
-            <div className="flex gap-2">
+
+            <div 
+              onClick={handleGoogleImport}
+              className="card flex items-center gap-4 p-4 cursor-pointer hover:bg-[var(--color-surface-secondary)] transition-all"
+              style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-light)" }}
+            >
+              <div style={{ fontSize: 28 }}>📧</div>
+              <div style={{ flex: 1 }}>
+                <h4 style={{ margin: "0 0 2px 0", fontSize: 15, fontWeight: 700 }}>Google Contacts</h4>
+                <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  Retrieve connections from your linked Gmail profile.
+                </p>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => setShowManualForm(true)}
+              className="card flex items-center gap-4 p-4 cursor-pointer hover:bg-[var(--color-surface-secondary)] transition-all"
+              style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-light)" }}
+            >
+              <div style={{ fontSize: 28 }}>✍️</div>
+              <div style={{ flex: 1 }}>
+                <h4 style={{ margin: "0 0 2px 0", fontSize: 15, fontWeight: 700 }}>Add Manually</h4>
+                <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  Key in a custom name and contact detail directly.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : showManualForm ? (
+        <div className="card p-4" style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-light)" }}>
+          <form onSubmit={handleManualAdd} className="flex flex-col gap-3">
+            <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Add Contact Manually</h4>
+            <div className="flex flex-col gap-2">
               <input
                 type="text"
                 className="input"
-                placeholder="Name (Optional)"
+                placeholder="Full Name"
                 value={manualName}
                 onChange={(e) => setManualName(e.target.value)}
-                style={{ flex: 1, minWidth: 100 }}
+                required
               />
               <input
                 type="text"
                 className="input"
-                placeholder="Phone or Email"
-                required
+                placeholder="Phone Number or Email"
                 value={manualInput}
                 onChange={(e) => setManualInput(e.target.value)}
-                style={{ flex: 2, minWidth: 150 }}
+                required
               />
-              <button type="submit" className="btn btn-primary" style={{ padding: "0 16px" }}>
-                Add
+            </div>
+            <div className="flex gap-2 justify-end mt-2">
+              <button 
+                type="button" 
+                onClick={() => setShowManualForm(false)} 
+                className="btn"
+                style={{ border: "1px solid var(--color-border)", background: "transparent" }}
+              >
+                Back
+              </button>
+              <button type="submit" className="btn btn-primary">
+                Add to List
               </button>
             </div>
           </form>
         </div>
       ) : (
         <div>
+          {/* Header Action Bar */}
           <div className="flex justify-between items-center mb-3">
             <div style={{ fontWeight: 600, fontSize: 14 }}>
-              {contacts.length} Contacts Found
+              {filteredContacts.length} Contacts Found
             </div>
             <button
               onClick={() => {
                 setContacts([]);
                 setImported(false);
+                setSearchQuery("");
               }}
               className="text-primary hover:underline text-body-sm font-semibold bg-transparent border-0 cursor-pointer"
             >
@@ -319,9 +373,22 @@ export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
             </button>
           </div>
 
+          {/* Contact Search Bar */}
+          <div className="mb-3">
+            <input
+              type="text"
+              className="input w-full"
+              placeholder="Search by name or number..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ padding: "8px 12px", fontSize: 13 }}
+            />
+          </div>
+
+          {/* Contact List Row Container */}
           <div
             style={{
-              maxHeight: 250,
+              maxHeight: 280,
               overflowY: "auto",
               display: "flex",
               flexDirection: "column",
@@ -329,33 +396,39 @@ export function ContactImporter({ inviteCode, onClose }: ContactImporterProps) {
               paddingRight: 4,
             }}
           >
-            {contacts.map((contact, idx) => (
-              <div
-                key={idx}
-                className="flex justify-between items-center p-3"
-                style={{
-                  background: "var(--color-surface-secondary)",
-                  borderRadius: "var(--radius-sm)",
-                  border: "1px solid var(--color-border-light)",
-                }}
-              >
-                <div style={{ minWidth: 0, flex: 1, marginRight: 12 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {contact.name}
-                  </div>
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {contact.phoneOrEmail}
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleSendInvite(contact)}
-                  className="btn btn-sm btn-primary"
-                  style={{ fontSize: 12, padding: "6px 12px" }}
-                >
-                  Invite
-                </button>
+            {filteredContacts.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "20px 0", color: "var(--color-text-secondary)", fontSize: 13 }}>
+                No matching contacts found.
               </div>
-            ))}
+            ) : (
+              filteredContacts.map((contact, idx) => (
+                <div
+                  key={idx}
+                  className="flex justify-between items-center p-3"
+                  style={{
+                    background: "var(--color-surface-secondary)",
+                    borderRadius: "var(--radius-sm)",
+                    border: "1px solid var(--color-border-light)",
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1, marginRight: 12 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {contact.name}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--color-text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {contact.phoneOrEmail}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleSendInvite(contact)}
+                    className="btn btn-sm btn-primary"
+                    style={{ fontSize: 12, padding: "6px 12px" }}
+                  >
+                    Invite
+                  </button>
+                </div>
+              ))
+            )}
           </div>
 
           <button

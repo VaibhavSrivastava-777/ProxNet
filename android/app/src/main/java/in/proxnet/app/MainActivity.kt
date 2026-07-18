@@ -127,6 +127,20 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 android.util.Log.d("ProxNetWebView", "Page load completed: $url")
+                
+                // If it's a login or auth redirect page, verify if it got stuck on an error state
+                if (url != null && (url.contains("/api/auth/callback") || url.contains("/login"))) {
+                    webView.evaluateJavascript(
+                        "javascript:(function() {" +
+                        "  var text = document.body ? document.body.innerText : '';" +
+                        "  if (text.includes('Server Error') || text.includes('Something went wrong') || text.includes('Error 500')) {" +
+                        "    console.log('Detected server error on auth page, redirecting...');" +
+                        "    window.location.href = '/qa';" +
+                        "  }" +
+                        "})()", null
+                    )
+                }
+
                 val token = fcmToken
                 if (!token.isNullOrEmpty()) {
                     webView.post {
@@ -222,6 +236,10 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 android.util.Log.e("ProxNetAndroid", "Google Sign-In failed: ${e.message}")
+                val err = e.message ?: "Google Sign-In failed"
+                webView.post {
+                    webView.evaluateJavascript("javascript:if(window.onGoogleSignInError){ window.onGoogleSignInError('$err'); }", null)
+                }
             }
         } else if (requestCode == RC_CONTACTS_SIGN_IN) {
             val task = GoogleSignIn.getSignedInAccountFromIntent(data)
@@ -275,7 +293,7 @@ class MainActivity : AppCompatActivity() {
     private fun fetchAndSendContacts() {
         Thread {
             try {
-                val contactsList = mutableListOf<String>()
+                val jsonArray = org.json.JSONArray()
                 val resolver = contentResolver
                 val cursor = resolver.query(
                     ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
@@ -296,17 +314,22 @@ class MainActivity : AppCompatActivity() {
                             val name = it.getString(nameIndex) ?: ""
                             val number = it.getString(numberIndex) ?: ""
                             if (name.isNotEmpty() && number.isNotEmpty()) {
-                                val escapedName = name.replace("\"", "\\\"").replace("\n", " ")
-                                val escapedNumber = number.replace("\"", "\\\"").replace("\n", " ")
-                                contactsList.add("{\"name\":\"$escapedName\",\"phoneOrEmail\":\"$escapedNumber\"}")
+                                val obj = org.json.JSONObject()
+                                obj.put("name", name)
+                                obj.put("phoneOrEmail", number)
+                                jsonArray.put(obj)
                             }
                         }
                     }
                 }
                 
-                val jsonArrayString = "[" + contactsList.joinToString(",") + "]"
+                val jsonArrayString = jsonArray.toString()
+                val base64Data = android.util.Base64.encodeToString(
+                    jsonArrayString.toByteArray(Charsets.UTF_8),
+                    android.util.Base64.NO_WRAP
+                )
                 webView.post {
-                    webView.evaluateJavascript("javascript:if(window.onAndroidContactsReady){ window.onAndroidContactsReady('$jsonArrayString'); }", null)
+                    webView.evaluateJavascript("javascript:if(window.onAndroidContactsReady){ window.onAndroidContactsReady('$base64Data', true); }", null)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("ProxNetAndroid", "Error querying contacts: ${e.message}")
@@ -350,7 +373,7 @@ class MainActivity : AppCompatActivity() {
                     val response = conn.inputStream.bufferedReader().use { it.readText() }
                     val jsonResponse = org.json.JSONObject(response)
                     val connections = jsonResponse.optJSONArray("connections")
-                    val contactsList = mutableListOf<String>()
+                    val jsonArray = org.json.JSONArray()
                     
                     if (connections != null) {
                         for (i in 0 until connections.length()) {
@@ -379,16 +402,21 @@ class MainActivity : AppCompatActivity() {
                             
                             val contactVal = if (phoneVal.isNotEmpty()) phoneVal else emailVal
                             if (contactVal.isNotEmpty()) {
-                                val escapedName = displayName.replace("\"", "\\\"").replace("\n", " ")
-                                val escapedContact = contactVal.replace("\"", "\\\"").replace("\n", " ")
-                                contactsList.add("{\"name\":\"$escapedName\",\"phoneOrEmail\":\"$escapedContact\"}")
+                                val obj = org.json.JSONObject()
+                                obj.put("name", displayName)
+                                obj.put("phoneOrEmail", contactVal)
+                                jsonArray.put(obj)
                             }
                         }
                     }
                     
-                    val jsonArrayString = "[" + contactsList.joinToString(",") + "]"
+                    val jsonArrayString = jsonArray.toString()
+                    val base64Data = android.util.Base64.encodeToString(
+                        jsonArrayString.toByteArray(Charsets.UTF_8),
+                        android.util.Base64.NO_WRAP
+                    )
                     webView.post {
-                        webView.evaluateJavascript("javascript:if(window.onAndroidContactsReady){ window.onAndroidContactsReady('$jsonArrayString'); }", null)
+                        webView.evaluateJavascript("javascript:if(window.onAndroidContactsReady){ window.onAndroidContactsReady('$base64Data', true); }", null)
                     }
                 } else {
                     val errorMsg = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP ${conn.responseCode}"

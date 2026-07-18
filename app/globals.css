@@ -898,7 +898,30 @@ input[type="range"]::-moz-range-thumb {
     height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px)) !important;
   }
   .main-content {
-    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 16px)) !important;
   }
+}
+
+/* ================================================================
+   CUSTOM ANIMATIONS FOR SPARKLE SPLASH
+   ================================================================ */
+
+@keyframes taglineFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 0.75; transform: translateY(0); }
+}
+
+@keyframes progressLoad {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+.animate-tagline {
+  animation: taglineFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 0.6s;
+  opacity: 0;
+}
+
+.animate-progress {
+  animation: progressLoad 2.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
