@@ -22,11 +22,6 @@ export function QAContent() {
     const tabParam = searchParams.get("tab");
     let initialTab = tabParam ? `/${tabParam}` : window.location.pathname;
     
-    // Default to /proximity if landing directly on /qa
-    if (initialTab === "/qa" && !tabParam) {
-      initialTab = "/proximity";
-    }
-
     const tabPaths = ["/proximity", "/qa", "/forum", "/grow"];
     
     if (tabPaths.includes(initialTab)) {

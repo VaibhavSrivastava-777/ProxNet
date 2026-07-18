@@ -12,21 +12,42 @@ export async function GET(request: Request) {
   const supabase = createAdminClient();
 
   try {
-    const { data: users, error: userError } = await supabase.from("users").select("company, full_name, email");
-    if (userError) throw new Error(userError.message);
+    const { data: forumPosts, error: fetchError } = await supabase
+      .from("questions")
+      .select("id, body")
+      .eq("type", "forum");
 
-    const { data: configs, error: configError } = await supabase.from("company_ats_config").select("*");
-    if (configError) throw new Error(configError.message);
+    if (fetchError) throw new Error(fetchError.message);
 
-    const networkCompanies = Array.from(new Set(
-      users.map(u => u.company).filter(c => c && c.trim() !== "")
-    ));
+    const seedPhrases = [
+      "pediatrician in the Koramangala area",
+      "power cuts this week in sector 4",
+      "weekend marathon this Sunday",
+      "Herman Miller Aeron chair",
+      "Lost a golden retriever near the supermarket",
+      "reliable plumber to fix a persistent leak",
+      "cafe that opened up near the metro station",
+      "local farmer's market setting up this Saturday"
+    ];
+
+    const idsToDelete = (forumPosts ?? [])
+      .filter((q) => seedPhrases.some((phrase) => q.body.includes(phrase)))
+      .map((q) => q.id);
+
+    let deletedCount = 0;
+    if (idsToDelete.length > 0) {
+      const { error: deleteError } = await supabase
+        .from("questions")
+        .delete()
+        .in("id", idsToDelete);
+      if (deleteError) throw new Error(deleteError.message);
+      deletedCount = idsToDelete.length;
+    }
 
     return NextResponse.json({
       success: true,
-      networkCompanies,
-      users: users.map(u => ({ name: u.full_name, email: u.email, company: u.company })),
-      configs: configs.map(c => ({ company: c.company_name, provider: c.provider, board: c.board_token_or_url }))
+      message: `Successfully purged ${deletedCount} fake seeded forum posts.`,
+      deletedCount
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
