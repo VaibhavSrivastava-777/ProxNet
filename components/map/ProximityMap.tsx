@@ -327,9 +327,15 @@ export function ProximityMap() {
                     <span className="text-xs text-[var(--color-text-secondary)] font-medium truncate mt-0.5">
                       {p.job_title}
                     </span>
-                    <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1">
-                      📍 {p.distance >= 1000 ? `${(p.distance / 1000).toFixed(1)} km` : `${Math.round(p.distance)} m`} away
-                    </span>
+                    {p.distance !== null && p.distance !== undefined ? (
+                      <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1">
+                        📍 {p.distance >= 1000 ? `${(p.distance / 1000).toFixed(1)} km` : `${Math.round(p.distance)} m`} away
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full inline-block mt-1 font-semibold animate-pulse" style={{ color: "var(--color-warning)", backgroundColor: "var(--color-warning-bg, rgba(245, 158, 11, 0.1))", border: "1px solid rgba(245, 158, 11, 0.2)", width: "fit-content" }}>
+                        ⚠️ Location not specified
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -420,8 +426,12 @@ export function ProximityMap() {
             <div className="flex flex-col gap-1.5 p-3 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)]">
               <div className="flex justify-between text-xs">
                 <span className="text-[var(--color-text-secondary)]">Proximity distance:</span>
-                <span className="font-semibold text-[var(--color-text)]">
-                  {selectedPerson.distance >= 1000 ? `${(selectedPerson.distance / 1000).toFixed(1)} km` : `${Math.round(selectedPerson.distance)} m`}
+                <span className="font-semibold text-xs" style={{ color: selectedPerson.distance !== null && selectedPerson.distance !== undefined ? "var(--color-text)" : "var(--color-warning)" }}>
+                  {selectedPerson.distance !== null && selectedPerson.distance !== undefined ? (
+                    selectedPerson.distance >= 1000 ? `${(selectedPerson.distance / 1000).toFixed(1)} km` : `${Math.round(selectedPerson.distance)} m`
+                  ) : (
+                    "Location not specified"
+                  )}
                 </span>
               </div>
             </div>
