@@ -243,59 +243,6 @@ export function GrowClient() {
         </div>
       </div>
 
-      {/* ── Section 3: Find People You Know ── */}
-      <div className="card" style={{ padding: 20, marginBottom: 20, borderRadius: "var(--radius-lg)" }}>
-        <div className="flex items-center gap-2 mb-2">
-          <span style={{ fontSize: 22 }}>📇</span>
-          <h3 className="text-h3 m-0">Find People You Know</h3>
-        </div>
-        <p className="text-body-sm m-0 mb-4" style={{ color: "var(--color-text-secondary)" }}>
-          Import your contacts to see who from your circle might benefit from ProxNet.
-          We&apos;ll never contact anyone without your explicit permission. 🔒
-        </p>
-
-        {!showContacts ? (
-          <div className="flex gap-3">
-            <button
-              className="btn btn-primary"
-              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-              onClick={() => {
-                setImportMode("phone");
-                setShowContacts(true);
-              }}
-            >
-              <span>📱</span> Phone Contacts
-            </button>
-            <button
-              className="btn"
-              style={{
-                flex: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                border: "1px solid var(--color-border)",
-                background: "var(--color-surface)",
-              }}
-              onClick={() => {
-                setImportMode("google");
-                setShowContacts(true);
-              }}
-            >
-              <span>📧</span> Google Contacts
-            </button>
-          </div>
-        ) : (
-          <ContactImporter
-            inviteCode={data.inviteCode}
-            defaultMode={importMode}
-            onClose={() => {
-              setShowContacts(false);
-              setImportMode(undefined);
-            }}
-          />
-        )}
-      </div>
 
       {/* ── Section 4: Points & Impact Dashboard ── */}
       <div className="card" style={{ padding: 20, marginBottom: 20, borderRadius: "var(--radius-lg)" }}>
