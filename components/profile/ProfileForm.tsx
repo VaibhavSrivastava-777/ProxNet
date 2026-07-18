@@ -718,8 +718,44 @@ export function ProfileForm({ initialUser }: Props) {
             gap: 16,
           }}
         >
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="label flex items-center justify-between">
+              <span>LinkedIn profile URL <span className="text-red-500">*</span></span>
+              {fetchingLinkedInDetails && <span className="text-xs text-[var(--color-primary)] animate-pulse">Parsing URL details...</span>}
+            </label>
+            <input
+              className="input"
+              style={showErrors && !user.linkedin_profile_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
+              value={user.linkedin_profile_url ?? ""}
+              placeholder="https://linkedin.com/in/..."
+              onChange={(e) =>
+                setUser({ ...user, linkedin_profile_url: e.target.value })
+              }
+              onBlur={() => handleLinkedInBlur(user.linkedin_profile_url ?? "")}
+            />
+            {showErrors && !user.linkedin_profile_url?.trim() && (
+              <p className="text-xs text-red-500 mt-1">LinkedIn profile URL is required</p>
+            )}
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="label">Profile photo URL <span className="text-red-500">*</span></label>
+            <input
+              className="input"
+              style={showErrors && !user.profile_photo_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
+              value={user.profile_photo_url ?? ""}
+              placeholder="https://..."
+              onChange={(e) =>
+                setUser({ ...user, profile_photo_url: e.target.value })
+              }
+            />
+            {showErrors && !user.profile_photo_url?.trim() && (
+              <p className="text-xs text-red-500 mt-1">Profile photo URL is required</p>
+            )}
+          </div>
+
           <div>
-            <label className="label">Full name</label>
+            <label className="label">Full name <span className="text-red-500">*</span></label>
             <input
               className="input"
               style={showErrors && !user.full_name?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
@@ -756,7 +792,7 @@ export function ProfileForm({ initialUser }: Props) {
           </div>
 
           <div>
-            <label className="label">Company</label>
+            <label className="label">Company <span className="text-red-500">*</span></label>
             <input
               className="input"
               style={showErrors && !user.company?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
@@ -770,7 +806,7 @@ export function ProfileForm({ initialUser }: Props) {
           </div>
 
           <div>
-            <label className="label">Job title</label>
+            <label className="label">Job title <span className="text-red-500">*</span></label>
             <input
               className="input"
               style={showErrors && !user.job_title?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
@@ -783,8 +819,19 @@ export function ProfileForm({ initialUser }: Props) {
             )}
           </div>
 
+          <div>
+            <label className="label">Phone number</label>
+            <input
+              className="input"
+              type="tel"
+              value={user.phone_number ?? ""}
+              placeholder="+1 234 567 8900"
+              onChange={(e) => setUser({ ...user, phone_number: e.target.value })}
+            />
+          </div>
+
           <div style={{ gridColumn: "1 / -1" }} className="bg-[var(--color-surface-hover)] p-4 rounded-lg border border-[var(--color-primary-subtle)]">
-            <label htmlFor="resume-upload" className="label font-bold text-[var(--color-primary)]">Upload Resume (PDF) for AI Matching</label>
+            <label htmlFor="resume-upload" className="label font-bold text-[var(--color-primary)]">Upload Resume (PDF) for AI Matching (Optional)</label>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-2">
               <input
                 id="resume-upload"
@@ -792,8 +839,7 @@ export function ProfileForm({ initialUser }: Props) {
                 accept="application/pdf"
                 onChange={handleResumeUpload}
                 disabled={uploadingResume}
-                style={showErrors && !user.resume_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-                className="file-input file-input-primary file-input-bordered w-full max-w-xs shadow-sm"
+                className="file-input file-input-primary file-input-bordered w-full max-w-xs shadow-sm text-xs"
                 title="Upload Resume (PDF)"
                 aria-label="Upload Resume (PDF)"
               />
@@ -807,54 +853,6 @@ export function ProfileForm({ initialUser }: Props) {
             <p className="text-xs text-text-tertiary mt-2">
               Upload your resume to automatically extract your experience and dramatically improve your AI job matches.
             </p>
-            {showErrors && !user.resume_url?.trim() && (
-              <p className="text-xs text-red-500 mt-1 font-semibold">Resume PDF upload is required</p>
-            )}
-          </div>
-
-
-
-          <div>
-            <label className="label">Phone number</label>
-            <input
-              className="input"
-              type="tel"
-              value={user.phone_number ?? ""}
-              placeholder="+1 234 567 8900"
-              onChange={(e) => setUser({ ...user, phone_number: e.target.value })}
-            />
-          </div>
-
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label className="label">Profile photo URL</label>
-            <input
-              className="input"
-              style={showErrors && !user.profile_photo_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-              value={user.profile_photo_url ?? ""}
-              placeholder="https://..."
-              onChange={(e) =>
-                setUser({ ...user, profile_photo_url: e.target.value })
-              }
-            />
-            {showErrors && !user.profile_photo_url?.trim() && (
-              <p className="text-xs text-red-500 mt-1">Profile photo URL is required</p>
-            )}
-          </div>
-
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label className="label">LinkedIn profile URL</label>
-            <input
-              className="input"
-              style={showErrors && !user.linkedin_profile_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-              value={user.linkedin_profile_url ?? ""}
-              placeholder="https://linkedin.com/in/..."
-              onChange={(e) =>
-                setUser({ ...user, linkedin_profile_url: e.target.value })
-              }
-            />
-            {showErrors && !user.linkedin_profile_url?.trim() && (
-              <p className="text-xs text-red-500 mt-1">LinkedIn profile URL is required</p>
-            )}
           </div>
         </div>
       </CollapsibleSection>
@@ -905,10 +903,9 @@ export function ProfileForm({ initialUser }: Props) {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
-              <label className="label">Office Name</label>
+              <label className="label">Office Name (Optional)</label>
               <LocationAutocomplete
                 value={user.office_name ?? ""}
-                style={showErrors && !user.office_name?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
                 placeholder="e.g. Manyata Tech Park"
                 onChange={(val) => setUser({ ...user, office_name: val })}
                 onSelect={({ name, lat, lng }) =>
@@ -920,12 +917,9 @@ export function ProfileForm({ initialUser }: Props) {
                   })
                 }
               />
-              {showErrors && !user.office_name?.trim() && (
-                <p className="text-xs text-red-500 mt-1">Office location name is required</p>
-              )}
             </div>
             <LocationPicker
-              legend="Office location Pin"
+              legend="Office location Pin (Optional)"
               lat={user.office_lat?.toString() ?? ""}
               lng={user.office_lng?.toString() ?? ""}
               defaultShowMap={false}
@@ -937,9 +931,6 @@ export function ProfileForm({ initialUser }: Props) {
                 })
               }
             />
-            {showErrors && (user.office_lat == null || user.office_lng == null) && (
-              <p className="text-xs text-red-500 mt-1">Please select and place a pin for your Office location</p>
-            )}
           </div>
         </div>
       </CollapsibleSection>

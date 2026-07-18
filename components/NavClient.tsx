@@ -900,22 +900,43 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
       {/* Profile Completion Reminder Banner */}
       {showProfileReminder && (
-        <div className="bg-[var(--color-accent)] text-white px-4 py-3 text-sm flex items-center justify-between z-[1000] relative shadow-md">
-          <span className="font-medium">Complete your profile to unlock better proximity matches!</span>
-          <div className="flex gap-4 items-center shrink-0">
-            <Link href="/profile" className="font-bold underline hover:text-white/80 transition-colors">Complete Now</Link>
-            <button 
-              onClick={() => {
-                sessionStorage.setItem("dismissed_profile_reminder", "true");
-                setShowProfileReminder(false);
-              }}
-              className="text-white hover:text-white/80 transition-colors"
-              title="Dismiss for this session"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
+        <>
+          {/* Mobile floating sticky banner */}
+          <div className="md:hidden fixed bottom-[calc(var(--bottom-nav-height)+8px)] left-4 right-4 z-[1005] bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl p-3 shadow-lg flex items-center justify-between animate-fadeInUp">
+            <span className="font-semibold text-xs pr-2">Complete your profile to unlock proximity matching!</span>
+            <div className="flex gap-3 items-center shrink-0">
+              <Link href="/profile" className="bg-white text-orange-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow hover:bg-white/95 transition-colors">Complete Now</Link>
+              <button 
+                onClick={() => {
+                  sessionStorage.setItem("dismissed_profile_reminder", "true");
+                  setShowProfileReminder(false);
+                }}
+                className="text-white/80 hover:text-white transition-colors"
+                title="Dismiss"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
           </div>
-        </div>
+
+          {/* Desktop/Tablet top sticky banner */}
+          <div className="hidden md:flex bg-[var(--color-accent)] text-white px-4 py-3 text-sm items-center justify-between z-[1000] relative shadow-md">
+            <span className="font-medium">Complete your profile to unlock better proximity matches!</span>
+            <div className="flex gap-4 items-center shrink-0">
+              <Link href="/profile" className="font-bold underline hover:text-white/80 transition-colors">Complete Now</Link>
+              <button 
+                onClick={() => {
+                  sessionStorage.setItem("dismissed_profile_reminder", "true");
+                  setShowProfileReminder(false);
+                }}
+                className="text-white hover:text-white/80 transition-colors"
+                title="Dismiss for this session"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Mobile Bottom Tab Bar */}
