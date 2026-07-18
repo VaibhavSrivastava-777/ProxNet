@@ -62,6 +62,8 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
   // Login Modal State
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showPwaInstallBanner, setShowPwaInstallBanner] = useState(false);
+  const [deviceOs, setDeviceOs] = useState<"ios" | "android" | null>(null);
 
   // Register native Google sign-in global receiver on mount
   useEffect(() => {
@@ -85,6 +87,46 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       }
     };
   }, []);
+
+  // Detect if running on mobile browser (not standalone PWA and not native app)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isStandalone = 
+        (window.navigator as any).standalone === true || 
+        window.matchMedia("(display-mode: standalone)").matches;
+
+      if (!isStandalone) {
+        const ua = window.navigator.userAgent.toLowerCase();
+        const isIpad = ua.includes("ipad");
+        const isIphone = ua.includes("iphone") && !ua.includes("like iphone");
+        const isMacintosh = ua.includes("macintosh") && typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
+        
+        const isIosDevice = isIphone || isIpad || isMacintosh;
+        const isAndroidDevice = ua.includes("android");
+        const isNativeApp = !!(window as any).AndroidBridge;
+
+        if (!isNativeApp) {
+          if (isIosDevice) {
+            setDeviceOs("ios");
+            setShowPwaInstallBanner(true);
+          } else if (isAndroidDevice) {
+            setDeviceOs("android");
+            setShowPwaInstallBanner(true);
+          }
+        }
+      }
+    }
+  }, []);
+
+  // Auto-trigger Login Modal inside native Android app if user is not authenticated
+  useEffect(() => {
+    if (typeof window !== "undefined" && !session) {
+      const isNativeApp = !!(window as any).AndroidBridge;
+      if (isNativeApp) {
+        setShowLoginModal(true);
+      }
+    }
+  }, [session]);
 
   // In-App Notification Center
   const [inAppNotifications, setInAppNotifications] = useState<any[]>([]);
@@ -656,6 +698,32 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   return (
     <>
       <audio id="honk-audio" src="/car-honk.mp3" preload="auto" />
+
+      {/* PWA Installation Promo Banner for Mobile Browsers */}
+      {showPwaInstallBanner && deviceOs && (
+        <div className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] text-white px-4 py-3 text-xs flex items-center justify-between z-[1000] relative shadow-md">
+          <span className="font-semibold flex items-center gap-1.5 leading-snug">
+            📱 {deviceOs === "ios" 
+              ? "Install ProxNet on your iPhone for the best mobile experience!" 
+              : "Install ProxNet on your Android for the best mobile experience!"}
+          </span>
+          <div className="flex gap-3 items-center shrink-0">
+            <Link 
+              href={deviceOs === "ios" ? "/install/ios" : "/install/android"} 
+              className="bg-white text-[var(--color-primary)] font-bold px-2.5 py-1 rounded shadow hover:bg-white/90 transition-colors"
+            >
+              Install Guide
+            </Link>
+            <button 
+              onClick={() => setShowPwaInstallBanner(false)}
+              className="text-white/80 hover:text-white transition-colors"
+              title="Dismiss"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
       {/* Desktop Top Nav */}
       {!isChatRoom && (
         <header
@@ -1076,15 +1144,17 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       {showLoginModal && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
           <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl max-w-sm w-full p-6 shadow-2xl relative animate-scaleIn pointer-events-auto">
-            <button
-              onClick={() => setShowLoginModal(false)}
-              className="absolute top-4 right-4 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer"
-              title="Close modal"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            {typeof window !== "undefined" && !(window as any).AndroidBridge && (
+              <button
+                onClick={() => setShowLoginModal(false)}
+                className="absolute top-4 right-4 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer"
+                title="Close modal"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
 
             <div className="text-center mb-6">
               <h3 className="text-lg font-bold text-[var(--color-text)]">Log in or sign up</h3>
