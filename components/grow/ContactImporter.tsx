@@ -153,7 +153,7 @@ export function ContactImporter({ inviteCode, onClose, defaultMode }: ContactImp
     try {
       await loadGoogleScript();
       
-      const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "901915190293-u5g61v30p01epas6vtr3pdt5v5q9bmbd.apps.googleusercontent.com";
+      const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "901915190293-octgqt2k8kdnrvtuj1crjk4ll3fgdtdj.apps.googleusercontent.com";
       if (!clientId) {
         throw new Error("Google Client ID is not configured.");
       }
