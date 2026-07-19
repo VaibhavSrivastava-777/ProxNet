@@ -14,6 +14,7 @@ export async function GET(request: Request) {
   const lng = parseFloat(searchParams.get("lng") ?? "");
   const radius = parseInt(searchParams.get("radius") ?? "100", 10);
   const unfiltered = searchParams.get("unfiltered") === "true";
+  const tagFilter = searchParams.get("tag")?.trim().toLowerCase() || null;
 
   if (Number.isNaN(lat) || Number.isNaN(lng) || (Number.isNaN(radius) && !unfiltered)) {
     return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
@@ -47,6 +48,13 @@ export async function GET(request: Request) {
   for (const u of (users ?? []) as User[]) {
     const visibility = u.visibility as UserVisibility;
     if (!visibility?.showCompany || !u.company?.trim()) continue;
+
+    // Filter by tag if requested
+    if (tagFilter) {
+      if (!u.tags || !u.tags.some(t => t.toLowerCase() === tagFilter || t.toLowerCase().includes(tagFilter))) {
+        continue;
+      }
+    }
 
     const current = locationMap.get(u.id);
     let bestLoc: { lat: number; lng: number } | null = null;

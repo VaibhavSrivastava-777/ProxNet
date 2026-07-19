@@ -173,6 +173,7 @@ export function ProfileForm({ initialUser }: Props) {
   const [fetchingLinkedInDetails, setFetchingLinkedInDetails] = useState(false);
   const [fetchingGeoAddress, setFetchingGeoAddress] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "error" | "success" } | null>(null);
+  const [tagInput, setTagInput] = useState("");
 
   useEffect(() => {
     if (toast) {
@@ -435,6 +436,7 @@ export function ProfileForm({ initialUser }: Props) {
         office_lng: user.office_lng ? Number(user.office_lng) : null,
         office_name: user.office_name,
         anonymous_name: user.anonymous_name,
+        tags: user.tags || [],
         active_location: "home",
         visibility,
       }),
@@ -518,6 +520,7 @@ export function ProfileForm({ initialUser }: Props) {
         office_lat: user.office_lat ? Number(user.office_lat) : null,
         office_lng: user.office_lng ? Number(user.office_lng) : null,
         anonymous_name: user.anonymous_name,
+        tags: user.tags || [],
         active_location: "home",
         visibility,
       }),
@@ -857,6 +860,46 @@ export function ProfileForm({ initialUser }: Props) {
             {showErrors && !user.job_title?.trim() && (
               <p className="text-xs text-red-500 mt-1">Job title is required</p>
             )}
+          </div>
+
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="label">Tags</label>
+            <div className="flex flex-col gap-2">
+              <input
+                className="input"
+                value={tagInput}
+                placeholder="e.g. IIM Lucknow (Press Enter to add)"
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault();
+                    const val = tagInput.trim().replace(/^,|,$/g, "");
+                    if (val && !(user.tags || []).includes(val)) {
+                      setUser({ ...user, tags: [...(user.tags || []), val] });
+                    }
+                    setTagInput("");
+                  }
+                }}
+              />
+              <div className="flex flex-wrap gap-2">
+                {(user.tags || []).map((t) => (
+                  <span key={t} className="badge badge-primary flex items-center gap-1" style={{ padding: "4px 8px" }}>
+                    {t}
+                    <button
+                      type="button"
+                      onClick={() => setUser({ ...user, tags: user.tags.filter(tag => tag !== t) })}
+                      className="border-none bg-transparent text-white cursor-pointer hover:opacity-80"
+                      style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+            <p className="text-[10px] text-[var(--color-text-secondary)] mt-1">
+              Add tags to help others find you in their neighborhood searches.
+            </p>
           </div>
 
           <div style={{ gridColumn: "1 / -1" }}>

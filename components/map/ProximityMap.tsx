@@ -37,6 +37,7 @@ export function ProximityMap() {
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [tagFilter, setTagFilter] = useState("");
   
   // Follows & profile modal states
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
@@ -92,13 +93,13 @@ export function ProximityMap() {
 
   const aggregateApiUrl = center
     ? (filter2km 
-        ? `/api/proximity/aggregate?lat=${center.lat}&lng=${center.lng}&radius=2000` 
-        : `/api/proximity/aggregate?lat=${center.lat}&lng=${center.lng}&unfiltered=true`)
+        ? `/api/proximity/aggregate?lat=${center.lat}&lng=${center.lng}&radius=2000${tagFilter ? `&tag=${encodeURIComponent(tagFilter)}` : ""}` 
+        : `/api/proximity/aggregate?lat=${center.lat}&lng=${center.lng}&unfiltered=true${tagFilter ? `&tag=${encodeURIComponent(tagFilter)}` : ""}`)
     : null;
   const peopleApiUrl = center
     ? (filter2km 
-        ? `/api/proximity/people?lat=${center.lat}&lng=${center.lng}&radius=2000` 
-        : `/api/proximity/people?lat=${center.lat}&lng=${center.lng}&unfiltered=true`)
+        ? `/api/proximity/people?lat=${center.lat}&lng=${center.lng}&radius=2000${tagFilter ? `&tag=${encodeURIComponent(tagFilter)}` : ""}` 
+        : `/api/proximity/people?lat=${center.lat}&lng=${center.lng}&unfiltered=true${tagFilter ? `&tag=${encodeURIComponent(tagFilter)}` : ""}`)
     : null;
 
   const { data: clusterData, isLoading: clustersLoading, mutate: mutateClusters } = useSWR<{ clusters: CompanyCluster[] }>(aggregateApiUrl, fetcher);
@@ -271,6 +272,18 @@ export function ProximityMap() {
                 />
                 <span>Limit search scope to 2 km</span>
               </label>
+            </div>
+
+            <div style={{ flex: "1 1 160px" }}>
+              <label className="label text-[10px] font-bold uppercase tracking-wider mb-1 block">Filter by Tag</label>
+              <input
+                type="text"
+                className="input w-full py-1.5 text-xs rounded-lg"
+                value={tagFilter}
+                onChange={(e) => setTagFilter(e.target.value)}
+                placeholder="e.g. IIM Lucknow"
+                style={{ color: "var(--color-text)", backgroundColor: "var(--color-surface-secondary)" }}
+              />
             </div>
 
             <button

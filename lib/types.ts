@@ -39,6 +39,7 @@ export interface User {
   anonymous_name: string | null;
   embedding: number[] | null;
   wallet: number;
+  tags: string[];
   created_at: string;
   updated_at: string;
 }

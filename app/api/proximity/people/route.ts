@@ -22,6 +22,7 @@ export async function GET(request: Request) {
   const lng = parseFloat(searchParams.get("lng") ?? "");
   const radius = parseInt(searchParams.get("radius") ?? "5000", 10);
   const unfiltered = searchParams.get("unfiltered") === "true";
+  const tagFilter = searchParams.get("tag")?.trim().toLowerCase() || null;
 
   if (Number.isNaN(lat) || Number.isNaN(lng)) {
     return NextResponse.json({ error: "Invalid location parameters" }, { status: 400 });
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
   // Fetch all active users (omit embedding completely)
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("id, company, job_title, professional_bio, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility")
+    .select("id, company, job_title, professional_bio, tags, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility")
     .eq("is_active", true)
     .neq("id", user.id);
 
@@ -58,6 +59,13 @@ export async function GET(request: Request) {
     // If user has no job title or company, don't show in proximity list
     if (!u.job_title?.trim() || !u.company?.trim()) continue;
 
+    // Filter by tag if requested
+    if (tagFilter) {
+      if (!u.tags || !u.tags.some(t => t.toLowerCase() === tagFilter || t.toLowerCase().includes(tagFilter))) {
+        continue;
+      }
+    }
+
     const current = locationMap.get(u.id);
     let minDistance = Infinity;
 
@@ -80,6 +88,7 @@ export async function GET(request: Request) {
         job_title: u.job_title.trim(),
         company: u.company.trim(),
         professional_bio: (u as any).professional_bio || null,
+        tags: u.tags || [],
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
         distance: minDistance === Infinity ? null : minDistance,
         is_followed: followingIds.has(u.id),

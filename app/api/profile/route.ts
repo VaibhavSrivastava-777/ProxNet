@@ -74,6 +74,7 @@ export async function PATCH(request: Request) {
   if (body.resume_url !== undefined) updates.resume_url = body.resume_url;
   if (body.resume_text !== undefined) updates.resume_text = body.resume_text;
   if (body.profile_photo_url !== undefined) updates.profile_photo_url = body.profile_photo_url;
+  if (body.tags !== undefined && Array.isArray(body.tags)) updates.tags = body.tags;
   if (body.linkedin_profile_url !== undefined) {
     updates.linkedin_profile_url = normalizeLinkedInUrl(body.linkedin_profile_url);
   }
