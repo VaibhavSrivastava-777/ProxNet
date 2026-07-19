@@ -14,7 +14,7 @@ async function main() {
   const { data: users, error } = await supabase
     .from("users")
     .select("id, full_name, company, job_title, about")
-    .is("professional_bio", null);
+    .not("job_title", "is", null);
 
   if (error) {
     console.error("Error fetching users:", error);
@@ -34,7 +34,7 @@ async function main() {
       continue;
     }
 
-    const prompt = `Write a short, engaging professional bio (max 3 sentences) for a professional named ${user.full_name}, who works as a ${user.job_title} at ${user.company}. ${user.about ? `Additional context: ${user.about}` : ''} Keep it third-person and professional.`;
+    const prompt = `Write a short, engaging professional bio (max 3 sentences) for a professional who works as a ${user.job_title} at ${user.company}. ${user.about ? `Additional context: ${user.about}` : ''} Keep it third-person and professional. Do NOT mention the person's name anywhere in the bio.`;
 
     try {
       const response = await openai.chat.completions.create({
