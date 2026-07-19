@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useTheme } from "./ThemeProvider";
 import { signOutAction } from "@/app/actions";
@@ -20,6 +20,7 @@ interface NavClientProps {
 export function NavClient({ session, userName, userId }: NavClientProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isChatRoom = pathname.startsWith("/chat/") || pathname === "/proxnet-ai";
   const { theme, resolved, setTheme } = useTheme();
   const isIosUser = typeof window !== "undefined" && (/iphone|ipad|ipod/i.test(window.navigator.userAgent) || (window.navigator.userAgent.includes("Mac") && window.navigator.maxTouchPoints > 0));
@@ -91,9 +92,16 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     };
   }, []);
 
+  // Register custom event listener for Login Modal
+  useEffect(() => {
+    const handler = () => setShowLoginModal(true);
+    window.addEventListener("openLoginModal", handler);
+    return () => window.removeEventListener("openLoginModal", handler);
+  }, []);
+
   // Detect if running on mobile browser (not standalone PWA and not native app)
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && session && searchParams.get("fresh_login") === "true") {
       const isStandalone = 
         (window.navigator as any).standalone === true || 
         window.matchMedia("(display-mode: standalone)").matches;
@@ -118,8 +126,12 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
           }
         }
       }
+      
+      // Strip fresh_login from URL without triggering a reload
+      const newUrl = window.location.pathname + window.location.search.replace(/([?&])fresh_login=true&?/, '$1').replace(/[?&]$/, '');
+      window.history.replaceState({}, '', newUrl);
     }
-  }, []);
+  }, [session, searchParams]);
 
   // Auto-trigger Login Modal inside native Android app if user is not authenticated
   useEffect(() => {
@@ -706,31 +718,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     <>
       <audio id="honk-audio" src="/car-honk.mp3" preload="auto" />
 
-      {/* PWA Installation Promo Banner for Mobile Browsers */}
-      {showPwaInstallBanner && deviceOs && (
-        <div className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] text-white px-4 py-3 text-xs flex items-center justify-between z-[1000] relative shadow-md">
-          <span className="font-semibold flex items-center gap-1.5 leading-snug">
-            📱 {deviceOs === "ios" 
-              ? "Install ProxNet on your iPhone for the best mobile experience!" 
-              : "Install ProxNet on your Android for the best mobile experience!"}
-          </span>
-          <div className="flex gap-3 items-center shrink-0">
-            <Link 
-              href={deviceOs === "ios" ? "/install/ios" : "/install/android"} 
-              className="bg-white text-[var(--color-primary)] font-bold px-2.5 py-1 rounded shadow hover:bg-white/90 transition-colors"
-            >
-              Install Guide
-            </Link>
-            <button 
-              onClick={() => setShowPwaInstallBanner(false)}
-              className="text-white/80 hover:text-white transition-colors"
-              title="Dismiss"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-          </div>
-        </div>
-      )}
+      {/* PWA Installation Promo Banner for Mobile Browsers removed */}
       {/* Desktop Top Nav */}
       {!isChatRoom && (
         <header

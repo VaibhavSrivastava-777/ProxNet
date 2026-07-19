@@ -13,12 +13,12 @@ export function LoginButton({ className, style }: LoginButtonProps) {
     if (typeof window !== "undefined" && (window as any).AndroidBridge) {
       (window as any).AndroidBridge.startGoogleSignIn();
     } else {
-      signIn("google", { callbackUrl: "/profile" });
+      signIn("google", { callbackUrl: "/profile?fresh_login=true" });
     }
   };
 
   const handleLinkedInClick = () => {
-    signIn("linkedin", { callbackUrl: "/profile" });
+    signIn("linkedin", { callbackUrl: "/profile?fresh_login=true" });
   };
 
   const isHero = className?.includes("btn-lg") ?? false;

@@ -7,6 +7,8 @@ import { LoginButton } from "@/components/auth/LoginButton";
 import { HomeWidgets } from "@/components/home/HomeWidgets";
 import { isOnboardingIncomplete } from "@/lib/profile-validation";
 
+import { LandingStoreButtons } from "@/components/auth/LandingStoreButtons";
+
 export default async function HomePage({
   searchParams,
 }: {
@@ -62,12 +64,7 @@ export default async function HomePage({
             <div className="flex flex-col items-center gap-3 mb-4">
               <p className="text-caption text-white/50 uppercase tracking-widest font-medium">Available on</p>
               <div className="flex items-center gap-3 animate-fadeIn">
-                <a href="/install/ios" className="store-badge-link" aria-label="Download on the App Store">
-                  <img src="/icons/badge-app-store.svg" alt="Download on the App Store" className="h-11 w-auto hover:opacity-80 transition-opacity" />
-                </a>
-                <a href="/install/android" className="store-badge-link" aria-label="Get it on Google Play">
-                  <img src="/icons/badge-google-play.svg" alt="Get it on Google Play" className="h-11 w-auto hover:opacity-80 transition-opacity" />
-                </a>
+                <LandingStoreButtons iconHeightClass="h-11" />
               </div>
             </div>
 
@@ -135,12 +132,7 @@ export default async function HomePage({
         
         {/* Store Badges */}
         <div className="flex items-center gap-3 mb-8 opacity-70">
-          <a href="/install/ios" aria-label="App Store">
-            <img src="/icons/badge-app-store.svg" alt="App Store" className="h-10 w-auto hover:opacity-80 transition-opacity" />
-          </a>
-          <a href="/install/android" aria-label="Google Play">
-            <img src="/icons/badge-google-play.svg" alt="Google Play" className="h-10 w-auto hover:opacity-80 transition-opacity" />
-          </a>
+          <LandingStoreButtons iconHeightClass="h-10" />
         </div>
 
         <LoginButton className="btn btn-linkedin btn-lg" />
