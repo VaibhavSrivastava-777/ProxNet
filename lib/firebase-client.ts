@@ -9,12 +9,17 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+export const isFirebaseConfigured = !!firebaseConfig.appId && !!firebaseConfig.projectId;
+
+const app = isFirebaseConfigured 
+  ? (getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0])
+  : null;
 
 export const isSupported = () => 
   typeof window !== "undefined" && 
   "serviceWorker" in navigator && 
-  "PushManager" in window;
+  "PushManager" in window &&
+  isFirebaseConfigured;
 
 export async function getFcmRegistration(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return null;

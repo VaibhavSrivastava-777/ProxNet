@@ -287,7 +287,11 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         setShowPushPrompt(true);
       } else if (permission === "granted") {
         try {
-          const { getMessaging, getToken, getFcmRegistration } = await import("@/lib/firebase-client");
+          const { getMessaging, getToken, getFcmRegistration, isFirebaseConfigured } = await import("@/lib/firebase-client");
+          if (!isFirebaseConfigured) {
+            console.warn("Firebase not configured for push notifications.");
+            return;
+          }
           const messaging = getMessaging();
           const registration = await getFcmRegistration();
           if (!registration) {
@@ -368,7 +372,13 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         return;
       }
 
-      const { getMessaging, getToken, getFcmRegistration } = await import("@/lib/firebase-client");
+      const { getMessaging, getToken, getFcmRegistration, isFirebaseConfigured } = await import("@/lib/firebase-client");
+      
+      if (!isFirebaseConfigured) {
+        alert("Push notifications are not fully configured (missing App ID or Project ID). Please set the Firebase environment variables.");
+        return;
+      }
+
       const messaging = getMessaging();
       const registration = await getFcmRegistration();
       if (!registration) {

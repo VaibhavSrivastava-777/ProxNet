@@ -1187,12 +1187,18 @@ export function ProfileForm({ initialUser }: Props) {
                         return;
                       }
                       const fcmVapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+                      const { getMessaging, getToken, getFcmRegistration, isFirebaseConfigured } = await import("@/lib/firebase-client");
+                      
+                      if (!isFirebaseConfigured) {
+                        alert("Push notifications are not fully configured (missing App ID or Project ID). Please set the Firebase environment variables.");
+                        return;
+                      }
+
                       if (!fcmVapidKey) {
                         alert("Push notification key is not set. Please try again later.");
                         return;
                       }
 
-                      const { getMessaging, getToken, getFcmRegistration } = await import("@/lib/firebase-client");
                       const messaging = getMessaging();
                       const registration = await getFcmRegistration();
                       if (!registration) {
