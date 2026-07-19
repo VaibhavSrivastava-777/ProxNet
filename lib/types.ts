@@ -38,6 +38,7 @@ export interface User {
   network_points: number;
   anonymous_name: string | null;
   embedding: number[] | null;
+  wallet: number;
   created_at: string;
   updated_at: string;
 }

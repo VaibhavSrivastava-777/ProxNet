@@ -859,6 +859,21 @@ export function ProfileForm({ initialUser }: Props) {
             )}
           </div>
 
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="label">Professional Bio</label>
+            <textarea
+              className="input"
+              value={user.professional_bio ?? ""}
+              placeholder="Tell us a little about your professional background and interests..."
+              onChange={(e) => setUser({ ...user, professional_bio: e.target.value })}
+              rows={4}
+              style={{ resize: "vertical", height: "auto" }}
+            />
+            <p className="text-[10px] text-[var(--color-text-secondary)] mt-1">
+              Your API-generated professional bio. Edit as you see fit.
+            </p>
+          </div>
+
           <div>
             <label className="label">Phone number</label>
             <input

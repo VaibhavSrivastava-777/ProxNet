@@ -82,6 +82,22 @@ export async function POST(request: Request) {
     const supabase = createAdminClient();
     const { sessionId, aiUserId } = await getOrCreateAISession(supabase, user.id);
 
+    // Charge the session (costs 1 credit for new sessions, 0 for existing)
+    const { data: charged, error: chargeError } = await supabase.rpc("charge_session", {
+      p_user_id: user.id,
+      p_session_id: sessionId,
+      amount: 1
+    });
+
+    if (chargeError) {
+      console.error("Wallet charge error:", chargeError);
+      return NextResponse.json({ error: "Failed to process payment." }, { status: 500 });
+    }
+
+    if (!charged) {
+      return NextResponse.json({ error: "Insufficient credits" }, { status: 402 });
+    }
+
     // Save User message
     await supabase.from("chat_messages").insert({
       session_id: sessionId,

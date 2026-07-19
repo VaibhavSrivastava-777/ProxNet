@@ -65,6 +65,9 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   const [showPwaInstallBanner, setShowPwaInstallBanner] = useState(false);
   const [deviceOs, setDeviceOs] = useState<"ios" | "android" | null>(null);
 
+  // Wallet State
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+
   // Register native Google sign-in global receiver on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -483,6 +486,10 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       .then((r) => r.json())
       .then(async (user) => {
         if (!user || user.error) return;
+
+        if (user.wallet !== undefined) {
+          setWalletBalance(user.wallet);
+        }
         
         let hasHomeLocation = !!user.home_lat;
         let isProfileComplete = !isProfileIncomplete(user);
@@ -834,7 +841,13 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                         <p className="text-body-sm font-semibold truncate text-[var(--color-text)]">
                           {userName || "User"}
                         </p>
-                        <p className="text-caption truncate">Logged in</p>
+                        <p className="text-caption truncate text-[var(--color-text-secondary)]">Logged in</p>
+                        {walletBalance !== null && (
+                          <div className="mt-2 flex items-center justify-between text-xs font-semibold text-[var(--color-primary)] bg-[var(--color-surface-hover)] px-2 py-1 rounded">
+                            <span>Credits</span>
+                            <span>{walletBalance}</span>
+                          </div>
+                        )}
                       </div>
                       <Link
                         href="/profile"
@@ -931,7 +944,13 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                       <p className="text-body-sm font-semibold truncate text-[var(--color-text)]">
                         {userName || "User"}
                       </p>
-                      <p className="text-caption truncate">Logged in</p>
+                      <p className="text-caption truncate text-[var(--color-text-secondary)]">Logged in</p>
+                      {walletBalance !== null && (
+                        <div className="mt-2 flex items-center justify-between text-xs font-semibold text-[var(--color-primary)] bg-[var(--color-surface-hover)] px-2 py-1 rounded">
+                          <span>Credits</span>
+                          <span>{walletBalance}</span>
+                        </div>
+                      )}
                     </div>
                     <Link
                       href="/profile"

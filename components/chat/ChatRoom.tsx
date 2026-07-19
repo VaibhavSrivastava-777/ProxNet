@@ -296,6 +296,9 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
       const data = await res.json();
       setMessages((prev) => prev.map(m => m.id === tempId ? data.message : m));
     } else {
+      if (res.status === 402) {
+        alert("Insufficient credits. Please complete your profile or top up your wallet to start new chats.");
+      }
       setMessages((prev) => prev.filter(m => m.id !== tempId));
     }
   }
