@@ -60,13 +60,7 @@ export default async function HomePage({
             />
           </div>
           <div className="flex flex-col items-center justify-center gap-4">
-            {/* App Store & Play Store Badges */}
-            <div className="flex flex-col items-center gap-3 mb-4">
-              <p className="text-caption text-white/50 uppercase tracking-widest font-medium">Available on</p>
-              <div className="flex items-center gap-3 animate-fadeIn">
-                <LandingStoreButtons iconHeightClass="h-11" />
-              </div>
-            </div>
+
 
             <LoginButton className="btn btn-linkedin btn-lg shadow-xl shadow-black/20" />
             <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • LINKEDIN VERIFIED • FREE TO USE</p>
@@ -130,10 +124,7 @@ export default async function HomePage({
       <section className="px-4 py-24 text-center bg-[var(--color-surface)] flex flex-col items-center">
         <h2 className="text-h2 mb-8">Ready to discover who's next door?</h2>
         
-        {/* Store Badges */}
-        <div className="flex items-center gap-3 mb-8 opacity-70">
-          <LandingStoreButtons iconHeightClass="h-10" />
-        </div>
+
 
         <LoginButton className="btn btn-linkedin btn-lg" />
       </section>
