@@ -172,6 +172,16 @@ export function ProfileForm({ initialUser }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [fetchingLinkedInDetails, setFetchingLinkedInDetails] = useState(false);
   const [fetchingGeoAddress, setFetchingGeoAddress] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "error" | "success" } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const showName = !initialUser.full_name?.trim();
   const showEmail = !initialUser.email?.trim();
@@ -242,23 +252,50 @@ export function ProfileForm({ initialUser }: Props) {
   const handleLinkedInBlur = async (url: string) => {
     if (!url || !url.includes("linkedin.com")) return;
     setFetchingLinkedInDetails(true);
+    setToast(null);
     try {
       const res = await fetch(`/api/profile/parse-linkedin?url=${encodeURIComponent(url)}`);
       if (res.ok) {
         const result = await res.json();
         if (result.success && result.data) {
           const { full_name, company, job_title, professional_bio } = result.data;
-          setUser((prev) => ({
-            ...prev,
-            full_name: prev.full_name || full_name || "",
-            company: prev.company || company || "",
-            job_title: prev.job_title || job_title || "",
-            professional_bio: prev.professional_bio || professional_bio || "",
-          }));
+          const hasData = full_name || company || job_title || professional_bio;
+          if (hasData) {
+            setUser((prev) => ({
+              ...prev,
+              full_name: prev.full_name || full_name || "",
+              company: prev.company || company || "",
+              job_title: prev.job_title || job_title || "",
+              professional_bio: prev.professional_bio || professional_bio || "",
+            }));
+            setToast({
+              message: "Successfully imported profile details from LinkedIn.",
+              type: "success",
+            });
+          } else {
+            setToast({
+              message: "Unable to pull details programmatically. Please provide the details manually.",
+              type: "error",
+            });
+          }
+        } else {
+          setToast({
+            message: "Unable to pull details programmatically. Please provide the details manually.",
+            type: "error",
+          });
         }
+      } else {
+        setToast({
+          message: "Unable to pull details programmatically. Please provide the details manually.",
+          type: "error",
+        });
       }
     } catch (err) {
       console.error("Failed to parse LinkedIn URL:", err);
+      setToast({
+        message: "Unable to pull details programmatically. Please provide the details manually.",
+        type: "error",
+      });
     } finally {
       setFetchingLinkedInDetails(false);
     }
@@ -1475,6 +1512,41 @@ export function ProfileForm({ initialUser }: Props) {
             </div>
 
           </div>
+        </div>
+      )}
+
+      {/* Floating In-App Toast */}
+      {toast && (
+        <div 
+          className="fixed bottom-20 right-4 z-[9999] flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-lg)] animate-fadeInUp border-l-4 pointer-events-auto"
+          style={{ 
+            borderColor: toast.type === "error" ? "var(--color-error)" : "var(--color-border)",
+            borderLeftColor: toast.type === "error" ? "var(--color-error)" : "var(--color-primary)",
+            maxWidth: "350px",
+          }}
+        >
+          <div className="flex-1 flex flex-col gap-0.5">
+            <span className="text-xs font-semibold text-[var(--color-text)] flex items-center gap-1.5">
+              {toast.type === "error" ? (
+                <svg className="w-4 h-4 text-[var(--color-error)]" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-[var(--color-primary)]" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+              )}
+              {toast.type === "error" ? "Import Failed" : "Import Success"}
+            </span>
+            <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-normal">{toast.message}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer self-start p-0.5 border-none bg-transparent"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
         </div>
       )}
     </>
