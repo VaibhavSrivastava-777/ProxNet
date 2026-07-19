@@ -224,11 +224,11 @@ export async function GET(request: Request) {
         const systemContent = needsJobTitle
           ? `Given the LinkedIn profile data, do two things:
 1. Determine the person's current job title/designation from available context (especially the OG Title which follows "Name - Job Title - Company | LinkedIn" format).
-2. Write a concise 2-3 sentence professional bio in third person. Do NOT mention the person's name anywhere in the bio. Be factual, do not fabricate.
+2. Write a concise 2-3 sentence professional bio in third person. CRITICAL INSTRUCTION: You MUST NOT mention the person's name anywhere in the bio under ANY circumstances. Start the bio directly with their professional identity (e.g., "A seasoned professional..."). Be factual, do not fabricate.
 
 Return raw JSON only:
 {"job_title": "string or null", "professional_bio": "string or null"}`
-          : `Write a concise 2-3 sentence professional bio for this person based on the data provided. Write in third person. Do NOT mention the person's name anywhere in the bio. Be factual, do not fabricate.
+          : `Write a concise 2-3 sentence professional bio for this person based on the data provided. Write in third person. CRITICAL INSTRUCTION: You MUST NOT mention the person's name anywhere in the bio under ANY circumstances. Start the bio directly with their professional identity (e.g., "A seasoned professional..."). Be factual, do not fabricate.
 
 Return raw JSON only:
 {"professional_bio": "string or null"}`;
@@ -278,7 +278,7 @@ Return raw JSON only:
 - full_name: The person's full name
 - company: Their current company
 - job_title: Their current job title
-- professional_bio: A 2-3 sentence professional bio that does NOT mention the person's name (null if insufficient data)
+- professional_bio: A 2-3 sentence professional bio. CRITICAL INSTRUCTION: You MUST NOT mention the person's name anywhere in the bio under ANY circumstances. Start the bio directly with their professional identity (e.g., "A seasoned professional..."). (null if insufficient data)
 
 Output raw JSON only. No markdown. Set fields to null if unknown. Do not fabricate.`;
 

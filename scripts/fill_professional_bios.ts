@@ -33,7 +33,7 @@ async function main() {
       continue;
     }
 
-    const prompt = `Write a short, engaging professional bio (max 3 sentences) for a professional who works as a ${user.job_title} at ${user.company}. ${user.about ? `Additional context: ${user.about}` : ''} Keep it third-person and professional. Do NOT mention the person's name anywhere in the bio.`;
+    const prompt = `Write a short, engaging professional bio (max 3 sentences) for a professional who works as a ${user.job_title} at ${user.company}. ${user.about ? `Additional context: ${user.about}` : ''} Keep it third-person and professional. CRITICAL INSTRUCTION: You MUST NOT mention the person's name anywhere in the bio under ANY circumstances. Start the bio directly with their professional identity (e.g., "A seasoned professional...", "An experienced ${user.job_title}...").`;
 
     try {
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
