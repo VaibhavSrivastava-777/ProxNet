@@ -63,7 +63,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
   // Login Modal State
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [showPwaInstallBanner, setShowPwaInstallBanner] = useState(false);
+  const [showPwaInstallModal, setShowPwaInstallModal] = useState(false);
   const [deviceOs, setDeviceOs] = useState<"ios" | "android" | null>(null);
 
   // Wallet State
@@ -119,10 +119,10 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         if (!isNativeApp) {
           if (isIosDevice) {
             setDeviceOs("ios");
-            setShowPwaInstallBanner(true);
+            setShowPwaInstallModal(true);
           } else if (isAndroidDevice) {
             setDeviceOs("android");
-            setShowPwaInstallBanner(true);
+            setShowPwaInstallModal(true);
           }
         }
       }
@@ -1146,6 +1146,67 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
           );
         })}
       </div>
+
+      {/* PWA Install Guide Modal Overlay */}
+      {showPwaInstallModal && deviceOs && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl max-w-sm w-full p-6 shadow-2xl relative animate-scaleIn pointer-events-auto flex flex-col items-center">
+            <button
+              onClick={() => setShowPwaInstallModal(false)}
+              className="absolute top-4 right-4 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer bg-[var(--color-surface-hover)] rounded-full p-1"
+              title="Close modal"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <img src="/logo.png" alt="ProxNet" className="w-12 h-12 rounded-xl shadow-sm mb-4" />
+            <h3 className="text-lg font-bold text-[var(--color-text)] text-center mb-1">Install ProxNet</h3>
+            <p className="text-sm text-[var(--color-text-secondary)] text-center mb-6">
+              Get the fast, app-like experience on your home screen.
+            </p>
+
+            {deviceOs === "ios" ? (
+              <div className="flex flex-col gap-4 w-full">
+                <div className="flex gap-3 items-center bg-[var(--color-surface-hover)] p-3 rounded-lg border border-[var(--color-border-light)]">
+                  <div className="w-7 h-7 rounded bg-white flex items-center justify-center shadow-sm shrink-0">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                  </div>
+                  <p className="text-sm m-0 leading-tight">Tap the <strong className="text-[var(--color-text)]">Share</strong> icon at the bottom of Safari.</p>
+                </div>
+                <div className="flex gap-3 items-center bg-[var(--color-surface-hover)] p-3 rounded-lg border border-[var(--color-border-light)]">
+                  <div className="w-7 h-7 rounded bg-white flex items-center justify-center shadow-sm shrink-0">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-700"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                  </div>
+                  <p className="text-sm m-0 leading-tight">Select <strong className="text-[var(--color-text)]">Add to Home Screen</strong> from the menu.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4 w-full">
+                <div className="flex gap-3 items-center bg-[var(--color-surface-hover)] p-3 rounded-lg border border-[var(--color-border-light)]">
+                  <div className="w-7 h-7 rounded bg-white flex items-center justify-center shadow-sm shrink-0">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                  </div>
+                  <p className="text-sm m-0 leading-tight">Tap the <strong className="text-[var(--color-text)]">three dots menu</strong> in the top-right of Chrome.</p>
+                </div>
+                <div className="flex gap-3 items-center bg-[var(--color-surface-hover)] p-3 rounded-lg border border-[var(--color-border-light)]">
+                  <div className="w-7 h-7 rounded bg-white flex items-center justify-center shadow-sm shrink-0">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-700"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                  </div>
+                  <p className="text-sm m-0 leading-tight">Select <strong className="text-[var(--color-text)]">Install App</strong> or <strong className="text-[var(--color-text)]">Add to Home Screen</strong>.</p>
+                </div>
+              </div>
+            )}
+            <button 
+              onClick={() => setShowPwaInstallModal(false)}
+              className="mt-6 text-sm font-semibold text-[var(--color-primary)] hover:underline"
+            >
+              Continue in browser
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Login Modal Overlay */}
       {showLoginModal && (
