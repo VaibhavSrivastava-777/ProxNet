@@ -70,8 +70,24 @@ export function QAContent() {
     <div className="w-full">
       {/* ── 1. Proximity Map Tab ── */}
       <div className={activeTab === "/proximity" ? "block" : "hidden"}>
-        <div className="mx-auto max-w-6xl p-4 md:p-8 animate-fadeIn" style={{ paddingBottom: "3rem" }}>
+        <div className="mx-auto max-w-6xl p-4 md:p-8 animate-fadeIn" style={{ paddingBottom: "6rem" }}>
           <ProximityMap />
+
+          {/* Footer links for Proximity Tab */}
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 text-sm text-[var(--color-text-tertiary)] text-center">
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+              <a href="/privacy" className="hover:text-[var(--color-accent)] transition-colors">Privacy</a>
+              <span>&bull;</span>
+              <a href="/delete-account" className="hover:text-[var(--color-accent)] transition-colors">Delete Account</a>
+              <span>&bull;</span>
+              <a href="/safety" className="hover:text-[var(--color-accent)] transition-colors">Safety</a>
+              <span>&bull;</span>
+              <a href="/disclaimer" className="hover:text-[var(--color-accent)] transition-colors">Disclaimer</a>
+              <span>&bull;</span>
+              <a href="https://wa.me/918197678983?text=Hi%20ProxNet,%20I%20have%20some%20feedback" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--color-accent)] transition-colors">Contact Us</a>
+            </div>
+            <div>&copy; ProxNet 2026</div>
+          </div>
         </div>
       </div>
 

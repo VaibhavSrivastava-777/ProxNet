@@ -40,7 +40,7 @@ export function LocalForumFeed() {
   const [postBody, setPostBody] = useState("");
   const [postCategory, setPostCategory] = useState("General");
   const [isPosting, setIsPosting] = useState(false);
-  const [filter2km, setFilter2km] = useState(false);
+  const [filter2km, setFilter2km] = useState(true);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
 
   const toggleExpand = (e: React.MouseEvent, id: string) => {

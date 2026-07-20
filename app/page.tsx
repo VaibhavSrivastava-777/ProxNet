@@ -130,30 +130,20 @@ export default async function HomePage({
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-[var(--color-border-light)] bg-[var(--color-surface)] px-4 py-8 text-center text-[var(--color-text-tertiary)]">
+      <footer className="border-t border-[var(--color-border-light)] bg-[var(--color-surface)] px-4 py-8 text-center text-[var(--color-text-tertiary)] flex flex-col items-center gap-4">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
+          <Link href="/privacy" className="hover:text-[var(--color-accent)] transition-colors">Privacy</Link>
+          <span>&bull;</span>
+          <Link href="/delete-account" className="hover:text-[var(--color-accent)] transition-colors">Delete Account</Link>
+          <span>&bull;</span>
+          <Link href="/safety" className="hover:text-[var(--color-accent)] transition-colors">Safety</Link>
+          <span>&bull;</span>
+          <Link href="/disclaimer" className="hover:text-[var(--color-accent)] transition-colors">Disclaimer</Link>
+          <span>&bull;</span>
+          <a href="https://wa.me/918197678983?text=Hi%20ProxNet,%20I%20have%20some%20feedback" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--color-accent)] transition-colors">Contact Us</a>
+        </div>
         <div className="text-body-sm" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.25rem" }}>
-          <span>&copy; {new Date().getFullYear()}</span>
-          <span style={{ fontWeight: "bold", display: "inline-flex", alignItems: "center" }}>
-            <span style={{
-              background: "linear-gradient(135deg, var(--color-primary) 30%, #0077ff 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              fontWeight: 800,
-            }}>Prox</span>
-            <span style={{
-              background: "linear-gradient(135deg, var(--color-accent) 30%, #a855f7 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              fontWeight: 500,
-            }}>Net</span>
-            <sup style={{
-              fontSize: "0.55em",
-              fontWeight: "bold",
-              color: "var(--color-text-secondary)",
-              marginLeft: "1px",
-              verticalAlign: "super"
-            }}>®</sup>
-          </span>
+          <span>&copy; ProxNet {new Date().getFullYear()}</span>
           <span>. Built for professionals.</span>
         </div>
       </footer>

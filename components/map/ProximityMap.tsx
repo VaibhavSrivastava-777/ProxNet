@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import type { CompanyCluster } from "@/lib/types";
 import { QuestionForm } from "@/components/qa/QuestionForm";
@@ -31,7 +31,7 @@ export function ProximityMap() {
   const router = useRouter();
   const [aiQuery, setAiQuery] = useState("");
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
-  const [filter2km, setFilter2km] = useState(false);
+  const [filter2km, setFilter2km] = useState(true);
   const [localError, setLocalError] = useState("");
   const [locationMode, setLocationMode] = useState<"home" | "office">("home");
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
@@ -43,6 +43,20 @@ export function ProximityMap() {
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
   const [chatTarget, setChatTarget] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
+  
+  // Pagination
+  const [displayLimit, setDisplayLimit] = useState(20);
+
+  const observer = useRef<IntersectionObserver | null>(null);
+  const lastElementRef = useCallback((node: HTMLDivElement | null) => {
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) {
+        setDisplayLimit(prev => prev + 20);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, []);
 
   // Typewriter animated search placeholder
   const placeholderPhrases = [
@@ -113,6 +127,7 @@ export function ProximityMap() {
   const refreshAll = () => {
     mutateClusters();
     mutatePeople();
+    setDisplayLimit(20);
   };
 
   const handleFollowToggle = async (e: React.MouseEvent | React.FormEvent, person: any) => {
@@ -325,9 +340,18 @@ export function ProximityMap() {
               <p className="text-caption text-[var(--color-text-tertiary)] mt-1">Try expanding your search radius using the scope filter.</p>
             </div>
           ) : (
-            people.map((p: any) => (
+            <>
+              <div className="flex items-center justify-between px-2 py-1">
+                <span className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">
+                  {people.length} Professionals Found
+                </span>
+              </div>
+              {people.slice(0, displayLimit).map((p: any, index: number) => {
+                const isLast = index === Math.min(people.length, displayLimit) - 1;
+                return (
               <div
                 key={p.id}
+                ref={isLast ? lastElementRef : null}
                 onClick={() => setSelectedPerson(p)}
                 className="card p-3 sm:p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)] transition-all cursor-pointer flex items-center justify-between gap-4"
               >
@@ -368,7 +392,9 @@ export function ProximityMap() {
                   </button>
                 </div>
               </div>
-            ))
+              );
+            })}
+            </>
           )}
         </div>
       ) : (

@@ -206,7 +206,7 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [aiSearchSuggestions, setAiSearchSuggestions] = useState<any[]>([]);
   const [searchingAI, setSearchingAI] = useState(false);
-  const [filter2km, setFilter2km] = useState(false);
+  const [filter2km, setFilter2km] = useState(true);
   const [locationMode, setLocationMode] = useState<"home" | "office">("home");
   const [filtersExpanded, setFiltersExpanded] = useState(false);
 
