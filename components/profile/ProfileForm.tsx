@@ -158,7 +158,10 @@ export function ProfileForm({ initialUser }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isOnboarding = searchParams?.get("onboarding") === "true";
-  const [user, setUser] = useState(initialUser);
+  const [user, setUser] = useState({
+    ...initialUser,
+    linkedin_profile_url: initialUser.linkedin_profile_url || "https://www.linkedin.com/in/"
+  });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState(false);
@@ -251,7 +254,7 @@ export function ProfileForm({ initialUser }: Props) {
   }, [showModal]);
 
   const handleLinkedInBlur = async (url: string) => {
-    if (!url || !url.includes("linkedin.com")) return;
+    if (!url || url === "https://www.linkedin.com/in/" || !url.includes("linkedin.com")) return;
     setFetchingLinkedInDetails(true);
     setToast(null);
     try {

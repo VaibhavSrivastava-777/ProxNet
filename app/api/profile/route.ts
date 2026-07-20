@@ -3,7 +3,8 @@ import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/is-configured";
 import { normalizeLinkedInUrl } from "@/lib/linkedin/normalize-url";
-
+import { isProfileIncomplete } from "@/lib/profile-validation";
+import { initiateWelcomeMessage } from "@/lib/ai-chat";
 async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`, {
@@ -65,6 +66,8 @@ export async function PATCH(request: Request) {
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
+
+  const wasIncomplete = isProfileIncomplete(user);
 
   if (body.full_name !== undefined) updates.full_name = body.full_name;
   if (body.company !== undefined) updates.company = body.company;
@@ -175,5 +178,14 @@ export async function PATCH(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const isIncompleteNow = isProfileIncomplete(data);
+  if (wasIncomplete && !isIncompleteNow) {
+    // Note: We don't await this so it doesn't block the API response
+    initiateWelcomeMessage(user.id).catch(err => {
+      console.error("Failed to initiate welcome message:", err);
+    });
+  }
+
   return NextResponse.json(data);
 }

@@ -2,50 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-// Helper to ensure AI user and Chat Session exist
-async function getOrCreateAISession(supabase: any, userId: string) {
-  // 1. Get or Create AI User
-  let { data: aiUser } = await supabase.from("users").select("id").eq("email", "ai@proxnet.in").maybeSingle();
-  if (!aiUser) {
-    const { data: newUser } = await supabase.from("users").insert({
-      email: "ai@proxnet.in", full_name: "ProxNet AI", job_title: "Network Assistant", company: "ProxNet", source: "admin", is_active: true, visibility: { showCompany: true, showTitle: true, showPhoto: true }
-    }).select("id").single();
-    aiUser = newUser;
-  }
-  const aiUserId = aiUser.id;
-
-  // 2. Check if a session exists between user and AI
-  // We look for a session where question_id is null and participants include BOTH user and AI
-  const { data: sessions } = await supabase
-    .from("chat_participants")
-    .select("session_id")
-    .eq("user_id", userId);
-  
-  let sessionId = null;
-  if (sessions && sessions.length > 0) {
-    const sessionIds = sessions.map((s: any) => s.session_id);
-    const { data: aiParticipants } = await supabase
-      .from("chat_participants")
-      .select("session_id")
-      .eq("user_id", aiUserId)
-      .in("session_id", sessionIds);
-    if (aiParticipants && aiParticipants.length > 0) {
-      sessionId = aiParticipants[0].session_id;
-    }
-  }
-
-  if (!sessionId) {
-    // Create new session
-    const { data: newSession } = await supabase.from("chat_sessions").insert({}).select("id").single();
-    sessionId = newSession.id;
-    await supabase.from("chat_participants").insert([
-      { session_id: sessionId, user_id: userId, alias: "Resident" },
-      { session_id: sessionId, user_id: aiUserId, alias: "ProxNet AI" }
-    ]);
-  }
-
-  return { sessionId, aiUserId };
-}
+import { getOrCreateAISession } from "@/lib/ai-chat";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
