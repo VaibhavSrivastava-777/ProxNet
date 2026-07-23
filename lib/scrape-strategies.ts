@@ -317,66 +317,72 @@ export const customStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
     return successfactorsSitemapStrategy(boardUrl, companyName);
   }
 
-  // Fallback to OpenAI-based HTML scraper
-  console.log(`  [CUSTOM] Crawling custom URL: ${boardUrl} (Timeout: 5m)...`);
-  const res = await fetchWithHeaders(boardUrl, {
-    signal: AbortSignal.timeout(300000)
-  });
-  if (!res.ok) throw new Error(`Custom page returned ${res.status}`);
-  const html = await res.text();
-  const plainText = stripHtml(html).substring(0, 15000);
-
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) {
-    throw new Error("Missing OPENAI_API_KEY for custom scraper");
+  // Use Firecrawl Extraction API for robust JS-rendered scraping
+  console.log(`  [CUSTOM] Extracting jobs via Firecrawl for URL: ${boardUrl}...`);
+  
+  const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+  if (!firecrawlKey) {
+    throw new Error("Missing FIRECRAWL_API_KEY for generic custom scraper");
   }
 
-  console.log(`  [CUSTOM] Webpage content fetched (${plainText.length} chars). Extracting jobs using OpenAI...`);
-  const prompt = `Extract the core job details from the following webpage text. Return ONLY valid JSON.
-Schema:
-{
-  "jobs": [
-    {
-      "title": "Job Title",
-      "location": "Job Location (or Remote)",
-      "description": "Full text of the job description"
-    }
-  ]
-}
+  const prompt = `Extract all job listings from this careers page. Make sure to capture the job title, location, description, and the direct URL to apply for the job.`;
+  const schema = {
+    type: "object",
+    properties: {
+      jobs: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            location: { type: "string" },
+            description: { type: "string" },
+            url: { type: "string" }
+          },
+          required: ["title", "location", "url"]
+        }
+      }
+    },
+    required: ["jobs"]
+  };
 
-Webpage Text:
-${plainText}`;
-
-  const oaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${openaiKey}`,
+      "Authorization": `Bearer ${firecrawlKey}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" }
+      url: boardUrl,
+      formats: ["extract"],
+      extract: {
+        prompt,
+        schema
+      }
     }),
-    signal: AbortSignal.timeout(30000)
+    signal: AbortSignal.timeout(300000) // 5 mins
   });
 
-  if (!oaiRes.ok) throw new Error(`OpenAI error: ${oaiRes.status}`);
-  const oaiData = await oaiRes.json();
-  try {
-    const extracted = JSON.parse(oaiData.choices[0].message.content);
-    const jobsList = extracted.jobs || [];
-    return jobsList.map((j: any) => ({
-      title: j.title || "Job Opportunity",
-      location: j.location || "Remote",
-      url: boardUrl,
-      posted_at: new Date().toISOString(),
-      description: j.description || j.title || "",
-      source: "custom_ai"
-    }));
-  } catch (e: any) {
-    throw new Error(`Failed to parse OpenAI response: ${e.message}`);
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Firecrawl API error: ${res.status} ${errText}`);
   }
+
+  const data = await res.json();
+  if (!data.success || !data.data || !data.data.extract) {
+    throw new Error("Firecrawl API failed to extract data");
+  }
+
+  const jobsList = data.data.extract.jobs || [];
+  
+  return jobsList.map((j: any) => ({
+    title: j.title || "Job Opportunity",
+    location: j.location || "Remote",
+    url: j.url || boardUrl,
+    posted_at: new Date().toISOString(),
+    description: j.description || j.title || "",
+    source: "firecrawl_extract"
+  }));
 };
 
 export const workdayStrategy: ScrapeStrategy = async (boardUrl, companyName) => {

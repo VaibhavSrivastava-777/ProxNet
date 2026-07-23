@@ -27,7 +27,7 @@ export default async function HomePage({
       redirect("/profile?onboarding=true");
     }
 
-    redirect("/qa?tab=proximity");
+    redirect("/jobs");
   }
 
   return (
@@ -52,11 +52,11 @@ export default async function HomePage({
       <section className="relative overflow-hidden bg-gradient-to-br from-[var(--color-primary)] to-[#004182] px-4 py-24 text-center text-white sm:py-32">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iLjE1Ii8+PC9zdmc+')] bg-[length:24px_24px] opacity-20" />
         <div className="relative mx-auto max-w-4xl animate-fadeInUp">
-          <h1 className="text-display mb-6 text-white leading-tight">Who Else Is In Your Vicinity?</h1>
+          <h1 className="text-display mb-6 text-white leading-tight">Get Referred. Get Hired. Anonymously.</h1>
           <div className="text-body-lg mx-auto mb-10 max-w-2xl text-white/90" style={{ minHeight: "84px" }}>
             <TypewriterText 
               speedMs={65} 
-              text="Discover professionals from top companies living in your apartment complex. Ask questions, network anonymously, and unlock opportunities — all without revealing your identity." 
+              text="Unlock verified job referrals from professionals inside top companies. Request referrals anonymously, get hired, and claim bonuses — all without revealing your identity." 
             />
           </div>
           <div className="flex flex-col items-center justify-center gap-4">
@@ -73,12 +73,12 @@ export default async function HomePage({
         <div className="mx-auto max-w-4xl">
           <h2 className="text-h2 text-center mb-12">Explore the Network Hub</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger-children max-w-2xl mx-auto">
-            <Link href="/proximity" className="card p-6 flex flex-col gap-3 bg-[var(--color-surface)] border-b-[5px] border-[var(--color-primary)] hover:-translate-y-1 hover:shadow-[var(--shadow-lg)] active:translate-y-1 active:border-b-2 transition-all duration-200">
+            <Link href="/jobs" className="card p-6 flex flex-col gap-3 bg-[var(--color-surface)] border-b-[5px] border-[var(--color-primary)] hover:-translate-y-1 hover:shadow-[var(--shadow-lg)] active:translate-y-1 active:border-b-2 transition-all duration-200">
               <div className="w-10 h-10 rounded-full bg-[var(--color-primary-subtle)] text-[var(--color-primary)] flex items-center justify-center shadow-inner">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.896 1.982-2.007 1.982H5.757c-1.111 0-2.007-.888-2.007-1.982v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v3.896m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
               </div>
-              <h2 className="text-h3 font-semibold m-0">Proximity Map</h2>
-              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">Discover professionals from top companies in your area.</p>
+              <h2 className="text-h3 font-semibold m-0">Job Referrals</h2>
+              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">Browse open roles and request anonymous referrals from verified insiders.</p>
             </Link>
 
             <Link href="/qa" className="card p-6 flex flex-col gap-3 bg-[var(--color-surface)] border-b-[5px] border-[var(--color-accent)] hover:-translate-y-1 hover:shadow-[var(--shadow-lg)] active:translate-y-1 active:border-b-2 transition-all duration-200">
@@ -106,7 +106,7 @@ export default async function HomePage({
 
       {/* Bottom CTA */}
       <section className="px-4 py-24 text-center bg-[var(--color-surface)] flex flex-col items-center">
-        <h2 className="text-h2 mb-8">Ready to discover who's next door?</h2>
+        <h2 className="text-h2 mb-8">Ready to get referred?</h2>
         
 
 

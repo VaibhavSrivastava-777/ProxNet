@@ -32,6 +32,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   };
 
   const navLinks = [
+    { href: "/jobs", label: "Jobs", icon: BriefcaseIcon },
     { href: "/proximity", label: "Proximity", icon: MapPinIcon },
     { href: "/qa", label: "Chats", icon: ChatIcon },
     { href: "/forum", label: "Forum", icon: ForumIcon },
@@ -419,7 +420,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   };
 
   const handleTabClick = async (e: React.MouseEvent, tabHref: string) => {
-    const tabPaths = ["/proximity", "/qa", "/forum", "/grow"];
+    const tabPaths = ["/jobs", "/proximity", "/qa", "/forum", "/grow"];
     const isOnTabRoute = tabPaths.includes(pathname);
 
     if (isOnTabRoute && tabPaths.includes(tabHref)) {

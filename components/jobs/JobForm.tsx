@@ -43,7 +43,7 @@ export function JobForm({ onPosted, onCancel, initialData }: Props) {
   // Build preview text
   const previewAction = type === "seeker" ? "looking for" : "referring for";
   const previewRole = role || "a role";
-  const previewCompany = type === "giver" && company ? ` at ${company}` : "";
+  const previewCompany = company ? ` at ${company}` : "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -56,7 +56,7 @@ export function JobForm({ onPosted, onCancel, initialData }: Props) {
       const bodyPayload: any = {
         type,
         role,
-        company: type === "giver" ? company : "",
+        company,
         experience_years: experience,
         skills,
         is_on_behalf: isOnBehalf,
@@ -160,8 +160,7 @@ export function JobForm({ onPosted, onCancel, initialData }: Props) {
             </div>
           </div>
 
-          {/* Role + Company (for referrer) */}
-          <div className={type === "giver" ? "grid grid-cols-2 gap-3" : ""}>
+          <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
                 {type === "seeker" ? "Target Role" : "Hiring Role"}
@@ -175,18 +174,18 @@ export function JobForm({ onPosted, onCancel, initialData }: Props) {
               />
             </div>
 
-            {type === "giver" && (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">Company</span>
-                <input
-                  required
-                  className="input text-sm"
-                  placeholder="e.g. Google"
-                  value={company}
-                  onChange={(e) => setCompany(e.target.value)}
-                />
-              </div>
-            )}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
+                {type === "seeker" ? "Target Company" : "Company"}
+              </span>
+              <input
+                required
+                className="input text-sm"
+                placeholder="e.g. Google"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+              />
+            </div>
           </div>
 
           {/* Skills */}

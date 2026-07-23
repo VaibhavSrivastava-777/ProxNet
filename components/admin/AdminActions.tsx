@@ -61,7 +61,7 @@ export function AdminActions() {
         if (data.emails && data.emails.length > 0) {
           const bccList = data.emails.join(",");
           const subject = encodeURIComponent("Complete your ProxNet Profile!");
-          const body = encodeURIComponent("Hi there,\n\nYou are missing out on local professional networking opportunities because your ProxNet profile is incomplete. Please add your company, job title, and location information to appear on the proximity map network!\n\nBest,\nThe ProxNet Team");
+          const body = encodeURIComponent("Hi there,\n\nYou are missing out on local professional networking opportunities because your ProxNet profile is incomplete. Please complete your profile by adding your name, email, designation, and company name to unlock full access!\n\nBest,\nThe ProxNet Team");
           const mailtoUrl = `mailto:?bcc=${bccList}&subject=${subject}&body=${body}`;
           window.location.href = mailtoUrl;
         }

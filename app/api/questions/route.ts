@@ -420,6 +420,11 @@ export async function POST(request: Request) {
   const supabase = createAdminClient();
 
   if (targetUserId) {
+    // Check wallet before proceeding with a new chat
+    const { data: userData } = await supabase.from("users").select("wallet").eq("id", user.id).single();
+    const hasLowWallet = !userData || (userData.wallet ?? 0) < 1;
+    // We are no longer blocking if credits are 0, just setting a flag.
+
     const { data: existingTargets } = await supabase
       .from("question_targets")
       .select("question_id, questions(id, asker_id, type)")
@@ -683,6 +688,13 @@ Never mention that you are an AI assistant or simulated user. Play your characte
           { session_id: session.id, user_id: user.id, alias: getAlias(asker, "resident") },
           { session_id: session.id, user_id: targetUserId, alias: getAlias(pro, "professional") },
         ]);
+
+        // Attempt to charge the initiator 1 credit (fails gracefully if insufficient funds)
+        await supabase.rpc("charge_session", {
+          p_user_id: user.id,
+          p_session_id: session.id,
+          amount: 1
+        });
       }
     } else {
       const { data: users } = await supabase
@@ -727,7 +739,7 @@ Never mention that you are an AI assistant or simulated user. Play your characte
         console.error("Bulk notifications trigger error:", err);
       }
     }
-    return NextResponse.json({ question, targetCount: targets.length, sessionId });
+    return NextResponse.json({ question, targetCount: targets.length, sessionId, walletWarning: targetUserId && hasLowWallet });
   }
 
   return NextResponse.json({ question, targetCount: 0 });

@@ -40,19 +40,19 @@ runTest("Null company", { ...completeUser, company: null }, true);
 runTest("Missing job_title", { ...completeUser, job_title: "" }, true);
 runTest("Null job_title", { ...completeUser, job_title: null }, true);
 
-runTest("Missing resume_url", { ...completeUser, resume_url: "" }, true);
-runTest("Null resume_url", { ...completeUser, resume_url: null }, true);
+runTest("Missing resume_url", { ...completeUser, resume_url: "" }, false);
+runTest("Null resume_url", { ...completeUser, resume_url: null }, false);
 
-runTest("Missing profile_photo_url", { ...completeUser, profile_photo_url: "" }, true);
-runTest("Null profile_photo_url", { ...completeUser, profile_photo_url: null }, true);
+runTest("Missing profile_photo_url", { ...completeUser, profile_photo_url: "" }, false);
+runTest("Null profile_photo_url", { ...completeUser, profile_photo_url: null }, false);
 
-runTest("Missing linkedin_profile_url", { ...completeUser, linkedin_profile_url: "" }, true);
-runTest("Null linkedin_profile_url", { ...completeUser, linkedin_profile_url: null }, true);
+runTest("Missing linkedin_profile_url", { ...completeUser, linkedin_profile_url: "" }, false);
+runTest("Null linkedin_profile_url", { ...completeUser, linkedin_profile_url: null }, false);
 
-runTest("Missing home_lat", { ...completeUser, home_lat: null }, true);
-runTest("Missing home_lng", { ...completeUser, home_lng: null }, true);
+runTest("Missing home_lat", { ...completeUser, home_lat: null }, false);
+runTest("Missing home_lng", { ...completeUser, home_lng: null }, false);
 
-runTest("Missing office_lat", { ...completeUser, office_lat: null }, true);
-runTest("Missing office_lng", { ...completeUser, office_lng: null }, true);
+runTest("Missing office_lat", { ...completeUser, office_lat: null }, false);
+runTest("Missing office_lng", { ...completeUser, office_lng: null }, false);
 
 console.log("All Profile Validation logic tests passed successfully! 🚀");

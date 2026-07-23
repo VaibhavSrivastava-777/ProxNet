@@ -2,9 +2,11 @@
 
 import { QuestionForm } from "@/components/qa/QuestionForm";
 import { QuestionList } from "@/components/qa/QuestionList";
-import { ProximityMap } from "@/components/map/ProximityMap";
+import { JobsClient } from "@/components/jobs/JobsClient";
+import { HowItWorksModal } from "@/components/HowItWorksModal";
 import { LocalForumFeed } from "@/components/home/LocalForumFeed";
 import { GrowClient } from "@/components/grow/GrowClient";
+import { ProximityMap } from "@/components/map/ProximityMap";
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -12,7 +14,7 @@ export function QAContent() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [directTarget, setDirectTarget] = useState<{ id: string; job_title: string; company: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("/proximity");
+  const [activeTab, setActiveTab] = useState<string>("/jobs");
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -22,7 +24,7 @@ export function QAContent() {
     const tabParam = searchParams.get("tab");
     let initialTab = tabParam ? `/${tabParam}` : window.location.pathname;
     
-    const tabPaths = ["/proximity", "/qa", "/forum", "/grow"];
+    const tabPaths = ["/proximity", "/jobs", "/qa", "/forum", "/grow"];
     
     if (tabPaths.includes(initialTab)) {
       setActiveTab(initialTab);
@@ -68,12 +70,21 @@ export function QAContent() {
 
   return (
     <div className="w-full">
-      {/* ── 1. Proximity Map Tab ── */}
-      <div className={activeTab === "/proximity" ? "block" : "hidden"}>
-        <div className="mx-auto max-w-6xl p-4 md:p-8 animate-fadeIn" style={{ paddingBottom: "6rem" }}>
-          <ProximityMap />
+      {/* ── 1. Job Referrals Tab ── */}
+      <div className={activeTab === "/jobs" ? "block" : "hidden"}>
+        <div className="mx-auto max-w-4xl py-6 md:py-8 p-4 md:p-8 animate-fadeIn" style={{ paddingBottom: "6rem" }}>
+          <div className="mb-6 md:mb-8 text-center px-4">
+            <div className="flex items-center justify-center gap-4 mb-2">
+              <h1 className="text-h1">Job Referrals</h1>
+              <HowItWorksModal type="jobs" />
+            </div>
+            <p className="text-body-sm max-w-xl mx-auto">
+              Looking for a job? Offering a referral? Connect with verified professionals anonymously based on skills and experience.
+            </p>
+          </div>
+          <JobsClient />
 
-          {/* Footer links for Proximity Tab */}
+          {/* Footer links */}
           <div className="mt-8 flex flex-col items-center justify-center gap-3 text-sm text-[var(--color-text-tertiary)] text-center">
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
               <a href="/privacy" className="hover:text-[var(--color-accent)] transition-colors">Privacy</a>
@@ -134,14 +145,21 @@ export function QAContent() {
         </div>
       </div>
 
-      {/* ── 3. Forum Tab ── */}
+      {/* ── 3. Proximity Tab ── */}
+      <div className={activeTab === "/proximity" ? "block" : "hidden"}>
+        <div className="mx-auto max-w-4xl p-4 md:p-8 animate-fadeIn flex flex-col gap-4 pb-24">
+          <ProximityMap />
+        </div>
+      </div>
+
+      {/* ── 4. Forum Tab ── */}
       <div className={activeTab === "/forum" ? "block" : "hidden"}>
         <div className="mx-auto max-w-4xl p-0 md:p-4">
           <LocalForumFeed />
         </div>
       </div>
 
-      {/* ── 4. Grow Tab ── */}
+      {/* ── 5. Grow Tab ── */}
       <div className={activeTab === "/grow" ? "block" : "hidden"}>
         <GrowClient />
       </div>

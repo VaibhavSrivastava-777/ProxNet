@@ -1,18 +1,10 @@
 import { CompanyScraper, ScrapedJob } from "./types";
-import { ZscalerScraper } from "./zscaler";
-import { WellsFargoScraper } from "./wellsfargo";
-import { VodafoneScraper } from "./vodafone-india-services";
 import { FallbackScraper } from "./fallback";
-import { AmazonScraper } from "./amazon";
-import { AccentureScraper } from "./accenture";
 import { generateSimulatedJobs } from "./utils";
 
 export const SCRAPER_REGISTRY: Record<string, CompanyScraper> = {
-  "zscaler": ZscalerScraper,
-  "wellsfargo": WellsFargoScraper,
-  "vodafone india services": VodafoneScraper,
-  "amazon": AmazonScraper,
-  "accenture": AccentureScraper,
+  // Custom DOM scrapers have been deprecated in favor of robust generic strategies (e.g. Firecrawl/SerpApi)
+  // Standard ATS integrations are handled by the FallbackScraper dynamically
 };
 
 class SafeCompanyScraper implements CompanyScraper {
@@ -46,7 +38,7 @@ export function getScraper(
 ): CompanyScraper | null {
   const normalized = companyName.toLowerCase().trim();
   
-  // 1. Check custom scrapers
+  // 1. Check legacy custom scrapers (now mostly empty)
   let scraper = SCRAPER_REGISTRY[normalized];
   if (!scraper) {
     const alphanumericOnly = (str: string) => str.replace(/[^a-z0-9]/g, "");

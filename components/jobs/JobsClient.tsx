@@ -14,14 +14,28 @@ export function JobsClient() {
   const [editData, setEditData] = useState<any>(null);
   const [inboxCount, setInboxCount] = useState(0);
 
-  // Listen for edit events from feed
+  // Listen for edit and request events from feed
   useEffect(() => {
     const handleEdit = (e: any) => {
       setEditData(e.detail);
       setShowComposer(true);
     };
+    const handleRequestReferral = (e: any) => {
+      const job = e.detail;
+      setEditData({
+        type: "seeker",
+        role: job.role,
+        company: job.company,
+        skills: job.skills || ""
+      });
+      setShowComposer(true);
+    };
     window.addEventListener("editJobPost", handleEdit);
-    return () => window.removeEventListener("editJobPost", handleEdit);
+    window.addEventListener("requestReferral", handleRequestReferral);
+    return () => {
+      window.removeEventListener("editJobPost", handleEdit);
+      window.removeEventListener("requestReferral", handleRequestReferral);
+    };
   }, []);
 
   // Fetch inbox count for badge

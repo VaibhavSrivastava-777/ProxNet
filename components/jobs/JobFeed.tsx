@@ -17,6 +17,8 @@ interface JobPost {
   is_on_behalf?: boolean;
   contact_number?: string;
   ai_summary?: string;
+  is_scraped?: boolean;
+  url?: string;
 }
 
 export function JobFeed({ refreshKey }: { refreshKey: number }) {
@@ -120,6 +122,12 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
     } finally {
       setStartingChat(null);
     }
+  }
+
+  function handleRequestReferral(post: JobPost) {
+    // Open the JobForm / Referral Request modal with this job prefilled
+    const evt = new CustomEvent("requestReferral", { detail: post });
+    window.dispatchEvent(evt);
   }
 
   async function handleDelete(postId: string) {
@@ -384,6 +392,13 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
                               Delete
                             </button>
                           </>
+                        ) : post.is_scraped ? (
+                          <button
+                            className="btn btn-sm h-8 min-h-0 px-4 btn-primary"
+                            onClick={() => handleRequestReferral(post)}
+                          >
+                            Request Referral
+                          </button>
                         ) : post.is_on_behalf && post.contact_number ? (
                           <a
                             href={`https://wa.me/${post.contact_number.replace(/\D/g, "")}?text=${encodeURIComponent(`Hi, I saw your post for ${post.role}${post.company ? ` at ${post.company}` : ""} on ProxNet.in (https://www.proxnet.in/jobs).`)}`}
