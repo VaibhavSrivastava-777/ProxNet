@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import { LocationAutocomplete } from "@/components/map/LocationAutocomplete";
