@@ -2,9 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { BlockedUserScreen } from "@/components/BlockedUserScreen";
-import { auth } from "@/lib/auth";
-import { findUserById } from "@/lib/users";
+import { BlockUserWrapper } from "@/components/BlockUserWrapper";
+import { Suspense } from "react";
 import "./globals.css";
 
 const inter = Inter({
@@ -40,21 +39,11 @@ export const viewport: Viewport = {
   themeColor: "#004182",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await auth();
-  let isBlocked = false;
-
-  if (session?.user?.id) {
-    const user = await findUserById(session.user.id);
-    if (user?.is_blocked) {
-      isBlocked = true;
-    }
-  }
-
   return (
     <html
       lang="en"
@@ -64,11 +53,11 @@ export default async function RootLayout({
       <body>
         <ThemeProvider>
           <Nav />
-          {isBlocked ? (
-            <BlockedUserScreen />
-          ) : (
-            <main className="main-content">{children}</main>
-          )}
+          <Suspense fallback={<main className="main-content">{children}</main>}>
+            <BlockUserWrapper>
+              <main className="main-content">{children}</main>
+            </BlockUserWrapper>
+          </Suspense>
         </ThemeProvider>
       </body>
     </html>
