@@ -417,12 +417,13 @@ export async function POST(request: Request) {
   }
 
   let sessionId: string | undefined = undefined;
+  let hasLowWallet = false;
   const supabase = createAdminClient();
 
   if (targetUserId) {
     // Check wallet before proceeding with a new chat
     const { data: userData } = await supabase.from("users").select("wallet").eq("id", user.id).single();
-    const hasLowWallet = !userData || (userData.wallet ?? 0) < 1;
+    hasLowWallet = !userData || (userData.wallet ?? 0) < 1;
     // We are no longer blocking if credits are 0, just setting a flag.
 
     const { data: existingTargets } = await supabase
