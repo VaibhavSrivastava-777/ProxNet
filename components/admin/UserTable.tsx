@@ -214,7 +214,7 @@ export function UserTable() {
                                 body: JSON.stringify({ is_blocked: newStatus })
                               });
                               if (res.ok) {
-                                fetchUsers();
+                                load();
                               } else {
                                 alert('Failed to update block status');
                               }
