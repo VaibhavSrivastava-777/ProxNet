@@ -38,6 +38,9 @@ export async function handleBroadcast(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const url = new URL(request.url);
+  const isPreview = url.searchParams.get("preview") === "true";
+
   const supabase = createAdminClient();
   const broadcastType = getBroadcastType();
 
@@ -58,12 +61,9 @@ export async function handleBroadcast(request: Request) {
   let globalTargets: any[] = [];
 
   if (broadcastType === "AM") {
-    const [carpoolsRes, jobsRes] = await Promise.all([
-      supabase.from("carpool_posts").select("*").eq("status", "active"),
-      supabase.from("job_posts").select("*, users(home_lat, home_lng)").eq("status", "active")
-    ]);
-    globalCarpoolPosts = carpoolsRes.data || [];
-    globalJobPosts = jobsRes.data || [];
+    // Carpool and Jobs queries disabled
+    globalCarpoolPosts = [];
+    globalJobPosts = [];
   } else {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -78,68 +78,14 @@ export async function handleBroadcast(request: Request) {
 
   let notificationsSent = 0;
   const notificationPromises = [];
+  const previewMessages: { userId: string; message: string }[] = [];
 
   for (const user of users) {
     let message = "";
     
     if (broadcastType === "AM") {
-      // 1. Priority 1: Carpool Match
-      if (user.home_lat && user.home_lng && user.office_lat && user.office_lng) {
-        const carpoolPosts = globalCarpoolPosts.filter((p: any) => p.user_id !== user.id);
-
-        if (carpoolPosts && carpoolPosts.length > 0) {
-          let exactMatches = 0;
-          let onTheWayMatches = 0;
-
-          const validMatches = carpoolPosts.filter(post => {
-            const startDist = haversineDistanceMeters(user.home_lat!, user.home_lng!, post.start_lat, post.start_lng);
-            const endDist = haversineDistanceMeters(user.office_lat!, user.office_lng!, post.dest_lat, post.dest_lng);
-            
-            if (startDist <= 1000 && endDist <= 1000) {
-                exactMatches++;
-                return true;
-            }
-
-            const vectorSim = calculateVectorSimilarity(
-              user.home_lat!, user.home_lng!, user.office_lat!, user.office_lng!,
-              post.start_lat, post.start_lng, post.dest_lat, post.dest_lng
-            );
-
-            if (startDist <= 4000 && vectorSim >= 0.85) {
-                onTheWayMatches++;
-                return true;
-            }
-
-            return false;
-          });
-
-          if (exactMatches > 0) {
-            message = `🚗 ${exactMatches} verified professional(s) are sharing your exact commute today. Tap to ride together.`;
-          } else if (onTheWayMatches > 0) {
-            message = `🚗 A neighbor's commute is right on your way! A minor detour could let you share the ride and split costs.`;
-          }
-        }
-      }
-
-      // 2. Priority 2: Jobs
-      if (!message && user.home_lat && user.home_lng) {
-        const jobs = globalJobPosts.filter((j: any) => j.user_id !== user.id);
-
-        if (jobs && jobs.length > 0) {
-          const localJobs = jobs.filter(job => {
-            if (!job.users?.home_lat || !job.users?.home_lng) return false;
-            const dist = haversineDistanceMeters(user.home_lat!, user.home_lng!, job.users.home_lat, job.users.home_lng);
-            return dist <= 5000; // 5km radius for jobs
-          });
-
-          if (localJobs.length > 0) {
-            const randomJob = localJobs[Math.floor(Math.random() * localJobs.length)];
-            const typeText = randomJob.type === "giver" ? "give a referral" : "find a role";
-            const companyText = randomJob.company ? ` at ${randomJob.company}` : "";
-            message = `💼 A neighbor${companyText} is looking to ${typeText} today. Check it out before you start work.`;
-          }
-        }
-      }
+      // 1. Priority 1: Carpool Match (Disabled)
+      // 2. Priority 2: Jobs (Disabled)
 
       // 3. Fallback: Proximity Awareness
       if (!message) {
@@ -207,18 +153,31 @@ export async function handleBroadcast(request: Request) {
     }
 
     if (message) {
-      notificationPromises.push(
-        sendNotification(user.id, {
-          title: broadcastType === "AM" ? "ProxNet Morning Match" : "ProxNet Evening Wrap-up",
-          body: message,
-          url: "/"
-        }).then(() => {
-          notificationsSent++;
-        }).catch((e) => {
-          console.error(`Failed to send push to user ${user.id}`, e);
-        })
-      );
+      if (isPreview) {
+        previewMessages.push({ userId: user.id, message });
+      } else {
+        notificationPromises.push(
+          sendNotification(user.id, {
+            title: broadcastType === "AM" ? "ProxNet Morning Match" : "ProxNet Evening Wrap-up",
+            body: message,
+            url: "/"
+          }).then(() => {
+            notificationsSent++;
+          }).catch((e) => {
+            console.error(`Failed to send push to user ${user.id}`, e);
+          })
+        );
+      }
     }
+  }
+
+  if (isPreview) {
+    return NextResponse.json({
+      success: true,
+      broadcastType,
+      targetCount: previewMessages.length,
+      messages: previewMessages,
+    });
   }
 
   await Promise.allSettled(notificationPromises);

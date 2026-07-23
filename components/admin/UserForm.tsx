@@ -23,6 +23,11 @@ const emptyUser = {
   office_lng: "",
   active_location: "home" as const,
   is_active: true,
+  is_blocked: false,
+  about: "",
+  professional_bio: "",
+  wallet: 0,
+  tags: [] as string[],
 };
 
 export function UserForm({ user, onSuccess }: Props) {
@@ -42,6 +47,11 @@ export function UserForm({ user, onSuccess }: Props) {
           office_lng: user.office_lng?.toString() ?? "",
           active_location: user.active_location,
           is_active: user.is_active,
+          is_blocked: user.is_blocked || false,
+          about: user.about ?? "",
+          professional_bio: user.professional_bio ?? "",
+          wallet: user.wallet ?? 0,
+          tags: user.tags ?? [],
         }
       : emptyUser
   );
@@ -191,6 +201,11 @@ export function UserForm({ user, onSuccess }: Props) {
       office_lng: form.office_lng ? Number(form.office_lng) : null,
       active_location: form.active_location,
       is_active: form.is_active,
+      is_blocked: form.is_blocked,
+      about: form.about || null,
+      professional_bio: form.professional_bio || null,
+      wallet: Number(form.wallet) || 0,
+      tags: form.tags,
     };
 
     const url = user ? `/api/admin/users/${user.id}` : "/api/admin/users";
@@ -470,6 +485,58 @@ export function UserForm({ user, onSuccess }: Props) {
           onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
         />
         Active
+      </label>
+
+      <label className="flex items-center gap-2 text-sm font-semibold text-red-600">
+        <input
+          type="checkbox"
+          checked={form.is_blocked}
+          onChange={(e) => setForm({ ...form, is_blocked: e.target.checked })}
+        />
+        Block User
+      </label>
+
+      <label className="block text-sm">
+        <span className="font-medium">About</span>
+        <textarea
+          className="mt-1 w-full rounded border px-3 py-2"
+          rows={3}
+          value={form.about}
+          onChange={(e) => setForm({ ...form, about: e.target.value })}
+          style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", color: "var(--color-text)" }}
+        />
+      </label>
+
+      <label className="block text-sm">
+        <span className="font-medium">Professional Bio</span>
+        <textarea
+          className="mt-1 w-full rounded border px-3 py-2"
+          rows={3}
+          value={form.professional_bio}
+          onChange={(e) => setForm({ ...form, professional_bio: e.target.value })}
+          style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", color: "var(--color-text)" }}
+        />
+      </label>
+
+      <label className="block text-sm">
+        <span className="font-medium">Wallet Balance</span>
+        <input
+          type="number"
+          className="mt-1 w-full rounded border px-3 py-2"
+          value={form.wallet}
+          onChange={(e) => setForm({ ...form, wallet: Number(e.target.value) })}
+          style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", color: "var(--color-text)" }}
+        />
+      </label>
+
+      <label className="block text-sm">
+        <span className="font-medium">Tags (comma separated)</span>
+        <input
+          className="mt-1 w-full rounded border px-3 py-2"
+          value={form.tags.join(", ")}
+          onChange={(e) => setForm({ ...form, tags: e.target.value.split(",").map(t => t.trim()).filter(Boolean) })}
+          style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", color: "var(--color-text)" }}
+        />
       </label>
 
       {error && <div className="alert alert-error">{error}</div>}

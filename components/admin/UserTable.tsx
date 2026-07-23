@@ -169,9 +169,16 @@ export function UserTable() {
                         <div>Office: {u.office_lat ? "✅" : "❌"}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${u.is_active ? "bg-[var(--color-success)]" : "bg-[var(--color-error)]"}`} />
-                          <span className="text-[var(--color-text-secondary)]">{u.is_active ? "Active" : "Inactive"}</span>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${u.is_active ? "bg-[var(--color-success)]" : "bg-[var(--color-error)]"}`} />
+                            <span className="text-[var(--color-text-secondary)]">{u.is_active ? "Active" : "Inactive"}</span>
+                          </div>
+                          {u.is_blocked && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="badge badge-error text-xs px-1.5 py-0.5 rounded font-semibold bg-red-100 text-red-700">Blocked</span>
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -194,6 +201,30 @@ export function UserTable() {
                         </label>
                         <button onClick={() => openEditModal(u)} className="btn btn-ghost btn-sm px-2 text-[var(--color-primary)]">
                           Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const newStatus = !u.is_blocked;
+                            if (!confirm(`Are you sure you want to ${newStatus ? 'block' : 'unblock'} this user?`)) return;
+                            try {
+                              const res = await fetch(`/api/admin/users/${u.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ is_blocked: newStatus })
+                              });
+                              if (res.ok) {
+                                fetchUsers();
+                              } else {
+                                alert('Failed to update block status');
+                              }
+                            } catch (e) {
+                              alert('Failed to update block status');
+                            }
+                          }}
+                          className={`btn btn-ghost btn-sm px-2 ${u.is_blocked ? "text-green-600" : "text-orange-600"}`}
+                        >
+                          {u.is_blocked ? "Unblock" : "Block"}
                         </button>
                         <button
                           type="button"

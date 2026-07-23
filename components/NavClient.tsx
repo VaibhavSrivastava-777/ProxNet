@@ -42,8 +42,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [toasts, setToasts] = useState<{ id: string; title: string; body: string; url: string }[]>([]);
   const [hasIncomingOpen, setHasIncomingOpen] = useState(false);
-  const [hasCarpoolNotification, setHasCarpoolNotification] = useState(false);
-  const [hasJobsNotification, setHasJobsNotification] = useState(false);
+
   // Per-toast swipe state
   const [swipeDelta, setSwipeDelta] = useState<Record<string, number>>({});
   const swipeStart = useRef<Record<string, number>>({});
@@ -467,35 +466,10 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         setHasIncomingOpen(openCount > 0);
       })
       .catch(() => {});
-      
-    // Fetch carpool notifications
-    const fetchCarpoolNotifications = () => {
-      fetch("/api/carpool/notifications")
-        .then((r) => r.json())
-        .then((data) => {
-          setHasCarpoolNotification(data.unreadCount > 0 || data.newMatches > 0);
-        })
-        .catch(() => {});
-    };
-
-    // Fetch jobs notifications
-    const fetchJobsNotifications = () => {
-      fetch("/api/jobs/notifications")
-        .then((r) => r.json())
-        .then((data) => {
-          setHasJobsNotification(data.unreadCount > 0 || data.newMatches > 0);
-        })
-        .catch(() => {});
-    };
-    
-    fetchCarpoolNotifications();
-    fetchJobsNotifications();
     fetchInAppNotifications();
     
     // Poll every 30s as a fallback
     const interval = setInterval(() => {
-      fetchCarpoolNotifications();
-      fetchJobsNotifications();
       fetchInAppNotifications();
     }, 30000);
     return () => clearInterval(interval);
@@ -632,47 +606,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       )
       .subscribe();
 
-    // 3. Listen to all carpool messages and filter locally for rooms I'm in
-    const carpoolMessageChannel = supabase
-      .channel("all-carpool-messages")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "carpool_messages",
-        },
-        async (payload) => {
-          if (payload.new.sender_id === userId) return;
 
-          // Verify if I am a participant in this thread
-          const { data: isParticipant } = await supabase
-            .from("carpool_participants")
-            .select("alias")
-            .eq("thread_id", payload.new.thread_id)
-            .eq("user_id", userId)
-            .maybeSingle();
-
-          if (isParticipant) {
-            const { data: sender } = await supabase
-              .from("carpool_participants")
-              .select("alias")
-              .eq("thread_id", payload.new.thread_id)
-              .eq("user_id", payload.new.sender_id)
-              .maybeSingle();
-
-            const audio = new Audio('/car-honk.mp3');
-            audio.play().catch(() => {}); // catch in case browser blocks auto-play
-
-            triggerToast({
-              title: `Carpool: Message from ${sender?.alias || "Anonymous"}`,
-              body: payload.new.body,
-              url: `/carpool/chat/${payload.new.thread_id}`,
-            });
-          }
-        }
-      )
-      .subscribe();
 
     // Listen for new in-app notifications
     const inAppChannel = supabase
@@ -694,7 +628,6 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     return () => {
       supabase.removeChannel(targetChannel);
       supabase.removeChannel(messageChannel);
-      supabase.removeChannel(carpoolMessageChannel);
       supabase.removeChannel(inAppChannel);
     };
   }, [session, userId]);

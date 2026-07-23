@@ -61,6 +61,11 @@ export async function POST(request: Request) {
       office_lng: body.office_lng ?? null,
       active_location: body.active_location ?? "home",
       is_active: body.is_active ?? true,
+      is_blocked: body.is_blocked ?? false,
+      about: body.about ?? null,
+      professional_bio: body.professional_bio ?? null,
+      wallet: body.wallet ?? 0,
+      tags: body.tags ?? [],
       created_at: now,
       updated_at: now,
     })

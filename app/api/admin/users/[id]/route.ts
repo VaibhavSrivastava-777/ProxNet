@@ -49,6 +49,11 @@ export async function PATCH(
     "office_lng",
     "active_location",
     "is_active",
+    "is_blocked",
+    "about",
+    "professional_bio",
+    "wallet",
+    "tags",
   ] as const;
 
   for (const f of fields) {
