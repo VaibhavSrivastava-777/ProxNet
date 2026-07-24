@@ -3,6 +3,7 @@
 import { QuestionForm } from "@/components/qa/QuestionForm";
 import { QuestionList } from "@/components/qa/QuestionList";
 import { JobsClient } from "@/components/jobs/JobsClient";
+import { JobInbox } from "@/components/jobs/JobInbox";
 import { HowItWorksModal } from "@/components/HowItWorksModal";
 import { LocalForumFeed } from "@/components/home/LocalForumFeed";
 import { GrowClient } from "@/components/grow/GrowClient";
@@ -15,6 +16,7 @@ export function QAContent() {
   const [formOpen, setFormOpen] = useState(false);
   const [directTarget, setDirectTarget] = useState<{ id: string; job_title: string; company: string } | null>(null);
   const [activeTab, setActiveTab] = useState<string>("/jobs");
+  const [qaSubTab, setQaSubTab] = useState<"referrals" | "qa">("referrals");
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -73,15 +75,6 @@ export function QAContent() {
       {/* ── 1. Job Referrals Tab ── */}
       <div className={activeTab === "/jobs" ? "block" : "hidden"}>
         <div className="mx-auto max-w-4xl py-6 md:py-8 p-4 md:p-8 animate-fadeIn" style={{ paddingBottom: "6rem" }}>
-          <div className="mb-6 md:mb-8 text-center px-4">
-            <div className="flex items-center justify-center gap-4 mb-2">
-              <h1 className="text-h1">Job Referrals</h1>
-              <HowItWorksModal type="jobs" />
-            </div>
-            <p className="text-body-sm max-w-xl mx-auto">
-              Looking for a job? Offering a referral? Connect with verified professionals anonymously based on skills and experience.
-            </p>
-          </div>
           <JobsClient />
 
           {/* Footer links */}
@@ -105,6 +98,22 @@ export function QAContent() {
       {/* ── 2. Chats (Q&A) List Tab ── */}
       <div className={activeTab === "/qa" ? "block" : "hidden"}>
         <div className="mx-auto max-w-4xl p-4 md:p-8 animate-fadeIn flex flex-col gap-[1.5rem] pb-[3rem]">
+          
+          <div className="flex gap-4 border-b border-border-light pb-2">
+            <button 
+              className={`text-h4 font-bold pb-2 transition-colors ${qaSubTab === 'referrals' ? 'text-primary border-b-2 border-primary' : 'text-text-tertiary hover:text-text'}`}
+              onClick={() => setQaSubTab("referrals")}
+            >
+              Referral Chats
+            </button>
+            <button 
+              className={`text-h4 font-bold pb-2 transition-colors ${qaSubTab === 'qa' ? 'text-primary border-b-2 border-primary' : 'text-text-tertiary hover:text-text'}`}
+              onClick={() => setQaSubTab("qa")}
+            >
+              Q&A Chats
+            </button>
+          </div>
+
           {formOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
               <div className="bg-[var(--color-surface)] w-full max-w-2xl rounded-xl shadow-xl border border-[var(--color-border)] flex flex-col h-[85vh] max-h-[800px] animate-scaleIn">
@@ -135,13 +144,17 @@ export function QAContent() {
             </div>
           )}
 
-          <QuestionList 
-            refreshKey={refreshKey} 
-            onOpenDirectQuestion={(target) => {
-              setDirectTarget(target || null);
-              setFormOpen(true);
-            }}
-          />
+          {qaSubTab === "qa" ? (
+            <QuestionList 
+              refreshKey={refreshKey} 
+              onOpenDirectQuestion={(target) => {
+                setDirectTarget(target || null);
+                setFormOpen(true);
+              }}
+            />
+          ) : (
+            <JobInbox />
+          )}
         </div>
       </div>
 

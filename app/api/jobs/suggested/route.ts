@@ -238,6 +238,26 @@ Return ONLY a JSON object with:
       }
     }
 
+    // Fetch user details for all referralContacts to anonymize names
+    const allContactIds = Object.values(companyGroups).flatMap(g => g.referralContacts.map(c => c.id));
+    if (allContactIds.length > 0) {
+      const { data: contactsData } = await supabase
+        .from('users')
+        .select('id, job_title, company')
+        .in('id', allContactIds);
+      
+      const contactMap = new Map(contactsData?.map(c => [c.id, c]) || []);
+
+      for (const group of Object.values(companyGroups)) {
+        for (const contact of group.referralContacts) {
+          const u = contactMap.get(contact.id);
+          if (u) {
+            contact.alias = u.job_title ? `${u.job_title} @ ${u.company || group.company}` : `Professional @ ${u.company || group.company}`;
+          }
+        }
+      }
+    }
+
     // Filter out groups with 0 contacts, update contactsCount, and sort jobs by highest match rate.
     const finalCompanies = Object.values(companyGroups)
       .filter(g => g.referralContacts.length > 0)

@@ -13,62 +13,87 @@ export async function GET(request: Request) {
 
   const supabase = createAdminClient();
 
-  // 1. Get companies with active unblocked users
+  // 1. Get ALL active users with a company
   const { data: usersData, error: usersError } = await supabase
     .from("users")
-    .select("company")
+    .select("id, company, job_title")
     .eq("is_blocked", false)
     .not("company", "is", null);
 
   if (usersError) return NextResponse.json({ error: usersError.message }, { status: 500 });
 
-  const activeCompanies = Array.from(new Set(usersData.map((u: any) => u.company.trim().toLowerCase())));
+  // 2. Group referrars by company
+  const companiesMap = new Map<string, {
+    company: string;
+    referrarCount: number;
+    jobCount: number;
+    referrars: any[];
+    jobs: any[];
+  }>();
 
-  // 2. Fetch scraped jobs for these companies
+  usersData.forEach((u: any) => {
+    const rawCompany = u.company.trim();
+    const compKey = rawCompany.toLowerCase();
+    
+    if (!companiesMap.has(compKey)) {
+      companiesMap.set(compKey, {
+        company: rawCompany,
+        referrarCount: 0,
+        jobCount: 0,
+        referrars: [],
+        jobs: []
+      });
+    }
+
+    const compData = companiesMap.get(compKey)!;
+    compData.referrarCount += 1;
+    compData.referrars.push({
+      id: u.id,
+      alias: u.job_title ? `${u.job_title} @ ${rawCompany}` : `Professional @ ${rawCompany}`
+    });
+  });
+
+  const activeCompanyKeys = Array.from(companiesMap.keys());
+
+  // 3. Fetch scraped jobs and group by company
   const { data: scrapedJobs, error: scrapedError } = await supabase
     .from("scraped_jobs")
     .select("*")
-    .order("created_at", { ascending: false })
-    .limit(100);
+    .order("created_at", { ascending: false });
 
   if (scrapedError) return NextResponse.json({ error: scrapedError.message }, { status: 500 });
 
-  const filteredScrapedJobs = (scrapedJobs || []).filter((job: any) => {
-    return job.company_name && activeCompanies.includes(job.company_name.trim().toLowerCase());
+  (scrapedJobs || []).forEach((job: any) => {
+    // The previous bug was checking job.company_name, but the column is job.company
+    const jobCompName = job.company || job.company_name;
+    if (!jobCompName) return;
+
+    const compKey = jobCompName.trim().toLowerCase();
+    
+    // Only map jobs to active companies
+    if (activeCompanyKeys.includes(compKey)) {
+      const compData = companiesMap.get(compKey)!;
+      compData.jobCount += 1;
+      compData.jobs.push({
+        id: job.id,
+        role: job.title || job.role || "Job Opening",
+        company: compData.company,
+        skills: job.keywords || job.location || "",
+        created_at: job.created_at || job.posted_at || new Date().toISOString(),
+        url: job.url,
+        description: job.description || "",
+      });
+    }
   });
 
-  // Map to JobFeed compatible format
-  const formattedPosts = filteredScrapedJobs.map((job: any) => ({
-    id: job.id,
-    type: "giver", // Treat scraped jobs as "givers" (the company is offering the job)
-    role: job.title || job.role || "Job Opening",
-    company: job.company_name,
-    experience_years: 0,
-    skills: job.keywords || job.location || "",
-    created_at: job.created_at || job.posted_at || new Date().toISOString(),
-    is_scraped: true,
-    url: job.url,
-    description: job.description || "",
-    user: {
-      full_name: `${job.company_name} ATS`,
-      company: job.company_name,
-      job_title: "Automated Hiring"
-    }
-  }));
-
-  // Fetch myPosts to allow user to see their own posts still (if needed)
-  const { data: activePosts } = await supabase
-    .from("job_posts")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
+  // Convert map to array and sort by jobCount (desc), then referrarCount (desc)
+  const companiesArray = Array.from(companiesMap.values()).sort((a, b) => {
+    if (b.jobCount !== a.jobCount) return b.jobCount - a.jobCount;
+    return b.referrarCount - a.referrarCount;
+  });
 
   return NextResponse.json({ 
-    posts: formattedPosts, 
-    myPosts: activePosts || [],
-    othersCount: formattedPosts.length,
-    requiresPost: false,
+    companies: companiesArray,
     currentUserId: user.id
   });
 }

@@ -34,6 +34,7 @@ export function SuggestedJobs() {
   const [startingChat, setStartingChat] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showSummary, setShowSummary] = useState(true);
   const router = useRouter();
 
   const decodeHtml = (html: string) => {
@@ -77,6 +78,13 @@ export function SuggestedJobs() {
     fetchSuggested();
   }, []);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSummary(false);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
   async function handleStartReferral(company: CompanyGroup, job: SuggestedJob, contactId: string) {
     setStartingChat(job.id);
     try {
@@ -91,8 +99,13 @@ export function SuggestedJobs() {
         }),
       });
       const data = await res.json();
+      
+      if (data.walletWarning) {
+        alert("Insufficient credits, but opening chat anyway.");
+      }
+
       if (data.threadId) {
-        router.push(`/jobs/chat/${data.threadId}`);
+        window.open(`/jobs/chat/${data.threadId}`, '_blank', 'noopener,noreferrer');
       } else {
         throw new Error(data.error || "Failed to start chat");
       }
@@ -129,24 +142,24 @@ export function SuggestedJobs() {
   });
 
   return (
-    <div className="space-y-6 stagger-children max-w-3xl mx-auto pb-12">
+    <div className="space-y-4 stagger-children max-w-3xl mx-auto pb-8">
       {errorMsg && (
         <div className="alert alert-error animate-fadeInUp">
           {errorMsg}
         </div>
       )}
 
-      {/* Header & Bio Digest */}
-      <div className="card p-6 border border-primary/20 bg-surface/60 backdrop-blur-md flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-h2 text-primary">Referral-First Matches</h2>
-          <p className="text-body-sm text-text-secondary">
-            Grouped by companies with active professionals. Semantically matched with your profile.
-          </p>
-        </div>
-
-        {profileDigest && (
-          <div className="p-3.5 rounded-lg bg-surface-elevated/40 border border-border/50 text-caption flex flex-col gap-2">
+      {/* Bio Digest (Minimal Header) */}
+      <div className="flex flex-col gap-4">
+        {profileDigest && showSummary && (
+          <div className="p-3.5 rounded-lg bg-surface-elevated/40 border border-border/50 text-caption flex flex-col gap-2 animate-fadeIn relative">
+            <button 
+              className="absolute top-2 right-2 text-text-tertiary hover:text-text"
+              onClick={() => setShowSummary(false)}
+              title="Dismiss"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
             <div>
               <span className="font-semibold text-text-secondary uppercase tracking-wider text-[10px]">Candidate Profile Summary</span>
               <p className="text-text mt-0.5">{profileDigest.summary || "No summary generated yet"}</p>
@@ -189,10 +202,10 @@ export function SuggestedJobs() {
         </div>
       ) : (
         filteredCompanies.map((group) => (
-          <div key={group.company} className="card p-5 animate-fadeInUp flex flex-col gap-4 border border-border bg-surface shadow-sm">
+          <div key={group.company} className="card p-4 sm:p-5 animate-fadeInUp flex flex-col gap-3 sm:gap-4 border border-border bg-surface shadow-sm">
             
             {/* Company Header */}
-            <div className="flex justify-between items-start border-b border-border/60 pb-3">
+            <div className="flex justify-between items-start border-b border-border/60 pb-2">
               <div>
                 <h3 className="text-h3 font-bold text-text">{group.company}</h3>
                 <div className="flex items-center gap-1.5 mt-1 text-caption text-text-secondary">
@@ -212,9 +225,9 @@ export function SuggestedJobs() {
             </div>
 
             {/* Jobs List inside Company */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               {group.jobs.map((job) => (
-                <div key={job.id} className="p-4 rounded-lg bg-surface-elevated/20 border border-border/40 hover:border-primary/20 transition-all flex flex-col gap-3">
+                <div key={job.id} className="p-3 sm:p-4 rounded-lg bg-surface-elevated/20 border border-border/40 hover:border-primary/20 transition-all flex flex-col gap-2.5">
                   <div className="flex justify-between items-start gap-4">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -254,31 +267,28 @@ export function SuggestedJobs() {
                     </p>
                   )}
 
-                  <div className="flex justify-between items-center pt-2.5 border-t border-border/30 mt-1 gap-4">
-                    <a
-                      href={job.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-text-secondary hover:text-primary transition-colors text-xs font-medium flex items-center gap-1"
-                    >
-                      View Posting External
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
-                    </a>
-
-                    <button
-                      className="btn btn-xs btn-primary font-bold px-3 py-1 rounded shadow-sm hover:shadow transition-all flex items-center gap-1.5"
-                      onClick={() => handleStartReferral(group, job, group.referralContacts[0].id)}
-                      disabled={startingChat === job.id}
-                    >
-                      {startingChat === job.id ? (
-                        <>Connecting...</>
-                      ) : (
-                        <>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                          Ask for Referral
-                        </>
-                      )}
-                    </button>
+                  <div className="flex flex-row gap-2 mt-2 w-full pt-2 border-t border-border/30">
+                    {group.referralContacts.map(c => (
+                      <button 
+                        key={c.id}
+                        className="btn btn-sm btn-primary flex-1 text-[11px] sm:text-xs h-8 min-h-0"
+                        onClick={() => handleStartReferral(group, job, c.id)}
+                        disabled={startingChat === job.id}
+                      >
+                        {startingChat === job.id ? "..." : `Ask ${c.alias}`}
+                      </button>
+                    ))}
+                    {job.url && (
+                      <a 
+                        href={job.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        onClick={(e) => { e.preventDefault(); window.open(job.url, '_blank', 'noopener,noreferrer'); }}
+                        className="btn btn-sm btn-outline flex-1 text-[11px] sm:text-xs h-8 min-h-0 text-text-secondary"
+                      >
+                        Apply External
+                      </a>
+                    )}
                   </div>
                 </div>
               ))}

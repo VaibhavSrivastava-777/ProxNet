@@ -11,19 +11,26 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
 
+  const { data: userData } = await supabase.from("users").select("wallet").eq("id", user.id).single();
+  const hasLowWallet = !userData || (userData.wallet ?? 0) < 1;
+
   // 1. Ensure a "target post" exists for the referral so the thread logic works.
   // We'll just create a dummy "giver" post for the contact if we need to.
-  const { data: targetUser } = await supabase
+  const { data: targetUser, error: targetError } = await supabase
     .from("users")
-    .select("job_title, company, alias")
+    .select("job_title, company")
     .eq("id", contactId)
     .single();
+
+  if (targetError) {
+    console.error("targetError:", targetError);
+  }
 
   if (!targetUser) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
 
   const { data: currentUserDb } = await supabase
     .from("users")
-    .select("job_title, company, alias")
+    .select("job_title, company")
     .eq("id", user.id)
     .single();
 
@@ -96,8 +103,15 @@ export async function POST(request: Request) {
   await supabase.from("job_messages").insert({
     thread_id: thread.id,
     sender_id: user.id,
-    content: initialMsg
+    body: initialMsg
   });
 
-  return NextResponse.json({ threadId: thread.id });
+  // Attempt to charge the initiator 1 credit (fails gracefully if insufficient funds)
+  await supabase.rpc("charge_session", {
+    p_user_id: user.id,
+    p_session_id: thread.id,
+    amount: 1
+  });
+
+  return NextResponse.json({ threadId: thread.id, walletWarning: hasLowWallet });
 }
