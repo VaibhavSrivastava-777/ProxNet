@@ -194,7 +194,7 @@ export async function discoverAts(companyName: string): Promise<{ provider: stri
               })
             }, 3000); // 3 seconds timeout per probe
 
-            if (res.status === 200 || res.status === 422) {
+            if (res.status === 200) {
               console.log(`[ATS Discover] Match found for Workday: ${tenant}.${subdomain}/wday/cxs/${tenant}/${site}/jobs`);
               return {
                 provider: "workday",

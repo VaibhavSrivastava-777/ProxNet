@@ -321,11 +321,48 @@ export const customStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
   console.log(`  [CUSTOM] Extracting jobs via Firecrawl for URL: ${boardUrl}...`);
   
   const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+
   if (!firecrawlKey) {
-    throw new Error("Missing FIRECRAWL_API_KEY for generic custom scraper");
+    console.warn(`[FallbackScraper] Skipping ${companyName} - no FIRECRAWL_API_KEY provided.`);
+    return [];
   }
 
-  const prompt = `Extract all job listings from this careers page. Make sure to capture the job title, location, description, and the direct URL to apply for the job.`;
+  if (openaiKey) {
+    // Fast scrape + native OpenAI extraction
+    const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${firecrawlKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        url: boardUrl,
+        formats: ["markdown"],
+        waitFor: 10000,
+        mobile: false
+      }),
+      signal: AbortSignal.timeout(60000) // 1 min timeout
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Firecrawl Scrape API error: ${res.status} ${errText}`);
+    }
+
+    const data = await res.json();
+    if (!data.success || !data.data || !data.data.markdown) {
+      throw new Error("Firecrawl Scrape API failed to return markdown");
+    }
+
+    const { extractJobsFromMarkdown } = await import("./llm-markdown-extractor");
+    const extractedJobs = await extractJobsFromMarkdown(data.data.markdown, boardUrl, openaiKey);
+    return extractedJobs;
+  }
+
+  // Fallback to Firecrawl's internal extract if no OpenAI key
+  const prompt = `Extract all job postings from this careers page. 
+  For each job, provide the title, location (default to 'Remote' if not found), url (must be absolute), and description.`;
   const schema = {
     type: "object",
     properties: {
@@ -336,8 +373,8 @@ export const customStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
           properties: {
             title: { type: "string" },
             location: { type: "string" },
-            description: { type: "string" },
-            url: { type: "string" }
+            url: { type: "string" },
+            description: { type: "string" }
           },
           required: ["title", "location", "url"]
         }
@@ -346,7 +383,7 @@ export const customStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
     required: ["jobs"]
   };
 
-  const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+  const res = await fetch("https://api.firecrawl.dev/v1/extract", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${firecrawlKey}`,
@@ -386,133 +423,25 @@ export const customStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
 };
 
 export const workdayStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
-  const cleanUrl = boardUrl.replace(/^https?:\/\//i, "");
-  const parts = cleanUrl.split("/wday/cxs/");
-  if (parts.length !== 2) {
-    throw new Error(`Invalid Workday board URL format: "${boardUrl}". Expected format: "<hostname>/wday/cxs/<tenant>/<site>/jobs"`);
-  }
-  const hostname = parts[0];
-  const listPath = `/wday/cxs/${parts[1]}`;
-  const tenantAndSite = parts[1].split("/jobs")[0];
-  const detailPrefix = `/wday/cxs/${tenantAndSite}`;
+  // Workday recently deployed Cloudflare WAF which blocks all node-fetch requests with 422/403.
+  // We must fall back to the generic Firecrawl scraper which bypasses Cloudflare using real headless browsers.
+  console.log(`  [WORKDAY] Fetch natively blocked by Cloudflare. Falling back to customStrategy for ${companyName}...`);
+  return customStrategy(boardUrl, companyName);
+};
 
-  // 1. Initialize session cookies by hitting the Workday portal home page
-  let cookieHeader = "";
-  try {
-    const sitePath = tenantAndSite.includes("/") ? tenantAndSite.split("/")[1] : tenantAndSite;
-    const homeUrl = `https://${hostname}/${sitePath}`;
-    
-    const initRes = await fetch(homeUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      },
-      signal: AbortSignal.timeout(10000)
-    });
+export const oracleStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
+  console.log(`  [ORACLE] Fetch natively blocked by Akamai. Falling back to customStrategy for ${companyName}...`);
+  return customStrategy(boardUrl, companyName);
+};
 
-    const rawCookies = (initRes.headers as any).getSetCookie 
-      ? (initRes.headers as any).getSetCookie() 
-      : (initRes.headers.get("set-cookie") || "").split(",");
-      
-    cookieHeader = rawCookies
-      .map((c: string) => c.trim().split(";")[0])
-      .filter((c: string) => c && !c.includes("Expires=") && !c.includes("Max-Age="))
-      .join("; ");
-  } catch (e: any) {
-    console.warn(`[Workday Scraper] Warning: Failed to pre-fetch cookies for ${companyName}: ${e.message}`);
-  }
+export const phenomStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
+  console.log(`  [PHENOM] Falling back to customStrategy for ${companyName} to fetch detailed locations...`);
+  return customStrategy(boardUrl, companyName);
+};
 
-  // 2. Fetch job listing POST request
-  const listUrl = `https://${hostname}${listPath}`;
-
-  const postings = [];
-  let offset = 0;
-  const limit = 20;
-
-  // We paginate up to 60 jobs (3 pages) for generic Workday scrapers to get a good spread,
-  // without taking too much time on the initial sweep.
-  while (offset < 60) {
-    try {
-      const listRes = await fetch(listUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          ...(cookieHeader ? { "Cookie": cookieHeader } : {})
-        },
-        body: JSON.stringify({
-          appliedFacets: {},
-          limit: limit,
-          offset: offset,
-          searchText: ""
-        }),
-        signal: AbortSignal.timeout(30000)
-      });
-
-      if (!listRes.ok) {
-        if (offset === 0) {
-          if (listRes.status === 422) {
-            throw new Error(`Workday CXS jobs API returned status 422. This company's Workday portal is likely undergoing standard weekly maintenance (common on weekends), or requires additional browser security session details.`);
-          }
-          throw new Error(`Workday CXS jobs API returned status ${listRes.status}`);
-        } else {
-          break; // Stop paginating if subsequent pages fail
-        }
-      }
-
-      const listData = await listRes.json() as any;
-      const currentPostings = listData.jobPostings || [];
-      postings.push(...currentPostings);
-      
-      if (currentPostings.length < limit) {
-        break; // Reached end of the jobs list
-      }
-      offset += limit;
-    } catch (e) {
-      if (offset === 0) throw e;
-      break;
-    }
-  }
-
-  const scrapedJobs: ScrapedJob[] = [];
-
-  for (const job of postings) {
-    const detailUrl = `https://${hostname}${detailPrefix}${job.externalPath}`;
-    try {
-      const detailRes = await fetch(detailUrl, {
-        headers: {
-          "Accept": "application/json",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          ...(cookieHeader ? { "Cookie": cookieHeader } : {})
-        },
-        signal: AbortSignal.timeout(10000)
-      });
-      if (!detailRes.ok) continue;
-
-      const detailsData = await detailRes.json() as any;
-      const details = detailsData.jobPostingInfo;
-      if (!details) continue;
-
-      const descriptionHtml = details.jobDescription || "";
-      const description = stripHtml(descriptionHtml);
-      const primaryLocation = details.location || "";
-      const additionalLocations = Array.isArray(details.additionalLocations) ? details.additionalLocations : [];
-      const allLocations = [primaryLocation, ...additionalLocations].join(", ");
-
-      scrapedJobs.push({
-        title: job.title,
-        location: allLocations || job.locationsText || "Remote",
-        url: `https://${hostname}${job.externalPath}`,
-        posted_at: details.startDate || new Date().toISOString(),
-        description,
-        source: "workday"
-      });
-    } catch (e: any) {
-      console.error(`Failed to fetch generic Workday details for job ${job.title}:`, e.message);
-    }
-  }
-
-  return scrapedJobs;
+export const ibmStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
+  console.log(`  [IBM] BrassRing natively blocked. Falling back to customStrategy for ${companyName}...`);
+  return customStrategy(boardUrl, companyName);
 };
 
 export const noneStrategy: ScrapeStrategy = async () => {
@@ -531,4 +460,7 @@ export const STRATEGIES: Record<string, ScrapeStrategy> = {
   workday: workdayStrategy,
   custom: customStrategy,
   none: noneStrategy,
+  oracle: oracleStrategy,
+  phenom: phenomStrategy,
+  ibm: ibmStrategy
 };

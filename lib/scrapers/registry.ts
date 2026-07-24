@@ -1,5 +1,55 @@
 import { CompanyScraper, ScrapedJob } from "./types";
-import { FallbackScraper } from "./fallback";export const SCRAPER_REGISTRY: Record<string, CompanyScraper> = {
+import { FallbackScraper } from "./fallback";
+import {
+  workdayStrategy,
+  greenhouseStrategy,
+  leverStrategy,
+  eightfoldStrategy,
+  smartrecruitersStrategy,
+  icimsStrategy,
+  customStrategy,
+  noneStrategy,
+  successfactorsStrategy,
+  successfactorsSitemapStrategy,
+  oracleStrategy,
+  phenomStrategy,
+  ibmStrategy
+} from "../scrape-strategies";
+
+export type ScraperType = 
+  | "workday" 
+  | "greenhouse" 
+  | "lever" 
+  | "eightfold" 
+  | "smartrecruiters"
+  | "icims"
+  | "myworkdayjobs"
+  | "custom"
+  | "none"
+  | "successfactors"
+  | "successfactors_sitemap"
+  | "oracle"
+  | "phenom"
+  | "ibm";
+
+export const scraperMap: Record<ScraperType, any> = {
+  workday: workdayStrategy,
+  myworkdayjobs: workdayStrategy,
+  greenhouse: greenhouseStrategy,
+  lever: leverStrategy,
+  eightfold: eightfoldStrategy,
+  smartrecruiters: smartrecruitersStrategy,
+  icims: icimsStrategy,
+  custom: customStrategy,
+  none: noneStrategy,
+  successfactors: successfactorsStrategy,
+  successfactors_sitemap: successfactorsSitemapStrategy,
+  oracle: oracleStrategy,
+  phenom: phenomStrategy,
+  ibm: ibmStrategy
+};
+
+export const SCRAPER_REGISTRY: Record<string, CompanyScraper> = {
   // Custom DOM scrapers have been deprecated in favor of robust generic strategies (e.g. Firecrawl/SerpApi)
   // Standard ATS integrations are handled by the FallbackScraper dynamically
 };
