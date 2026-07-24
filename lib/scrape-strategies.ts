@@ -306,7 +306,7 @@ export const successfactorsSitemapStrategy: ScrapeStrategy = async (
       location,
       url: entry.url,
       posted_at: entry.lastmod ? new Date(entry.lastmod).toISOString() : new Date().toISOString(),
-      description: `${title} position located at ${location}. Please view details on Wipro Careers site.`,
+      description: `Job Opportunity position located at ${location}. Please view details on the company's careers site.`,
       source: "successfactors_sitemap",
     };
   });
