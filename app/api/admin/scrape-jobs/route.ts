@@ -83,7 +83,11 @@ async function handleRequest(request: Request, onlyProxNet: boolean, targetCompa
   const startTime = Date.now();
 
   try {
-    let query = supabase.from("company_ats_config").select("*").neq("provider", "cron_status");
+    let query = supabase
+      .from("company_ats_config")
+      .select("*")
+      .neq("provider", "cron_status")
+      .order("last_scraped_at", { ascending: true, nullsFirst: true });
 
     if (onlyProxNet) {
       const { data: users } = await supabase.from("users").select("company");
@@ -102,6 +106,11 @@ async function handleRequest(request: Request, onlyProxNet: boolean, targetCompa
       query = query.in("company_name", targetCompanies);
     }
 
+    // Process in round-robin fashion (1 company per run) unless explicit targets were given
+    if (!targetCompanies || targetCompanies.length === 0) {
+      query = query.limit(1);
+    }
+
     const { data: atsConfigs, error: atsError } = await query;
       
     if (atsError) {
@@ -110,6 +119,18 @@ async function handleRequest(request: Request, onlyProxNet: boolean, targetCompa
     
     if (!atsConfigs || atsConfigs.length === 0) {
       return NextResponse.json({ success: true, totalAdded: 0, message: "No ATS configs found to scrape." });
+    }
+
+    // Purge jobs posted more than a month ago
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    try {
+      await supabase
+        .from("scraped_jobs")
+        .delete()
+        .lt("posted_at", oneMonthAgo.toISOString());
+    } catch (e: any) {
+      console.warn("Purge failed:", e.message);
     }
 
     const OPENAI_KEY = process.env.OPENAI_API_KEY;
@@ -121,12 +142,12 @@ async function handleRequest(request: Request, onlyProxNet: boolean, targetCompa
     let totalAdded = 0;
     const stats: Record<string, { provider: string; totalFound: number; totalProcessed: number; totalAdded: number; error?: string }> = {};
 
-    const twoWeeksAgo = new Date();
-    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
     for (const config of atsConfigs) {
       let jobs: any[] = [];
-      console.log(`Scraping API for ${config.company_name} (${config.provider})...`);
+      console.log(`- Running for ${config.company_name} Org`);
 
       const scraper = getScraper(config.company_name, config);
       if (!scraper) {
@@ -176,11 +197,22 @@ async function handleRequest(request: Request, onlyProxNet: boolean, targetCompa
       let companySkippedExperience = 0;
       let companySkippedContent = 0;
 
+      let jobsInLastWeek = 0;
+      for (const job of jobs) {
+        if (job.posted_at) {
+          const jobDate = new Date(job.posted_at);
+          if (!isNaN(jobDate.getTime()) && jobDate >= oneWeekAgo) {
+            jobsInLastWeek++;
+          }
+        }
+      }
+      console.log(`- ${jobsInLastWeek} Jobs posts in last 1 week`);
+
       for (const job of jobs) {
         // 1. Date cut-off check
         if (job.posted_at) {
           const jobDate = new Date(job.posted_at);
-          if (!isNaN(jobDate.getTime()) && jobDate < twoWeeksAgo) {
+          if (!isNaN(jobDate.getTime()) && jobDate < oneWeekAgo) {
             companySkippedDate++;
             continue;
           }
@@ -188,6 +220,7 @@ async function handleRequest(request: Request, onlyProxNet: boolean, targetCompa
 
         // 2. India Location check
         if (!isIndianOrIndianRemote(job.location)) {
+          console.log(`- Skipped location check for job: "${job.title}", location: "${job.location}"`);
           companySkippedLocation++;
           continue;
         }
@@ -287,8 +320,12 @@ async function handleRequest(request: Request, onlyProxNet: boolean, targetCompa
         if (!insertError) {
           companyAdded++;
           totalAdded++;
+          if (companyAdded % 3 === 0) {
+            console.log(`- Extracted ${companyAdded} jobs -> ${companyAdded + 3} jobs ....`);
+          }
         }
       }
+      console.log(`- Extracted all ${companyAdded} jobs in ${config.company_name}`);
 
       // Update config metadata
       await supabase

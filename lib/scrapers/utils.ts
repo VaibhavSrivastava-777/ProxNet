@@ -98,17 +98,26 @@ export function getRequest(hostname: string, path: string): Promise<any> {
 
 export function isIndianOrIndianRemote(location: string): boolean {
   if (!location) return false;
-  const loc = location.toLowerCase();
+  const loc = location.toLowerCase().trim();
   
   const indianKeywords = [
     "india", "bangalore", "bengaluru", "mumbai", "pune", "delhi", 
-    "gurugram", "gurgaon", "noida", "hyderabad", "chennai", "kolkata"
+    "gurugram", "gurgaon", "noida", "hyderabad", "chennai", "kolkata",
+    "kochi", "trivandrum", "thiruvananthapuram", "coimbatore", "chandigarh",
+    "ahmedabad", "indore", "jaipur", "mysore", "mohali", "lucknow", "nagpur",
+    "bhubaneswar", "visakhapatnam", "vadodara", "surat", "gandhinagar", "bhopal",
+    "patna", "ludhiana", "thane", "navi mumbai",
+    // States
+    "maharashtra", "karnataka", "tamil nadu", "telangana", "andhra pradesh",
+    "gujarat", "haryana", "uttar pradesh", "west bengal", "kerala", "punjab",
+    "rajasthan", "madhya pradesh", "odisha", "orissa", "assam", "bihar",
+    "jharkhand", "chhattisgarh"
   ];
   
-  const hasIndianKeyword = indianKeywords.some(k => loc.includes(k));
+  const hasIndianKeyword = indianKeywords.some(k => loc.includes(k)) || loc === "in" || loc === "ind" || loc.includes("pan india");
   
   if (loc.includes("remote")) {
-    return hasIndianKeyword;
+    return hasIndianKeyword || loc === "remote"; // some ATS just say 'remote' and it defaults to India for Indian sites
   }
   
   return hasIndianKeyword;
