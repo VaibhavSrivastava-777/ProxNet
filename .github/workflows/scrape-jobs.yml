@@ -2,8 +2,8 @@ name: Scrape Jobs Daily
 
 on:
   schedule:
-    # Run every 12 hours (at 00:00 and 12:00 UTC)
-    - cron: '0 0,12 * * *'
+    # Run daily at 03:00 UTC (08:30 AM IST) so notifications arrive by 9:00 AM IST
+    - cron: '0 3 * * *'
   # Allow manual trigger from the GitHub UI
   workflow_dispatch:
 
@@ -32,3 +32,16 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           npx tsx scripts/run-scraper.ts
+
+      - name: Trigger Errand Boy (Nudges)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Warning: CRON_SECRET is not set. Skipping Errand Boy."
+            exit 0
+          fi
+          echo "Triggering Errand Boy at https://www.proxnet.in/api/admin/nudges"
+          curl -X POST https://www.proxnet.in/api/admin/nudges \
+               -H "Authorization: Bearer $CRON_SECRET" \
+               -w "\nHTTP Status: %{http_code}\n"
