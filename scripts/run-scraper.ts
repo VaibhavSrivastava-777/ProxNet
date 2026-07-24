@@ -108,9 +108,18 @@ async function runScraper() {
         }
       }
     }
-    console.log(`- ${jobsInLastWeek} Jobs posts in last 1 week`);
+    console.log(`- Fetched ${jobs.length} total expected jobs from ATS`);
+    console.log(`- ${jobsInLastWeek} Job posts in last 1 week`);
+
+    let jobIndex = 0;
+    const totalJobsInCompany = jobs.length;
 
     for (const job of jobs) {
+      jobIndex++;
+      if (jobIndex % 5 === 0 || jobIndex === totalJobsInCompany) {
+        const percent = Math.round((jobIndex / totalJobsInCompany) * 100);
+        console.log(`[${jobIndex}/${totalJobsInCompany}] (${percent}%) processing jobs for ${config.company_name}...`);
+      }
       // 1. Date cut-off check
       if (job.posted_at) {
         const jobDate = new Date(job.posted_at);
