@@ -59,217 +59,217 @@ async function runScraper() {
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  // 2. Loop through companies sequentially
+  // 2. Build Company Pools by fetching ATS Data
+  const pools: {
+    config: any;
+    allJobs: any[];
+    index: number;
+    added: number;
+    processed: number;
+    skippedDate: number;
+    skippedLocation: number;
+    skippedExperience: number;
+    skippedContent: number;
+  }[] = [];
+
   for (const config of companies) {
-    console.log(`\n------------------------------------------`);
-    console.log(`Running for ${config.company_name} Org`);
-    
+    console.log(`\nFetching ATS jobs for ${config.company_name}...`);
     const scraper = getScraper(config.company_name, config);
     if (!scraper) {
-      console.warn(`No scraping strategy found for company: ${config.company_name}`);
-      await supabase
-        .from("company_ats_config")
-        .update({
-          last_scraped_at: new Date().toISOString(),
-          scrape_notes: `Failed: No scraping strategy registered for '${config.company_name}'.`
-        })
-        .eq("company_name", config.company_name);
+      console.warn(`No scraping strategy found for ${config.company_name}`);
       continue;
     }
-
-    let jobs: any[] = [];
     try {
-      jobs = await scraper.scrape();
+      const jobs = await scraper.scrape();
+      pools.push({ 
+        config, 
+        allJobs: jobs, 
+        index: 0, 
+        added: 0, 
+        processed: 0,
+        skippedDate: 0,
+        skippedLocation: 0,
+        skippedExperience: 0,
+        skippedContent: 0
+      });
+      console.log(`- Found ${jobs.length} total expected jobs from ${config.company_name} ATS`);
     } catch (err: any) {
-      console.error(`Failed to fetch jobs for ${config.company_name}:`, err.message);
+      console.error(`Failed to fetch ATS for ${config.company_name}:`, err.message);
       await supabase
         .from("company_ats_config")
         .update({
           last_scraped_at: new Date().toISOString(),
-          scrape_notes: `Failed to scrape: ${err.message}`
+          scrape_notes: `Failed to scrape ATS: ${err.message}`
         })
         .eq("company_name", config.company_name);
-      continue;
     }
+  }
 
-    let companyProcessed = 0;
-    let companyAdded = 0;
-    let companySkippedDate = 0;
-    let companySkippedLocation = 0;
-    let companySkippedExperience = 0;
-    let companySkippedContent = 0;
+  // 3. Round-Robin Processing
+  console.log(`\n==========================================`);
+  console.log(`Starting Round-Robin AI Processing (Batch size: 200)`);
+  console.log(`==========================================`);
 
-    let jobsInLastWeek = 0;
-    for (const job of jobs) {
-      if (job.posted_at) {
-        const jobDate = new Date(job.posted_at);
-        if (!isNaN(jobDate.getTime()) && jobDate >= oneWeekAgo) {
-          jobsInLastWeek++;
+  const BATCH_SIZE = 200;
+  let keepProcessing = true;
+
+  while (keepProcessing) {
+    keepProcessing = false;
+
+    for (const pool of pools) {
+      if (pool.index >= pool.allJobs.length) continue;
+      
+      keepProcessing = true; // We found at least one pool with work remaining
+      
+      const batch = pool.allJobs.slice(pool.index, pool.index + BATCH_SIZE);
+      const endIndex = Math.min(pool.index + BATCH_SIZE, pool.allJobs.length);
+      console.log(`\n[${pool.config.company_name}] Processing jobs ${pool.index + 1} to ${endIndex} of ${pool.allJobs.length}...`);
+
+      let batchProcessed = 0;
+      let batchAdded = 0;
+
+      for (const job of batch) {
+        batchProcessed++;
+        pool.processed++;
+        totalProcessed++;
+
+        // 1. Date cut-off check
+        if (job.posted_at) {
+          const jobDate = new Date(job.posted_at);
+          if (!isNaN(jobDate.getTime()) && jobDate < oneWeekAgo) {
+            pool.skippedDate++;
+            continue;
+          }
         }
-      }
-    }
-    console.log(`- Fetched ${jobs.length} total expected jobs from ATS`);
-    console.log(`- ${jobsInLastWeek} Job posts in last 1 week`);
 
-    let jobIndex = 0;
-    const totalJobsInCompany = jobs.length;
-
-    for (const job of jobs) {
-      jobIndex++;
-      if (jobIndex % 5 === 0 || jobIndex === totalJobsInCompany) {
-        const percent = Math.round((jobIndex / totalJobsInCompany) * 100);
-        console.log(`[${jobIndex}/${totalJobsInCompany}] (${percent}%) processing jobs for ${config.company_name}...`);
-      }
-      // 1. Date cut-off check
-      if (job.posted_at) {
-        const jobDate = new Date(job.posted_at);
-        if (!isNaN(jobDate.getTime()) && jobDate < oneWeekAgo) {
-          companySkippedDate++;
+        // 2. India Location check
+        if (!isIndianOrIndianRemote(job.location)) {
+          pool.skippedLocation++;
           continue;
         }
-      }
 
-      // 2. India Location check
-      if (!isIndianOrIndianRemote(job.location)) {
-        console.log(`- Skipped location check for job: "${job.title}", location: "${job.location}"`);
-        companySkippedLocation++;
-        continue;
-      }
-
-      // 3. Title/description completeness
-      const hasTitle = job.title && job.title.trim() !== "" && job.title !== "Unknown Title" && job.title !== "Job Title";
-      const hasDesc = job.description && job.description.trim() !== "" && job.description !== "No description provided" && job.description !== "Full text of the job description";
-      if (!hasTitle || !hasDesc) {
-        companySkippedContent++;
-        continue;
-      }
-
-      // 4. Experience check (no junior roles)
-      if (isJuniorJob(job.title, job.description)) {
-        companySkippedExperience++;
-        continue;
-      }
-
-      // 4.5. URL validation check (reject hallucinated / 404 URLs)
-      let urlIsValid = true;
-      try {
-        const urlRes = await fetch(job.url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
-        if (urlRes.status === 404) {
-          urlIsValid = false;
+        // 3. Title/description completeness
+        const hasTitle = job.title && job.title.trim() !== "" && job.title !== "Unknown Title" && job.title !== "Job Title";
+        const hasDesc = job.description && job.description.trim() !== "" && job.description !== "No description provided" && job.description !== "Full text of the job description";
+        if (!hasTitle || !hasDesc) {
+          pool.skippedContent++;
+          continue;
         }
-      } catch (e: any) {
-        // We only care about explicit 404s. If it times out or blocks HEAD, we assume it might be valid.
-      }
-      
-      if (!urlIsValid) {
-        console.log(`- Skipped fake/404 URL: ${job.url}`);
-        companySkippedContent++;
-        continue;
-      }
 
-      companyProcessed++;
-      totalProcessed++;
+        // 4. Experience check (no junior roles)
+        if (isJuniorJob(job.title, job.description)) {
+          pool.skippedExperience++;
+          continue;
+        }
 
-      // 5. Generate Keywords & Embedding
-      let embedding = null;
-      let keywords: string[] = [];
-      
-      if (OPENAI_KEY) {
+        // 4.5. URL validation check
+        let urlIsValid = true;
         try {
-          const textToEmbed = `Title: ${job.title}\nCompany: ${config.company_name}\nDescription: ${job.description}`.slice(0, 8000);
+          const urlRes = await fetch(job.url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+          if (urlRes.status === 404) urlIsValid = false;
+        } catch (e: any) {}
+        
+        if (!urlIsValid) {
+          pool.skippedContent++;
+          continue;
+        }
 
-          // Keywords extraction
-          const kwPrompt = `Extract 3 to 5 technical skills or buzzwords from the job. Return a JSON object with key 'keywords' containing an array of strings.\n\nJob:\n${textToEmbed}`;
-          const kwRes = await fetch("https://api.openai.com/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${OPENAI_KEY}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              model: "gpt-4o-mini",
-              messages: [{ role: "user", content: kwPrompt }],
-              response_format: { type: "json_object" }
-            })
-          });
+        // 5. Generate Keywords & Embedding
+        let embedding = null;
+        let keywords: string[] = [];
+        
+        if (OPENAI_KEY) {
+          try {
+            const textToEmbed = `Title: ${job.title}\nCompany: ${pool.config.company_name}\nDescription: ${job.description}`.slice(0, 8000);
 
-          if (kwRes.ok) {
-            const kwData = await kwRes.json();
-            try {
-              const parsed = JSON.parse(kwData.choices[0].message.content);
-              keywords = Array.isArray(parsed) ? parsed : Object.values(parsed)[0] as string[];
-              if (!Array.isArray(keywords)) keywords = [];
-            } catch(e) {}
-          }
+            const kwPrompt = `Extract 3 to 5 technical skills or buzzwords from the job. Return a JSON object with key 'keywords' containing an array of strings.\n\nJob:\n${textToEmbed}`;
+            const kwRes = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${OPENAI_KEY}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [{ role: "user", content: kwPrompt }],
+                response_format: { type: "json_object" }
+              })
+            });
 
-          // Embedding generation
-          const embRes = await fetch("https://api.openai.com/v1/embeddings", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${OPENAI_KEY}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              input: textToEmbed,
-              model: "text-embedding-3-small"
-            })
-          });
-
-          if (embRes.ok) {
-            const embData = await embRes.json();
-            if (embData.data && embData.data.length > 0) {
-              embedding = embData.data[0].embedding;
+            if (kwRes.ok) {
+              const kwData = await kwRes.json();
+              try {
+                const parsed = JSON.parse(kwData.choices[0].message.content);
+                keywords = Array.isArray(parsed) ? parsed : Object.values(parsed)[0] as string[];
+                if (!Array.isArray(keywords)) keywords = [];
+              } catch(e) {}
             }
+
+            const embRes = await fetch("https://api.openai.com/v1/embeddings", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${OPENAI_KEY}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                input: textToEmbed,
+                model: "text-embedding-3-small"
+              })
+            });
+
+            if (embRes.ok) {
+              const embData = await embRes.json();
+              if (embData.data && embData.data.length > 0) {
+                embedding = embData.data[0].embedding;
+              }
+            }
+          } catch(e: any) {
+            console.error(`AI processing error for ${job.title}:`, e.message);
           }
-        } catch(e: any) {
-          console.error(`AI processing error for ${job.title}:`, e.message);
         }
-      } else {
-        console.warn(`OPENAI_API_KEY missing, skipping embeddings for ${job.title}`);
-      }
 
-      const jobData = {
-        company: config.company_name,
-        title: job.title,
-        location: job.location,
-        url: job.url,
-        description: job.description.substring(0, 5000),
-        ats_source: job.source,
-        posted_at: job.posted_at,
-        embedding
-      };
+        const jobData = {
+          company: pool.config.company_name,
+          title: job.title,
+          location: job.location,
+          url: job.url,
+          description: job.description.substring(0, 5000),
+          ats_source: job.source,
+          posted_at: job.posted_at,
+          embedding
+        };
 
-      let { error: insertError } = await supabase.from("scraped_jobs").upsert({
-        ...jobData,
-        keywords: keywords.slice(0, 5)
-      }, { onConflict: "url" });
+        let { error: insertError } = await supabase.from("scraped_jobs").upsert({
+          ...jobData,
+          keywords: keywords.slice(0, 5)
+        }, { onConflict: "url" });
 
-      if (insertError) {
-        // Retry without keywords column
-        const { error: retryError } = await supabase.from("scraped_jobs").upsert(jobData, { onConflict: "url" });
-        insertError = retryError;
-      }
+        if (insertError) {
+          const { error: retryError } = await supabase.from("scraped_jobs").upsert(jobData, { onConflict: "url" });
+          insertError = retryError;
+        }
 
-      if (!insertError) {
-        companyAdded++;
-        totalAdded++;
-        if (companyAdded % 3 === 0) {
-          console.log(`- Extracted ${companyAdded} jobs -> ${companyAdded + 3} jobs ....`);
+        if (!insertError) {
+          batchAdded++;
+          pool.added++;
+          totalAdded++;
         }
       }
+
+      pool.index += BATCH_SIZE;
+
+      // Update config metadata after each batch to persist progress immediately
+      await supabase
+        .from("company_ats_config")
+        .update({
+          last_scraped_at: new Date().toISOString(),
+          total_jobs_found: pool.allJobs.length,
+          scrape_notes: `Processed ${Math.min(pool.index, pool.allJobs.length)}/${pool.allJobs.length} total. Saved ${pool.added}. Skipped: ${pool.skippedDate} date, ${pool.skippedLocation} loc, ${pool.skippedExperience} exp.`
+        })
+        .eq("company_name", pool.config.company_name);
+
+      console.log(`[${pool.config.company_name}] Batch complete! Evaluated ${batchProcessed}. Added ${batchAdded} jobs. Moving to next company...`);
     }
-    
-    console.log(`- Extracted all ${companyAdded} jobs in ${config.company_name}`);
-
-    // Update config metadata
-    await supabase
-      .from("company_ats_config")
-      .update({
-        last_scraped_at: new Date().toISOString(),
-        total_jobs_found: jobs.length,
-        scrape_notes: `Scraped ${jobs.length} total. Saved ${companyAdded}. Skipped: ${companySkippedDate} date, ${companySkippedLocation} loc, ${companySkippedExperience} exp, ${companySkippedContent} empty.`
-      })
-      .eq("company_name", config.company_name);
   }
 
   const durationSeconds = Math.round((Date.now() - startTime) / 1000);
