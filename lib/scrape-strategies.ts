@@ -424,32 +424,55 @@ export const workdayStrategy: ScrapeStrategy = async (boardUrl, companyName) => 
   // 2. Fetch job listing POST request
   const listUrl = `https://${hostname}${listPath}`;
 
-  const listRes = await fetch(listUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      ...(cookieHeader ? { "Cookie": cookieHeader } : {})
-    },
-    body: JSON.stringify({
-      appliedFacets: {},
-      limit: 20,
-      offset: 0,
-      searchText: ""
-    }),
-    signal: AbortSignal.timeout(30000)
-  });
+  const postings = [];
+  let offset = 0;
+  const limit = 20;
 
-  if (!listRes.ok) {
-    if (listRes.status === 422) {
-      throw new Error(`Workday CXS jobs API returned status 422. This company's Workday portal is likely undergoing standard weekly maintenance (common on weekends), or requires additional browser security session details.`);
+  // We paginate up to 60 jobs (3 pages) for generic Workday scrapers to get a good spread,
+  // without taking too much time on the initial sweep.
+  while (offset < 60) {
+    try {
+      const listRes = await fetch(listUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          ...(cookieHeader ? { "Cookie": cookieHeader } : {})
+        },
+        body: JSON.stringify({
+          appliedFacets: {},
+          limit: limit,
+          offset: offset,
+          searchText: ""
+        }),
+        signal: AbortSignal.timeout(30000)
+      });
+
+      if (!listRes.ok) {
+        if (offset === 0) {
+          if (listRes.status === 422) {
+            throw new Error(`Workday CXS jobs API returned status 422. This company's Workday portal is likely undergoing standard weekly maintenance (common on weekends), or requires additional browser security session details.`);
+          }
+          throw new Error(`Workday CXS jobs API returned status ${listRes.status}`);
+        } else {
+          break; // Stop paginating if subsequent pages fail
+        }
+      }
+
+      const listData = await listRes.json() as any;
+      const currentPostings = listData.jobPostings || [];
+      postings.push(...currentPostings);
+      
+      if (currentPostings.length < limit) {
+        break; // Reached end of the jobs list
+      }
+      offset += limit;
+    } catch (e) {
+      if (offset === 0) throw e;
+      break;
     }
-    throw new Error(`Workday CXS jobs API returned status ${listRes.status}`);
   }
-
-  const listData = await listRes.json() as any;
-  const postings = listData.jobPostings || [];
 
   const scrapedJobs: ScrapedJob[] = [];
 
