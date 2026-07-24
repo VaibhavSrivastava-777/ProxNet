@@ -141,6 +141,23 @@ async function runScraper() {
         continue;
       }
 
+      // 4.5. URL validation check (reject hallucinated / 404 URLs)
+      let urlIsValid = true;
+      try {
+        const urlRes = await fetch(job.url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+        if (urlRes.status === 404) {
+          urlIsValid = false;
+        }
+      } catch (e: any) {
+        // We only care about explicit 404s. If it times out or blocks HEAD, we assume it might be valid.
+      }
+      
+      if (!urlIsValid) {
+        console.log(`- Skipped fake/404 URL: ${job.url}`);
+        companySkippedContent++;
+        continue;
+      }
+
       companyProcessed++;
       totalProcessed++;
 

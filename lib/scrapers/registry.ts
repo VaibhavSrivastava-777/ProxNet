@@ -1,8 +1,5 @@
 import { CompanyScraper, ScrapedJob } from "./types";
-import { FallbackScraper } from "./fallback";
-import { generateSimulatedJobs } from "./utils";
-
-export const SCRAPER_REGISTRY: Record<string, CompanyScraper> = {
+import { FallbackScraper } from "./fallback";export const SCRAPER_REGISTRY: Record<string, CompanyScraper> = {
   // Custom DOM scrapers have been deprecated in favor of robust generic strategies (e.g. Firecrawl/SerpApi)
   // Standard ATS integrations are handled by the FallbackScraper dynamically
 };
@@ -25,10 +22,10 @@ class SafeCompanyScraper implements CompanyScraper {
     }
 
     if (!jobs || jobs.length === 0) {
-      jobs = generateSimulatedJobs(this.companyName, limit || 2);
+      console.log(`[SafeScraper] No jobs found for ${this.companyName}.`);
     }
 
-    return jobs;
+    return jobs || [];
   }
 }
 
