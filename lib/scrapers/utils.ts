@@ -117,7 +117,7 @@ export function isIndianOrIndianRemote(location: string): boolean {
   const hasIndianKeyword = indianKeywords.some(k => loc.includes(k)) || loc === "in" || loc === "ind" || loc.includes("pan india");
   
   if (loc.includes("remote")) {
-    return hasIndianKeyword || loc === "remote"; // some ATS just say 'remote' and it defaults to India for Indian sites
+    return false;
   }
   
   return hasIndianKeyword;
