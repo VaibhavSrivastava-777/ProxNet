@@ -7,7 +7,6 @@ import { JobInbox } from "@/components/jobs/JobInbox";
 import { HowItWorksModal } from "@/components/HowItWorksModal";
 import { LocalForumFeed } from "@/components/home/LocalForumFeed";
 import { GrowClient } from "@/components/grow/GrowClient";
-import { ProximityMap } from "@/components/map/ProximityMap";
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -26,7 +25,7 @@ export function QAContent() {
     const tabParam = searchParams.get("tab");
     let initialTab = tabParam ? `/${tabParam}` : window.location.pathname;
     
-    const tabPaths = ["/proximity", "/jobs", "/qa", "/forum", "/grow"];
+    const tabPaths = ["/jobs", "/qa", "/forum", "/grow"];
     
     if (tabPaths.includes(initialTab)) {
       setActiveTab(initialTab);
@@ -155,13 +154,6 @@ export function QAContent() {
           ) : (
             <JobInbox />
           )}
-        </div>
-      </div>
-
-      {/* ── 3. Proximity Tab ── */}
-      <div className={activeTab === "/proximity" ? "block" : "hidden"}>
-        <div className="mx-auto max-w-4xl p-4 md:p-8 animate-fadeIn flex flex-col gap-4 pb-24">
-          <ProximityMap />
         </div>
       </div>
 

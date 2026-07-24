@@ -17,7 +17,7 @@ interface SuggestedJob {
 interface CompanyGroup {
   company: string;
   contactsCount: number;
-  referralContacts: Array<{ id: string; alias: string }>;
+  referralContacts: Array<{ id: string; alias: string; is_followed?: boolean }>;
   jobs: SuggestedJob[];
 }
 
@@ -117,6 +117,44 @@ export function SuggestedJobs() {
       setStartingChat(null);
     }
   }
+
+  const handleFollowToggle = async (contactId: string, companyName: string, currentlyFollowed?: boolean) => {
+    // Optimistic update
+    setCompanies(prev => prev.map(c => {
+      if (c.company === companyName) {
+        return {
+          ...c,
+          referralContacts: c.referralContacts.map(rc => 
+            rc.id === contactId ? { ...rc, is_followed: !currentlyFollowed } : rc
+          )
+        };
+      }
+      return c;
+    }));
+
+    try {
+      const res = await fetch("/api/follow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ following_id: contactId }),
+      });
+      if (!res.ok) throw new Error("Failed to follow");
+    } catch (e) {
+      console.error(e);
+      // Revert on error
+      setCompanies(prev => prev.map(c => {
+        if (c.company === companyName) {
+          return {
+            ...c,
+            referralContacts: c.referralContacts.map(rc => 
+              rc.id === contactId ? { ...rc, is_followed: currentlyFollowed } : rc
+            )
+          };
+        }
+        return c;
+      }));
+    }
+  };
 
   if (loading) {
     return (
@@ -292,6 +330,35 @@ export function SuggestedJobs() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Network Section */}
+            <div className="mt-2 pt-4 border-t border-border/60">
+              <h4 className="text-sm font-semibold text-text-secondary mb-3 flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                Network at {group.company}
+              </h4>
+              <div className="flex flex-col gap-2">
+                {group.referralContacts.map(c => (
+                  <div key={c.id} className="flex justify-between items-center p-3 rounded-lg bg-surface-elevated/40 border border-border/40 transition-colors hover:border-primary/20">
+                    <span className="text-sm font-medium text-text">@{c.alias}</span>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        className={`btn btn-sm text-[11px] h-7 min-h-0 ${c.is_followed ? 'bg-primary/10 text-primary border-primary/20' : 'btn-outline text-text-secondary'}`}
+                        onClick={() => handleFollowToggle(c.id, group.company, c.is_followed)}
+                      >
+                        {c.is_followed ? "Following" : "Follow"}
+                      </button>
+                      <button 
+                        className="btn btn-sm btn-outline text-text-secondary text-[11px] h-7 min-h-0"
+                        onClick={() => window.dispatchEvent(new CustomEvent('tabchange', { detail: '/qa' }))}
+                      >
+                        Chat
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
           </div>

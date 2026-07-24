@@ -246,6 +246,14 @@ Return ONLY a JSON object with:
         .select('id, job_title, company')
         .in('id', allContactIds);
       
+      // Fetch followed status
+      const { data: followsData } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', user.id)
+        .in('following_id', allContactIds);
+      
+      const followedSet = new Set(followsData?.map(f => f.following_id) || []);
       const contactMap = new Map(contactsData?.map(c => [c.id, c]) || []);
 
       for (const group of Object.values(companyGroups)) {
@@ -254,6 +262,7 @@ Return ONLY a JSON object with:
           if (u) {
             contact.alias = u.job_title ? `${u.job_title} @ ${u.company || group.company}` : `Professional @ ${u.company || group.company}`;
           }
+          (contact as any).is_followed = followedSet.has(contact.id);
         }
       }
     }

@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { JobForm } from "./JobForm";
 import { JobFeed } from "./JobFeed";
 import { SuggestedJobs } from "./SuggestedJobs";
+import { ProximityMap } from "@/components/map/ProximityMap";
 
 export function JobsClient() {
-  const [activeTab, setActiveTab] = useState<"board" | "suggested">("suggested");
+  const [activeTab, setActiveTab] = useState<"board" | "suggested" | "map">("suggested");
   const [refreshKey, setRefreshKey] = useState(0);
   const [showComposer, setShowComposer] = useState(false);
   const [editData, setEditData] = useState<any>(null);
@@ -53,6 +54,12 @@ export function JobsClient() {
           >
             AI Matches ✨
           </button>
+          <button
+            className={`tab ${activeTab === "map" ? "active" : ""}`}
+            onClick={() => setActiveTab("map")}
+          >
+            Local Map 🗺️
+          </button>
         </div>
 
       </div>
@@ -95,6 +102,13 @@ export function JobsClient() {
       {/* AI Matches Tab */}
       {activeTab === "suggested" && (
         <SuggestedJobs />
+      )}
+
+      {/* Local Map Tab */}
+      {activeTab === "map" && (
+        <div className="bg-surface border border-border rounded-lg overflow-hidden h-[600px]">
+          <ProximityMap />
+        </div>
       )}
     </div>
   );
