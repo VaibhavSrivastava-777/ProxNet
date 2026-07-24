@@ -2,8 +2,8 @@ name: Scrape Jobs Daily
 
 on:
   schedule:
-    # Run daily at 03:00 UTC (08:30 AM IST) so notifications arrive by 9:00 AM IST
-    - cron: '0 3 * * *'
+    # Run daily at 00:00 UTC (05:30 AM IST) to allow ample time for scraping before 9:00 AM IST
+    - cron: '0 0 * * *'
   # Allow manual trigger from the GitHub UI
   workflow_dispatch:
 
