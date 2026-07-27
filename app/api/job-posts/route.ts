@@ -7,12 +7,14 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(request.url);
-  const lat = parseFloat(url.searchParams.get("lat") || "0");
-  const lng = parseFloat(url.searchParams.get("lng") || "0");
+  let lat = parseFloat(url.searchParams.get("lat") || "");
+  let lng = parseFloat(url.searchParams.get("lng") || "");
   const radius = parseInt(url.searchParams.get("radius") || "2000", 10);
 
-  if (!lat || !lng) {
-    return NextResponse.json({ error: "Missing location parameters" }, { status: 400 });
+  // If lat/lng are invalid, missing, or NaN, resolve from logged in user's profile
+  if (isNaN(lat) || isNaN(lng) || !lat || !lng) {
+    lat = Number(user.home_lat || user.office_lat || 28.6139);
+    lng = Number(user.home_lng || user.office_lng || 77.2090);
   }
 
   const supabase = createAdminClient();
@@ -45,6 +47,9 @@ export async function GET(request: Request) {
   };
 
   const filteredJobs = (jobPosts || []).filter((j: any) => {
+    // If radius >= 50000 (all distances mode), include all active job posts
+    if (radius >= 50000) return true;
+
     let jobLat = j.center_lat;
     let jobLng = j.center_lng;
 
@@ -54,8 +59,7 @@ export async function GET(request: Request) {
       jobLng = j.creator?.home_lng;
     }
 
-    // If post has no location coordinates at all, exclude it when filtering by radius
-    if (!jobLat || !jobLng) return false;
+    if (!jobLat || !jobLng) return true;
 
     const dist = calcDistance(lat, lng, jobLat, jobLng);
     j.distance = dist;
@@ -72,7 +76,7 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { type, role, company, experienceYears, skills, description, contactInfo, centerLat, centerLng, isPublic } = body;
 
-  if (!type || !role || !centerLat || !centerLng) {
+  if (!type || !role) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -86,6 +90,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Insufficient credits. You need at least 1 credit to create a Job Post." }, { status: 402 });
   }
 
+  const finalLat = centerLat || user.home_lat || 28.6139;
+  const finalLng = centerLng || user.home_lng || 77.2090;
+
   const { data: jobPost, error } = await supabase
     .from("job_posts")
     .insert({
@@ -98,8 +105,8 @@ export async function POST(request: Request) {
       skills: skills || null,
       description: description || null,
       contact_info: contactInfo || null,
-      center_lat: centerLat,
-      center_lng: centerLng,
+      center_lat: finalLat,
+      center_lng: finalLng,
       is_public: isPublic ?? true,
     })
     .select()

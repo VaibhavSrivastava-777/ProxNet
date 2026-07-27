@@ -11,17 +11,21 @@ import { JobPostModal } from "@/components/forum/JobPostModal";
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export function LocalForumFeed({ 
-  profile 
+  profile: propProfile 
 }: { 
   profile?: any 
 }) {
   const router = useRouter();
 
+  // Fetch user profile if not passed explicitly as prop
+  const { data: profileData } = useSWR(propProfile ? null : "/api/profile", fetcher);
+  const profile = propProfile || profileData?.user || profileData?.profile || profileData;
+
   // Active Location Mode: "home" | "office" | "current"
   const [locationMode, setLocationMode] = useState<"home" | "office" | "current">("home");
 
   // Fetch Questions SWR based on locationMode
-  const questionsUrl = profile ? `/api/questions?locationMode=${locationMode}` : null;
+  const questionsUrl = `/api/questions?locationMode=${locationMode}`;
   const { data, isLoading } = useSWR(
     questionsUrl,
     fetcher,
@@ -42,16 +46,15 @@ export function LocalForumFeed({
   const [editingEvent, setEditingEvent] = useState<any>(null);
   const [editingJob, setEditingJob] = useState<any>(null);
 
+  const activeLat = locationMode === "home" ? profile?.home_lat : profile?.office_lat;
+  const activeLng = locationMode === "home" ? profile?.home_lng : profile?.office_lng;
+
   // Fetch events SWR based on location and radius
-  const eventsUrl = profile 
-    ? `/api/events?lat=${locationMode === "home" ? profile.home_lat : profile.office_lat}&lng=${locationMode === "home" ? profile.home_lng : profile.office_lng}&radius=${filter2km ? 2000 : 50000}`
-    : null;
+  const eventsUrl = `/api/events?lat=${activeLat ?? ''}&lng=${activeLng ?? ''}&radius=${filter2km ? 2000 : 50000}`;
   const { data: eventsData } = useSWR(eventsUrl, fetcher, { refreshInterval: 30000 });
 
   // Fetch job posts SWR based on location and radius
-  const jobPostsUrl = profile
-    ? `/api/job-posts?lat=${locationMode === "home" ? profile.home_lat : profile.office_lat}&lng=${locationMode === "home" ? profile.home_lng : profile.office_lng}&radius=${filter2km ? 2000 : 50000}`
-    : null;
+  const jobPostsUrl = `/api/job-posts?lat=${activeLat ?? ''}&lng=${activeLng ?? ''}&radius=${filter2km ? 2000 : 50000}`;
   const { data: jobPostsData } = useSWR(jobPostsUrl, fetcher, { refreshInterval: 30000 });
 
   const toggleExpand = (e: React.MouseEvent, id: string) => {
@@ -194,19 +197,19 @@ export function LocalForumFeed({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsEventModalOpen(true)}
-              className="px-3 py-2 rounded-xl bg-[#E56B42] text-white font-bold text-xs hover:opacity-90 transition-all flex items-center gap-1.5 shadow-sm"
+              className="px-3 py-2 rounded-xl bg-[#E56B42] text-white font-bold text-xs hover:opacity-90 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <span>🎉</span> Meetup
             </button>
             <button
               onClick={() => setIsJobModalOpen(true)}
-              className="px-3 py-2 rounded-xl bg-[var(--color-primary)] text-white font-bold text-xs hover:opacity-90 transition-all flex items-center gap-1.5 shadow-sm"
+              className="px-3 py-2 rounded-xl bg-[var(--color-primary)] text-white font-bold text-xs hover:opacity-90 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <span>💼</span> Jobs
             </button>
             <button
               onClick={() => setIsModalOpen(true)}
-              className="px-3 py-2 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border)] text-[var(--color-text)] font-bold text-xs hover:bg-[var(--color-surface-hover)] transition-all flex items-center gap-1.5"
+              className="px-3 py-2 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border)] text-[var(--color-text)] font-bold text-xs hover:bg-[var(--color-surface-hover)] transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <span>✍️</span> Post
             </button>
@@ -217,7 +220,7 @@ export function LocalForumFeed({
         <div className="flex items-center justify-between border-t border-[var(--color-border-light)] pt-3 text-xs">
           <button
             onClick={() => setFilter2km(!filter2km)}
-            className={`flex items-center gap-2 font-bold px-2.5 py-1 rounded-lg transition-colors ${
+            className={`flex items-center gap-2 font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
               filter2km
                 ? "bg-[var(--color-primary-subtle)] text-[var(--color-primary)]"
                 : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]"
@@ -328,7 +331,7 @@ export function LocalForumFeed({
                       {displayBody.length > 150 && (
                         <button 
                           onClick={(e) => toggleExpand(e, q.id)} 
-                          className="text-[var(--color-primary)] font-medium ml-1 hover:underline inline-block"
+                          className="text-[var(--color-primary)] font-medium ml-1 hover:underline inline-block cursor-pointer bg-transparent border-0"
                         >
                           {expandedPosts[q.id] ? "show less" : "show more"}
                         </button>

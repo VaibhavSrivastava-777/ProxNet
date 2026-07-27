@@ -7,25 +7,23 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(request.url);
-  const lat = parseFloat(url.searchParams.get("lat") || "0");
-  const lng = parseFloat(url.searchParams.get("lng") || "0");
+  let lat = parseFloat(url.searchParams.get("lat") || "");
+  let lng = parseFloat(url.searchParams.get("lng") || "");
   const radius = parseInt(url.searchParams.get("radius") || "2000", 10);
 
-  if (!lat || !lng) {
-    return NextResponse.json({ error: "Missing location parameters" }, { status: 400 });
+  // If lat/lng are invalid, missing, or NaN, resolve from logged in user's profile
+  if (isNaN(lat) || isNaN(lng) || !lat || !lng) {
+    lat = Number(user.home_lat || user.office_lat || 28.6139);
+    lng = Number(user.home_lng || user.office_lng || 77.2090);
   }
 
   const supabase = createAdminClient();
 
-  // Use a simple distance formula query since we have PostGIS or just raw calculations.
-  // Actually, we'll fetch all active events and calculate distance in memory if we don't have a PostGIS function ready.
-  // Alternatively, since events are tied to proximity, we can do a naive bounding box or just fetch and filter.
-  // We'll fetch upcoming events (starts_at > now() or ends_at > now()) and filter by distance.
   const { data: events, error } = await supabase
     .from("events")
     .select(`
       *,
-      creator:users!events_creator_id_fkey(full_name, job_title, company, anonymous_name),
+      creator:users!events_creator_id_fkey(full_name, job_title, company, anonymous_name, home_lat, home_lng),
       rsvps:event_rsvps(user_id, status)
     `)
     .eq("status", "active")
@@ -50,7 +48,20 @@ export async function GET(request: Request) {
   };
 
   const filteredEvents = (events || []).filter((e: any) => {
-    const dist = calcDistance(lat, lng, e.center_lat, e.center_lng);
+    // If radius >= 50000 (all distances mode), include all active events
+    if (radius >= 50000) return true;
+
+    let eventLat = e.center_lat || e.venue_lat;
+    let eventLng = e.center_lng || e.venue_lng;
+
+    if (!eventLat || !eventLng) {
+      eventLat = e.creator?.home_lat;
+      eventLng = e.creator?.home_lng;
+    }
+
+    if (!eventLat || !eventLng) return true;
+
+    const dist = calcDistance(lat, lng, eventLat, eventLng);
     e.distance = dist;
     return dist <= radius;
   });
@@ -63,9 +74,9 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { title, subtitle, description, startsAt, endsAt, venueName, venueLat, venueLng, centerLat, centerLng, isPublic, recurrenceRule } = body;
+  const { title, subtitle, description, startsAt, endsAt, venueName, venueLat, venueLng, centerLat, centerLng, isPublic } = body;
 
-  if (!title || !startsAt || !endsAt || !venueName || !centerLat || !centerLng) {
+  if (!title || !startsAt || !endsAt || !venueName) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -89,12 +100,11 @@ export async function POST(request: Request) {
       starts_at: startsAt,
       ends_at: endsAt,
       venue_name: venueName,
-      venue_lat: venueLat,
-      venue_lng: venueLng,
-      center_lat: centerLat,
-      center_lng: centerLng,
+      venue_lat: venueLat || null,
+      venue_lng: venueLng || null,
+      center_lat: centerLat || venueLat || null,
+      center_lng: centerLng || venueLng || null,
       is_public: isPublic ?? true,
-      recurrence_rule: recurrenceRule || null
     })
     .select()
     .single();
@@ -106,7 +116,7 @@ export async function POST(request: Request) {
   // Deduct 1 credit point
   await supabase.from("users").update({ wallet: Math.max(0, currentWallet - 1) }).eq("id", user.id);
 
-  // Auto RSVP the creator
+  // Auto RSVP creator as yes
   await supabase.from("event_rsvps").insert({
     event_id: event.id,
     user_id: user.id,
