@@ -71,29 +71,34 @@ ALTER TABLE job_post_invites ENABLE ROW LEVEL SECURITY;
 DO $$ 
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated read on job_posts') THEN
-    CREATE POLICY "Allow authenticated read on job_posts" ON job_posts FOR SELECT USING (true);
+    EXECUTE 'CREATE POLICY "Allow authenticated read on job_posts" ON job_posts FOR SELECT USING (true)';
   END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated insert on job_posts') THEN
-    CREATE POLICY "Allow authenticated insert on job_posts" ON job_posts FOR INSERT WITH CHECK (auth.uid() = COALESCE(creator_id, user_id));
+    EXECUTE 'CREATE POLICY "Allow authenticated insert on job_posts" ON job_posts FOR INSERT WITH CHECK (auth.uid() = COALESCE(creator_id, user_id))';
   END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow creator update on job_posts') THEN
-    CREATE POLICY "Allow creator update on job_posts" ON job_posts FOR UPDATE USING (auth.uid() = COALESCE(creator_id, user_id));
+    EXECUTE 'CREATE POLICY "Allow creator update on job_posts" ON job_posts FOR UPDATE USING (auth.uid() = COALESCE(creator_id, user_id))';
   END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow creator delete on job_posts') THEN
-    CREATE POLICY "Allow creator delete on job_posts" ON job_posts FOR DELETE USING (auth.uid() = COALESCE(creator_id, user_id));
+    EXECUTE 'CREATE POLICY "Allow creator delete on job_posts" ON job_posts FOR DELETE USING (auth.uid() = COALESCE(creator_id, user_id))';
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated read on interests') THEN
-    CREATE POLICY "Allow authenticated read on interests" ON job_post_interests FOR SELECT USING (true);
+    EXECUTE 'CREATE POLICY "Allow authenticated read on interests" ON job_post_interests FOR SELECT USING (true)';
   END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated insert on interests') THEN
-    CREATE POLICY "Allow authenticated insert on interests" ON job_post_interests FOR INSERT WITH CHECK (auth.uid() = user_id);
+    EXECUTE 'CREATE POLICY "Allow authenticated insert on interests" ON job_post_interests FOR INSERT WITH CHECK (auth.uid() = user_id)';
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated read on job_invites') THEN
-    CREATE POLICY "Allow authenticated read on job_invites" ON job_post_invites FOR SELECT USING (true);
+    EXECUTE 'CREATE POLICY "Allow authenticated read on job_invites" ON job_post_invites FOR SELECT USING (true)';
   END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated insert on job_invites') THEN
-    CREATE POLICY "Allow authenticated insert on job_invites" ON job_post_invites FOR INSERT WITH CHECK (auth.uid() = invited_by);
+    EXECUTE 'CREATE POLICY "Allow authenticated insert on job_invites" ON job_post_invites FOR INSERT WITH CHECK (auth.uid() = invited_by)';
   END IF;
 END $$;

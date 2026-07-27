@@ -58,6 +58,35 @@ export function JobPostCard({
     }
   };
 
+  const handleShareWhatsapp = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/job-post/${jobPost.id}`;
+    const badgeEmoji = isSeeker ? "🔍" : "📢";
+    const text = `${badgeEmoji} *${jobPost.role}* ${jobPost.company ? `at ${jobPost.company}` : ''}\n${jobPost.description ? jobPost.description.slice(0, 120) + '...' : ''}\n\n👉 View details on ProxNet:\n${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/job-post/${jobPost.id}`;
+    const shareData = {
+      title: jobPost.role,
+      text: `Check out this job opportunity on ProxNet: ${jobPost.role} ${jobPost.company ? `at ${jobPost.company}` : ''}`,
+      url: url,
+    };
+
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        // User cancelled or share failed
+      }
+    } else {
+      navigator.clipboard.writeText(url);
+      alert("Job post link copied to clipboard!");
+    }
+  };
+
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("Are you sure you want to delete this Job post?")) return;
@@ -69,7 +98,8 @@ export function JobPostCard({
         if (onDelete) onDelete(jobPost.id);
         else if (onInterestUpdate) onInterestUpdate();
       } else {
-        alert("Failed to delete job post.");
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || "Failed to delete job post.");
       }
     } catch (err) {
       console.error(err);
@@ -177,17 +207,35 @@ export function JobPostCard({
           {interestedCount} Interested
         </span>
 
-        <button
-          onClick={handleInterest}
-          disabled={isSubmitting}
-          className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            isInterested
-              ? "bg-emerald-500/10 text-emerald-600 border border-emerald-300"
-              : "bg-[var(--color-primary)] text-white hover:opacity-90 shadow-sm"
-          }`}
-        >
-          {isInterested ? "✓ Interested" : "I'm Interested"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleShareWhatsapp}
+            className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600/10 text-emerald-600 hover:bg-emerald-600/20 transition-colors flex items-center gap-1"
+            title="Share on WhatsApp"
+          >
+            <span>💬</span> WhatsApp
+          </button>
+
+          <button
+            onClick={handleShare}
+            className="p-1.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)] transition-colors rounded-lg hover:bg-[var(--color-primary-subtle)] flex items-center gap-1 text-xs font-semibold"
+            title="Share with apps"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          </button>
+
+          <button
+            onClick={handleInterest}
+            disabled={isSubmitting}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              isInterested
+                ? "bg-emerald-500/10 text-emerald-600 border border-emerald-300"
+                : "bg-[var(--color-primary)] text-white hover:opacity-90 shadow-sm"
+            }`}
+          >
+            {isInterested ? "✓ Interested" : "I'm Interested"}
+          </button>
+        </div>
       </div>
     </div>
   );
