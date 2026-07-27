@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import Link from "next/link";
 import { EventInviteModal } from "@/components/forum/EventInviteModal";
+import { JobPostModal } from "@/components/forum/JobPostModal";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -22,6 +23,7 @@ export default function JobPostPage({ params }: { params: Promise<{ id: string }
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -80,6 +82,20 @@ export default function JobPostPage({ params }: { params: Promise<{ id: string }
     }
   };
 
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this Job post?")) return;
+    try {
+      const res = await fetch(`/api/job-posts/${jobPost.id}`, { method: "DELETE" });
+      if (res.ok) {
+        router.push("/?tab=forum");
+      } else {
+        alert("Failed to delete job post.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleShareWhatsapp = () => {
     const shareUrl = `${window.location.origin}/job-post/${jobPost.id}`;
     const text = `Check out this job opportunity on ProxNet: *${jobPost.role}* ${jobPost.company ? `at ${jobPost.company}` : ''}\n\nView details: ${shareUrl}`;
@@ -101,9 +117,18 @@ export default function JobPostPage({ params }: { params: Promise<{ id: string }
           
           <div className="flex flex-col md:flex-row gap-4 justify-between items-start">
             <div className="flex flex-col gap-2 flex-1">
-              <span className={`self-start px-3 py-1 rounded-full text-xs font-bold text-white uppercase tracking-wider ${badgeBg}`}>
-                {badgeText}
-              </span>
+              <div className="flex items-center justify-between">
+                <span className={`self-start px-3 py-1 rounded-full text-xs font-bold text-white uppercase tracking-wider ${badgeBg}`}>
+                  {badgeText}
+                </span>
+                {isCreator && (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setIsEditOpen(true)} className="px-3 py-1 bg-[var(--color-surface-secondary)] text-[var(--color-primary)] font-bold rounded-lg text-xs hover:bg-[var(--color-primary-subtle)] transition-colors">✏️ Edit</button>
+                    <button onClick={handleDelete} className="px-3 py-1 bg-red-500/10 text-red-600 font-bold rounded-lg text-xs hover:bg-red-500/20 transition-colors">🗑️ Delete</button>
+                  </div>
+                )}
+              </div>
+
               <h1 className="text-3xl md:text-4xl font-black text-[var(--color-text)] leading-tight mt-1">{jobPost.role}</h1>
               {jobPost.company && (
                 <p className="text-xl text-[var(--color-text-secondary)] font-semibold">
@@ -246,6 +271,18 @@ export default function JobPostPage({ params }: { params: Promise<{ id: string }
           onClose={() => setIsInviteOpen(false)}
           eventId={jobPost.id}
           eventTitle={jobPost.role}
+        />
+      )}
+
+      {isEditOpen && (
+        <JobPostModal
+          isOpen={isEditOpen}
+          initialData={jobPost}
+          onClose={() => setIsEditOpen(false)}
+          onSuccess={() => {
+            setIsEditOpen(false);
+            mutate();
+          }}
         />
       )}
     </div>

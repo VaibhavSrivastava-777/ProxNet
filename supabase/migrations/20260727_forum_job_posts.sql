@@ -1,7 +1,8 @@
--- Core job posts table
+-- Core job posts table (safe creation and column additions for existing schemas)
 CREATE TABLE IF NOT EXISTS job_posts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  creator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  creator_id UUID REFERENCES users(id) ON DELETE CASCADE,
   type TEXT NOT NULL CHECK (type IN ('seeker', 'giver')),
   role TEXT NOT NULL,
   company TEXT,
@@ -11,8 +12,8 @@ CREATE TABLE IF NOT EXISTS job_posts (
   contact_info TEXT,
 
   -- Visibility & Scope
-  center_lat DOUBLE PRECISION NOT NULL,
-  center_lng DOUBLE PRECISION NOT NULL,
+  center_lat DOUBLE PRECISION,
+  center_lng DOUBLE PRECISION,
   radius_meters INT DEFAULT 2000,
   is_public BOOLEAN DEFAULT true,
 
@@ -22,14 +23,25 @@ CREATE TABLE IF NOT EXISTS job_posts (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Ensure columns exist if table was created previously without them
+-- Ensure all columns exist on job_posts table if it was created previously
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS creator_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS type TEXT;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS role TEXT;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS company TEXT;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS experience_years TEXT;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS skills TEXT;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS contact_info TEXT;
 ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS center_lat DOUBLE PRECISION;
 ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS center_lng DOUBLE PRECISION;
 ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS radius_meters INT DEFAULT 2000;
 ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT true;
-ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS contact_info TEXT;
-ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS experience_years TEXT;
-ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS skills TEXT;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+
+-- Sync user_id and creator_id for backward compatibility
+UPDATE job_posts SET creator_id = user_id WHERE creator_id IS NULL AND user_id IS NOT NULL;
+UPDATE job_posts SET user_id = creator_id WHERE user_id IS NULL AND creator_id IS NOT NULL;
 
 -- Job post interest tracking (RSVP equivalent)
 CREATE TABLE IF NOT EXISTS job_post_interests (
@@ -62,13 +74,13 @@ BEGIN
     CREATE POLICY "Allow authenticated read on job_posts" ON job_posts FOR SELECT USING (true);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated insert on job_posts') THEN
-    CREATE POLICY "Allow authenticated insert on job_posts" ON job_posts FOR INSERT WITH CHECK (auth.uid() = creator_id);
+    CREATE POLICY "Allow authenticated insert on job_posts" ON job_posts FOR INSERT WITH CHECK (auth.uid() = COALESCE(creator_id, user_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow creator update on job_posts') THEN
-    CREATE POLICY "Allow creator update on job_posts" ON job_posts FOR UPDATE USING (auth.uid() = creator_id);
+    CREATE POLICY "Allow creator update on job_posts" ON job_posts FOR UPDATE USING (auth.uid() = COALESCE(creator_id, user_id));
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow creator delete on job_posts') THEN
-    CREATE POLICY "Allow creator delete on job_posts" ON job_posts FOR DELETE USING (auth.uid() = creator_id);
+    CREATE POLICY "Allow creator delete on job_posts" ON job_posts FOR DELETE USING (auth.uid() = COALESCE(creator_id, user_id));
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated read on interests') THEN

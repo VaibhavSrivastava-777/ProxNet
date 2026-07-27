@@ -8,7 +8,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const supabase = createAdminClient();
     const { data: jobPost } = await supabase
       .from("job_posts")
-      .select("*, creator:users!job_posts_creator_id_fkey(full_name, company), interests:job_post_interests(status)")
+      .select("*, creator:users!job_posts_user_id_fkey(full_name, company), interests:job_post_interests(status)")
       .eq("id", id)
       .single();
 

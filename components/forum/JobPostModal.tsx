@@ -5,19 +5,23 @@ import { useState, useEffect } from "react";
 export function JobPostModal({ 
   isOpen, 
   onClose, 
-  onSuccess 
+  onSuccess,
+  initialData
 }: { 
   isOpen: boolean; 
   onClose: () => void;
   onSuccess: () => void;
+  initialData?: any;
 }) {
-  const [type, setType] = useState<"seeker" | "giver">("seeker");
-  const [role, setRole] = useState("");
-  const [company, setCompany] = useState("");
-  const [experienceYears, setExperienceYears] = useState("");
-  const [skills, setSkills] = useState("");
-  const [description, setDescription] = useState("");
-  const [contactInfo, setContactInfo] = useState("");
+  const isEditing = !!initialData?.id;
+
+  const [type, setType] = useState<"seeker" | "giver">(initialData?.type || "seeker");
+  const [role, setRole] = useState(initialData?.role || "");
+  const [company, setCompany] = useState(initialData?.company || "");
+  const [experienceYears, setExperienceYears] = useState(initialData?.experience_years || "");
+  const [skills, setSkills] = useState(initialData?.skills || "");
+  const [description, setDescription] = useState(initialData?.description || "");
+  const [contactInfo, setContactInfo] = useState(initialData?.contact_info || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Invite states
@@ -26,6 +30,18 @@ export function JobPostModal({
   const [selectedInvitees, setSelectedInvitees] = useState<Set<string>>(new Set());
   const [isSearching, setIsSearching] = useState(false);
   const [searchPlaceholder, setSearchPlaceholder] = useState("Search based on name");
+
+  useEffect(() => {
+    if (initialData) {
+      setType(initialData.type || "seeker");
+      setRole(initialData.role || "");
+      setCompany(initialData.company || "");
+      setExperienceYears(initialData.experience_years || "");
+      setSkills(initialData.skills || "");
+      setDescription(initialData.description || "");
+      setContactInfo(initialData.contact_info || "");
+    }
+  }, [initialData]);
 
   useEffect(() => {
     const terms = ["name", "company", "designation"];
@@ -77,15 +93,21 @@ export function JobPostModal({
 
     setIsSubmitting(true);
     try {
-      // Fetch user profile to get location
-      const profileRes = await fetch("/api/profile");
-      const profile = await profileRes.json();
+      const url = isEditing ? `/api/job-posts/${initialData.id}` : "/api/job-posts";
+      const method = isEditing ? "PATCH" : "POST";
 
-      const centerLat = profile?.home_lat || 28.6139;
-      const centerLng = profile?.home_lng || 77.2090;
+      let centerLat = initialData?.center_lat || 28.6139;
+      let centerLng = initialData?.center_lng || 77.2090;
 
-      const res = await fetch("/api/job-posts", {
-        method: "POST",
+      if (!isEditing) {
+        const profileRes = await fetch("/api/profile");
+        const profile = await profileRes.json();
+        centerLat = profile?.home_lat || 28.6139;
+        centerLng = profile?.home_lng || 77.2090;
+      }
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type,
@@ -103,28 +125,31 @@ export function JobPostModal({
 
       if (res.ok) {
         const data = await res.json();
+        const jobPostId = isEditing ? initialData.id : data.jobPost?.id;
 
         // Send invites if selected
-        if (selectedInvitees.size > 0 && data.jobPost?.id) {
-          await fetch(`/api/job-posts/${data.jobPost.id}/invite`, {
+        if (selectedInvitees.size > 0 && jobPostId) {
+          await fetch(`/api/job-posts/${jobPostId}/invite`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userIds: Array.from(selectedInvitees) })
           });
         }
 
-        setRole("");
-        setCompany("");
-        setExperienceYears("");
-        setSkills("");
-        setDescription("");
-        setContactInfo("");
-        setInviteQuery("");
-        setSelectedInvitees(new Set());
+        if (!isEditing) {
+          setRole("");
+          setCompany("");
+          setExperienceYears("");
+          setSkills("");
+          setDescription("");
+          setContactInfo("");
+          setInviteQuery("");
+          setSelectedInvitees(new Set());
+        }
         onSuccess();
       } else {
-        const data = await res.json();
-        alert(data.error || "Failed to create job post.");
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || `Failed to ${isEditing ? "update" : "create"} job post.`);
       }
     } catch (err) {
       console.error(err);
@@ -138,7 +163,9 @@ export function JobPostModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
       <div className="bg-[var(--color-surface)] rounded-2xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-4 border-b border-[var(--color-border-light)] flex justify-between items-center shrink-0">
-          <h3 className="text-h3 font-bold text-[var(--color-text)]">Create Job Post</h3>
+          <h3 className="text-h3 font-bold text-[var(--color-text)]">
+            {isEditing ? "Edit Job Post" : "Create Job Post"}
+          </h3>
           <button onClick={onClose} className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] rounded-full hover:bg-[var(--color-surface-hover)] transition-colors">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
@@ -316,7 +343,7 @@ export function JobPostModal({
             disabled={isSubmitting}
             className="px-6 py-2.5 rounded-lg text-sm font-bold bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            {isSubmitting ? "Posting..." : "Post Job Opportunity"}
+            {isSubmitting ? "Saving..." : isEditing ? "Save Changes" : "Post Job Opportunity (1 Credit)"}
           </button>
         </div>
       </div>

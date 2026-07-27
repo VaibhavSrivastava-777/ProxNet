@@ -6,14 +6,22 @@ import { useState } from "react";
 export function JobPostCard({ 
   jobPost, 
   currentUserId, 
-  onInterestUpdate 
+  onInterestUpdate,
+  onEdit,
+  onDelete
 }: { 
   jobPost: any; 
   currentUserId?: string;
   onInterestUpdate?: () => void;
+  onEdit?: (jobPost: any) => void;
+  onDelete?: (jobPostId: string) => void;
 }) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const creatorId = jobPost.creator_id || jobPost.user_id;
+  const isCreator = currentUserId && currentUserId === creatorId;
 
   const isSeeker = jobPost.type === "seeker";
   const badgeText = isSeeker ? "Looking for Role" : "Hiring / Referring";
@@ -50,6 +58,32 @@ export function JobPostCard({
     }
   };
 
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this Job post?")) return;
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/job-posts/${jobPost.id}`, { method: "DELETE" });
+      if (res.ok) {
+        if (onDelete) onDelete(jobPost.id);
+        else if (onInterestUpdate) onInterestUpdate();
+      } else {
+        alert("Failed to delete job post.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting job post.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onEdit) onEdit(jobPost);
+  };
+
   const skillsList = jobPost.skills 
     ? jobPost.skills.split(",").map((s: string) => s.trim()).filter(Boolean)
     : [];
@@ -78,9 +112,31 @@ export function JobPostCard({
           </div>
         </div>
 
-        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${badgeBg} uppercase tracking-wider shrink-0`}>
-          {badgeText}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          {isCreator && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleEdit}
+                className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--color-surface-secondary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)] transition-colors"
+                title="Edit Job Post"
+              >
+                ✏️ Edit
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                title="Delete Job Post"
+              >
+                🗑️ Delete
+              </button>
+            </div>
+          )}
+
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${badgeBg} uppercase tracking-wider`}>
+            {badgeText}
+          </span>
+        </div>
       </div>
 
       <div className="flex flex-col gap-1 mt-1">

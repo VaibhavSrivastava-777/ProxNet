@@ -4,22 +4,35 @@ import { useState, useEffect } from "react";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import { LocationAutocomplete } from "@/components/map/LocationAutocomplete";
 
+function formatDateForInput(isoStr?: string) {
+  if (!isoStr) return "";
+  const d = new Date(isoStr);
+  const tzOffset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+}
+
 export function EventFormModal({ 
   isOpen, 
   onClose, 
-  onSuccess 
+  onSuccess,
+  initialData
 }: { 
   isOpen: boolean; 
   onClose: () => void;
   onSuccess: () => void;
+  initialData?: any;
 }) {
-  const [title, setTitle] = useState("");
-  const [subtitle, setSubtitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [startsAt, setStartsAt] = useState("");
-  const [endsAt, setEndsAt] = useState("");
-  const [venueName, setVenueName] = useState("");
-  const [venueCoords, setVenueCoords] = useState<{lat: number, lng: number} | null>(null);
+  const isEditing = !!initialData?.id;
+
+  const [title, setTitle] = useState(initialData?.title || "");
+  const [subtitle, setSubtitle] = useState(initialData?.subtitle || "");
+  const [description, setDescription] = useState(initialData?.description || "");
+  const [startsAt, setStartsAt] = useState(formatDateForInput(initialData?.starts_at) || "");
+  const [endsAt, setEndsAt] = useState(formatDateForInput(initialData?.ends_at) || "");
+  const [venueName, setVenueName] = useState(initialData?.venue_name || "");
+  const [venueCoords, setVenueCoords] = useState<{lat: number, lng: number} | null>(
+    initialData?.venue_lat && initialData?.venue_lng ? { lat: initialData.venue_lat, lng: initialData.venue_lng } : null
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Invite states
@@ -28,6 +41,20 @@ export function EventFormModal({
   const [selectedInvitees, setSelectedInvitees] = useState<Set<string>>(new Set());
   const [isSearching, setIsSearching] = useState(false);
   const [searchPlaceholder, setSearchPlaceholder] = useState("Search based on name");
+
+  useEffect(() => {
+    if (initialData) {
+      setTitle(initialData.title || "");
+      setSubtitle(initialData.subtitle || "");
+      setDescription(initialData.description || "");
+      setStartsAt(formatDateForInput(initialData.starts_at));
+      setEndsAt(formatDateForInput(initialData.ends_at));
+      setVenueName(initialData.venue_name || "");
+      if (initialData.venue_lat && initialData.venue_lng) {
+        setVenueCoords({ lat: initialData.venue_lat, lng: initialData.venue_lng });
+      }
+    }
+  }, [initialData]);
 
   useEffect(() => {
     const terms = ["name", "company", "designation"];
@@ -47,8 +74,6 @@ export function EventFormModal({
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        // We use a general users search if possible, but /api/events/[id]/search-users doesn't actually require the event ID structurally for searching users
-        // Let's call /api/events/00000000-0000-0000-0000-000000000000/search-users as a workaround since the ID is ignored in the handler
         const res = await fetch(`/api/events/00000000-0000-0000-0000-000000000000/search-users?q=${encodeURIComponent(inviteQuery)}`);
         if (res.ok) {
           const data = await res.json();
@@ -81,8 +106,11 @@ export function EventFormModal({
 
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/events", {
-        method: "POST",
+      const url = isEditing ? `/api/events/${initialData.id}` : "/api/events";
+      const method = isEditing ? "PATCH" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title,
@@ -93,7 +121,7 @@ export function EventFormModal({
           venueName,
           venueLat: venueCoords.lat,
           venueLng: venueCoords.lng,
-          centerLat: venueCoords.lat, // defaults to venue
+          centerLat: venueCoords.lat,
           centerLng: venueCoords.lng,
           isPublic: true,
         }),
@@ -101,29 +129,32 @@ export function EventFormModal({
 
       if (res.ok) {
         const data = await res.json();
+        const eventId = isEditing ? initialData.id : data.event?.id;
         
         // Send invites if any selected
-        if (selectedInvitees.size > 0 && data.event?.id) {
-          await fetch(`/api/events/${data.event.id}/invite`, {
+        if (selectedInvitees.size > 0 && eventId) {
+          await fetch(`/api/events/${eventId}/invite`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userIds: Array.from(selectedInvitees) })
           });
         }
 
-        setTitle("");
-        setSubtitle("");
-        setDescription("");
-        setStartsAt("");
-        setEndsAt("");
-        setVenueName("");
-        setVenueCoords(null);
-        setInviteQuery("");
-        setSelectedInvitees(new Set());
+        if (!isEditing) {
+          setTitle("");
+          setSubtitle("");
+          setDescription("");
+          setStartsAt("");
+          setEndsAt("");
+          setVenueName("");
+          setVenueCoords(null);
+          setInviteQuery("");
+          setSelectedInvitees(new Set());
+        }
         onSuccess();
       } else {
-        const data = await res.json();
-        alert(data.error || "Failed to create event.");
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || `Failed to ${isEditing ? "update" : "create"} event.`);
       }
     } catch (err) {
       console.error(err);
@@ -137,7 +168,9 @@ export function EventFormModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
       <div className="bg-[var(--color-surface)] rounded-2xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-4 border-b border-[var(--color-border-light)] flex justify-between items-center shrink-0">
-          <h3 className="text-h3 font-bold text-[var(--color-text)]">Create Meetup</h3>
+          <h3 className="text-h3 font-bold text-[var(--color-text)]">
+            {isEditing ? "Edit Meetup" : "Create Meetup Event"}
+          </h3>
           <button onClick={onClose} className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] rounded-full hover:bg-[var(--color-surface-hover)] transition-colors">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
@@ -152,18 +185,18 @@ export function EventFormModal({
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Weekend Professional Meetup"
+                placeholder="e.g. Bi-weekly Professional Tech Meetup"
                 className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none bg-[var(--color-surface)]"
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Subtitle</label>
               <input
                 type="text"
                 value={subtitle}
                 onChange={(e) => setSubtitle(e.target.value)}
-                placeholder="e.g. Casual networking over coffee"
+                placeholder="e.g. Discussing AI, Startups & Career Growth"
                 className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none bg-[var(--color-surface)]"
               />
             </div>
@@ -195,22 +228,24 @@ export function EventFormModal({
               <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Venue Name *</label>
               <LocationAutocomplete
                 value={venueName}
-                onChange={setVenueName}
-                onSelect={(sel) => {
-                  setVenueName(sel.name);
-                  setVenueCoords({ lat: sel.lat, lng: sel.lng });
+                onChange={(address) => setVenueName(address)}
+                onSelect={(loc) => {
+                  setVenueName(loc.name);
+                  setVenueCoords({ lat: loc.lat, lng: loc.lng });
                 }}
-                placeholder="Search venue or e.g. Starbucks, Indiranagar"
+                placeholder="Search venue name or location..."
               />
-              <div className="mt-3">
-                <LocationPicker
-                  legend="Pinpoint Venue Location *"
-                  lat={venueCoords?.lat.toString() || ""}
-                  lng={venueCoords?.lng.toString() || ""}
-                  onChange={(lat, lng) => setVenueCoords({ lat: parseFloat(lat), lng: parseFloat(lng) })}
-                  defaultShowMap={true}
-                />
-              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Pin Location on Map *</label>
+              <LocationPicker
+                legend="Venue location Pin"
+                lat={venueCoords?.lat?.toString() || ""}
+                lng={venueCoords?.lng?.toString() || ""}
+                defaultShowMap={true}
+                onChange={(latStr, lngStr) => setVenueCoords({ lat: Number(latStr), lng: Number(lngStr) })}
+              />
             </div>
 
             <div>
@@ -218,8 +253,8 @@ export function EventFormModal({
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="What's the agenda? Who should attend?"
-                rows={4}
+                placeholder="Details about the agenda, who should attend, coffee arrangements, etc."
+                rows={3}
                 className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none resize-none bg-[var(--color-surface)]"
               />
             </div>
@@ -254,7 +289,7 @@ export function EventFormModal({
                             {user.profile_photo_url ? (
                               <img src={user.profile_photo_url} alt={user.full_name} className="w-full h-full object-cover" />
                             ) : (
-                              user.full_name.substring(0, 2).toUpperCase()
+                              user.full_name?.substring(0, 2).toUpperCase() || "U"
                             )}
                           </div>
                           <div className="flex flex-col">
@@ -294,9 +329,9 @@ export function EventFormModal({
             type="submit"
             form="event-form"
             disabled={isSubmitting}
-            className="px-6 py-2.5 rounded-lg text-sm font-bold bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="px-6 py-2.5 rounded-lg text-sm font-bold bg-[#E56B42] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            {isSubmitting ? "Creating..." : "Create Meetup"}
+            {isSubmitting ? "Saving..." : isEditing ? "Save Changes" : "Create Meetup (1 Credit)"}
           </button>
         </div>
       </div>

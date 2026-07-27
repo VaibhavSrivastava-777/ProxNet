@@ -3,9 +3,24 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function EventCard({ event, onRsvpUpdate, currentUserId }: { event: any, onRsvpUpdate: () => void, currentUserId?: string }) {
+export function EventCard({ 
+  event, 
+  onRsvpUpdate, 
+  currentUserId,
+  onEdit,
+  onDelete
+}: { 
+  event: any;
+  onRsvpUpdate: () => void;
+  currentUserId?: string;
+  onEdit?: (event: any) => void;
+  onDelete?: (eventId: string) => void;
+}) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const isCreator = currentUserId && (currentUserId === event.creator_id || currentUserId === event.user_id);
 
   // Parse attendees
   const rsvps = event.rsvps || [];
@@ -51,6 +66,32 @@ export function EventCard({ event, onRsvpUpdate, currentUserId }: { event: any, 
     }
   };
 
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this Meetup event?")) return;
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/events/${event.id}`, { method: "DELETE" });
+      if (res.ok) {
+        if (onDelete) onDelete(event.id);
+        else onRsvpUpdate();
+      } else {
+        alert("Failed to delete event.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting event.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onEdit) onEdit(event);
+  };
+
   // Format date and time
   const startObj = new Date(event.starts_at);
   const endObj = new Date(event.ends_at);
@@ -60,16 +101,40 @@ export function EventCard({ event, onRsvpUpdate, currentUserId }: { event: any, 
   return (
     <div 
       onClick={() => router.push(`/event/${event.id}`)}
-      className="card p-5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-sm hover:shadow-md transition-shadow cursor-pointer flex flex-col gap-3 relative overflow-hidden"
+      className="card p-5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-sm hover:shadow-md transition-shadow cursor-pointer flex flex-col gap-3 relative overflow-hidden group"
     >
-      {/* Date badge */}
-      <div className="absolute top-0 right-0 bg-[var(--color-primary-subtle)] text-[var(--color-primary)] px-3 py-1 rounded-bl-xl text-xs font-bold shadow-sm">
-        MEETUP
+      {/* Top Bar: Meetup badge & Creator Edit/Delete actions */}
+      <div className="flex justify-between items-start">
+        <div className="flex items-center gap-2">
+          {isCreator && (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handleEdit}
+                className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--color-surface-secondary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)] transition-colors"
+                title="Edit Meetup"
+              >
+                ✏️ Edit
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                title="Delete Meetup"
+              >
+                🗑️ Delete
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-[var(--color-primary-subtle)] text-[var(--color-primary)] px-3 py-1 rounded-bl-xl text-xs font-bold shadow-sm">
+          MEETUP
+        </div>
       </div>
 
-      <div className="flex flex-col gap-1 pr-16">
+      <div className="flex flex-col gap-1 pr-4">
         <span className="text-xs font-bold text-[#E56B42] tracking-wide">{dateStr} · {timeStr}</span>
-        <h3 className="text-lg font-bold text-[var(--color-text)] leading-tight">{event.title}</h3>
+        <h3 className="text-lg font-bold text-[var(--color-text)] leading-tight group-hover:text-[var(--color-primary)] transition-colors">{event.title}</h3>
         {event.subtitle && <p className="text-sm font-medium text-[var(--color-text-secondary)]">{event.subtitle}</p>}
       </div>
 
@@ -80,9 +145,8 @@ export function EventCard({ event, onRsvpUpdate, currentUserId }: { event: any, 
 
       <div className="flex items-center gap-2 mt-2">
         <div className="flex -space-x-2">
-          {/* Avatar placeholders based on count */}
           {Array.from({ length: Math.min(going, 3) }).map((_, i) => (
-            <div key={i} className="w-6 h-6 rounded-full border-2 border-[var(--color-surface)] bg-[var(--color-border)]" />
+            <div key={i} className="w-6 h-6 rounded-full border-2 border-[var(--color-surface)] bg-[var(--color-border)] flex items-center justify-center text-[10px] text-[var(--color-text-secondary)]">👤</div>
           ))}
         </div>
         <span className="text-xs font-semibold text-[var(--color-text-secondary)]">
@@ -120,7 +184,7 @@ export function EventCard({ event, onRsvpUpdate, currentUserId }: { event: any, 
       
       {/* Creator Info */}
       <div className="text-[10px] text-[var(--color-text-tertiary)] text-right mt-1">
-        Hosted by {event.creator?.full_name}
+        Hosted by {event.creator?.full_name || "Neighbor"}
       </div>
     </div>
   );

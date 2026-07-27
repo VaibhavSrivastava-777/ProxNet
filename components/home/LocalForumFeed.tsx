@@ -48,6 +48,8 @@ export function LocalForumFeed() {
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<any>(null);
+  const [editingJob, setEditingJob] = useState<any>(null);
 
   // Fetch events SWR based on location and radius
   const eventsUrl = profile 
@@ -285,6 +287,11 @@ export function LocalForumFeed() {
                     event={item} 
                     currentUserId={profile?.id} 
                     onRsvpUpdate={() => mutate(eventsUrl)} 
+                    onEdit={(evt) => {
+                      setEditingEvent(evt);
+                      setIsEventModalOpen(true);
+                    }}
+                    onDelete={() => mutate(eventsUrl)}
                   />
                 );
               }
@@ -295,6 +302,11 @@ export function LocalForumFeed() {
                     jobPost={item}
                     currentUserId={profile?.id}
                     onInterestUpdate={() => mutate(jobPostsUrl)}
+                    onEdit={(job) => {
+                      setEditingJob(job);
+                      setIsJobModalOpen(true);
+                    }}
+                    onDelete={() => mutate(jobPostsUrl)}
                   />
                 );
               }
@@ -451,18 +463,28 @@ export function LocalForumFeed() {
       )}
       <EventFormModal 
         isOpen={isEventModalOpen} 
-        onClose={() => setIsEventModalOpen(false)} 
+        initialData={editingEvent}
+        onClose={() => {
+          setIsEventModalOpen(false);
+          setEditingEvent(null);
+        }} 
         onSuccess={() => {
           setIsEventModalOpen(false);
+          setEditingEvent(null);
           mutate(eventsUrl);
           mutate("/api/profile");
         }} 
       />
       <JobPostModal
         isOpen={isJobModalOpen}
-        onClose={() => setIsJobModalOpen(false)}
+        initialData={editingJob}
+        onClose={() => {
+          setIsJobModalOpen(false);
+          setEditingJob(null);
+        }}
         onSuccess={() => {
           setIsJobModalOpen(false);
+          setEditingJob(null);
           mutate(jobPostsUrl);
           mutate("/api/profile");
         }}

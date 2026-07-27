@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     .from("job_posts")
     .select(`
       *,
-      creator:users!job_posts_creator_id_fkey(full_name, job_title, company, profile_photo_url),
+      creator:users!job_posts_user_id_fkey(full_name, job_title, company, profile_photo_url),
       interests:job_post_interests(user_id, status)
     `)
     .eq("status", "active")
@@ -45,6 +45,7 @@ export async function GET(request: Request) {
   };
 
   const filteredJobs = (jobPosts || []).filter((j: any) => {
+    if (!j.center_lat || !j.center_lng) return true;
     const dist = calcDistance(lat, lng, j.center_lat, j.center_lng);
     j.distance = dist;
     return dist <= radius;
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
   const { data: jobPost, error } = await supabase
     .from("job_posts")
     .insert({
+      user_id: user.id,
       creator_id: user.id,
       type,
       role,

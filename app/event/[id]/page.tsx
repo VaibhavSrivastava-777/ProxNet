@@ -6,6 +6,7 @@ import useSWR from "swr";
 import Link from "next/link";
 
 import { EventInviteModal } from "@/components/forum/EventInviteModal";
+import { EventFormModal } from "@/components/forum/EventFormModal";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -23,6 +24,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -51,7 +53,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   const handleRsvp = async (status: string) => {
     if (!isLoggedIn) {
-      // Redirect to login with callback
       const cb = encodeURIComponent(`/event/${event.id}`);
       router.push(`/login?callbackUrl=${cb}`);
       return;
@@ -76,6 +77,20 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   };
 
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this Meetup event?")) return;
+    try {
+      const res = await fetch(`/api/events/${event.id}`, { method: "DELETE" });
+      if (res.ok) {
+        router.push("/?tab=forum");
+      } else {
+        alert("Failed to delete event.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const startObj = new Date(event.starts_at);
   const endObj = new Date(event.ends_at);
   const dateStr = startObj.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
@@ -92,7 +107,15 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           
           <div className="flex flex-col md:flex-row gap-6 justify-between items-start">
             <div className="flex flex-col gap-2 flex-1">
-              <span className="text-sm font-bold text-[#E56B42] uppercase tracking-wider">{dateStr}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-[#E56B42] uppercase tracking-wider">{dateStr}</span>
+                {isCreator && (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setIsEditOpen(true)} className="px-3 py-1 bg-[var(--color-surface-secondary)] text-[var(--color-primary)] font-bold rounded-lg text-xs hover:bg-[var(--color-primary-subtle)] transition-colors">✏️ Edit</button>
+                    <button onClick={handleDelete} className="px-3 py-1 bg-red-500/10 text-red-600 font-bold rounded-lg text-xs hover:bg-red-500/20 transition-colors">🗑️ Delete</button>
+                  </div>
+                )}
+              </div>
               <h1 className="text-3xl md:text-4xl font-black text-[var(--color-text)] leading-tight">{event.title}</h1>
               {event.subtitle && <p className="text-lg text-[var(--color-text-secondary)] font-medium mt-1">{event.subtitle}</p>}
             </div>
@@ -144,6 +167,39 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             </p>
           </div>
           
+          {/* RSVP Bar */}
+          <div className="p-4 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+              <h4 className="font-bold text-[var(--color-text)] text-base m-0">Are you going?</h4>
+              <p className="text-xs text-[var(--color-text-secondary)] m-0 mt-0.5">Your RSVP will reveal your designation @ company to other attendees.</p>
+            </div>
+            
+            <div className="flex gap-2 w-full md:w-auto">
+              <button 
+                disabled={isSubmitting}
+                onClick={() => handleRsvp("yes")}
+                className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+                  userRsvp === "yes" 
+                    ? "bg-[var(--color-primary)] text-white shadow-md" 
+                    : "bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]"
+                }`}
+              >
+                ✓ Going
+              </button>
+              <button 
+                disabled={isSubmitting}
+                onClick={() => handleRsvp("maybe")}
+                className={`flex-1 md:flex-none px-5 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+                  userRsvp === "maybe" 
+                    ? "bg-[var(--color-border)] text-[var(--color-text)] shadow-sm" 
+                    : "bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+                }`}
+              >
+                ? Maybe
+              </button>
+            </div>
+          </div>
+
         </div>
 
         {/* Attendee List */}
@@ -156,88 +212,61 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             <p className="text-sm text-[var(--color-text-secondary)] italic">Be the first to RSVP!</p>
           ) : (
             <div className="flex flex-col gap-4">
-              {going.slice(0, 5).map((r: any) => (
-                <div key={r.user.id} className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[var(--color-border)] overflow-hidden shrink-0">
-                    {r.user.profile_photo_url ? (
+              {going.map((r: any) => (
+                <div key={r.user?.id} className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[var(--color-primary-subtle)] text-[var(--color-primary)] flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
+                    {r.user?.profile_photo_url ? (
                       <img src={r.user.profile_photo_url} alt={r.user.full_name} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center font-bold text-[var(--color-text-secondary)] text-sm">
-                        {r.user.full_name.substring(0, 2).toUpperCase()}
-                      </div>
+                      r.user?.full_name?.substring(0, 2).toUpperCase() || "U"
                     )}
                   </div>
-                  <div>
-                    <div className="font-bold text-[var(--color-text)] text-sm">{r.user.full_name}</div>
-                    {(r.user.job_title || r.user.company) && (
-                      <div className="text-xs text-[var(--color-text-secondary)]">
-                        {r.user.job_title} {r.user.company ? `@ ${r.user.company}` : ''}
-                      </div>
-                    )}
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-[var(--color-text)]">{r.user?.full_name}</span>
+                    <span className="text-xs text-[var(--color-text-secondary)]">
+                      {r.user?.job_title} @ {r.user?.company}
+                    </span>
                   </div>
                 </div>
               ))}
-              
-              {going.length > 5 && (
-                <button className="text-sm font-bold text-[var(--color-primary)] mt-2 hover:underline self-start">
-                  See all {going.length} attendees
-                </button>
-              )}
             </div>
           )}
         </div>
-      </div>
 
-      {/* Sticky Bottom Bar for RSVP */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[var(--color-surface)] border-t border-[var(--color-border-light)] shadow-[0_-4px_12px_rgba(0,0,0,0.05)] p-4 z-50">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
-          
-          <div className="hidden sm:flex flex-col shrink-0">
-            <span className="font-bold text-[var(--color-text)]">{event.title}</span>
-            <span className="text-xs text-[var(--color-text-secondary)]">{dateStr}</span>
-          </div>
-
-          {!isLoggedIn ? (
-            <button 
-              onClick={() => handleRsvp("yes")}
-              className="w-full sm:w-auto px-8 py-3 rounded-xl font-bold bg-[var(--color-primary)] text-white hover:opacity-90 shadow-md text-sm transition-all"
+        {/* CTA for Non-Logged in Users */}
+        {!isLoggedIn && (
+          <div className="mt-6 p-6 rounded-2xl bg-gradient-to-r from-[var(--color-primary)] to-blue-700 text-white text-center shadow-lg flex flex-col items-center gap-3">
+            <h3 className="text-xl font-bold m-0">Join ProxNet to Attend</h3>
+            <p className="text-sm text-white/80 max-w-md m-0">Connect with local professionals, see who's going, and get invited to exclusive local events.</p>
+            <Link 
+              href={`/login?callbackUrl=${encodeURIComponent(`/event/${event.id}`)}`}
+              className="px-6 py-3 bg-white text-[var(--color-primary)] font-bold text-sm rounded-xl shadow hover:bg-white/90 transition-colors mt-2"
             >
-              Join ProxNet to RSVP
-            </button>
-          ) : (
-            <div className="flex gap-2 w-full sm:w-auto justify-end">
-              <button 
-                disabled={isSubmitting}
-                onClick={() => handleRsvp("yes")}
-                className={`flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold text-sm transition-all ${userRsvp === "yes" ? "bg-[var(--color-primary)] text-white shadow-md" : "bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border)]"}`}
-              >
-                {userRsvp === "yes" ? "✓ Going" : "Yes"}
-              </button>
-              <button 
-                disabled={isSubmitting}
-                onClick={() => handleRsvp("maybe")}
-                className={`flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold text-sm transition-all ${userRsvp === "maybe" ? "bg-[var(--color-border)] text-[var(--color-text)] shadow-sm" : "bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border)]"}`}
-              >
-                {userRsvp === "maybe" ? "✓ Maybe" : "Maybe"}
-              </button>
-              <button 
-                disabled={isSubmitting}
-                onClick={() => handleRsvp("no")}
-                className={`flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold text-sm transition-all ${userRsvp === "no" ? "bg-red-500/10 text-red-600 border border-red-500/20" : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border)]"}`}
-              >
-                {userRsvp === "no" ? "Not Going" : "No"}
-              </button>
-            </div>
-          )}
-        </div>
+              Sign Up / Login to RSVP
+            </Link>
+          </div>
+        )}
+
       </div>
 
-      {isLoggedIn && event && (
-        <EventInviteModal 
-          isOpen={isInviteOpen} 
-          onClose={() => setIsInviteOpen(false)} 
-          eventId={event.id} 
-          eventTitle={event.title} 
+      {isInviteOpen && (
+        <EventInviteModal
+          isOpen={isInviteOpen}
+          onClose={() => setIsInviteOpen(false)}
+          eventId={event.id}
+          eventTitle={event.title}
+        />
+      )}
+
+      {isEditOpen && (
+        <EventFormModal
+          isOpen={isEditOpen}
+          initialData={event}
+          onClose={() => setIsEditOpen(false)}
+          onSuccess={() => {
+            setIsEditOpen(false);
+            mutate();
+          }}
         />
       )}
     </div>
