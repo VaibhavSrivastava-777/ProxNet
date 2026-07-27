@@ -63,8 +63,9 @@ export function EventCard({
   const handleShareWhatsapp = (e: React.MouseEvent) => {
     e.stopPropagation();
     const url = `${window.location.origin}/event/${event.id}`;
-    const text = `🎉 *${event.title}*\n📅 Date: ${dateStr}\n⏰ Time: ${timeStr}\n📍 Venue: ${event.venue_name}\n\n👉 View & RSVP on ProxNet:\n${url}`;
-    
+    const hostName = event.creator?.full_name || "Neighbor";
+    const text = `🤝 *PROXNET MEETUP*\n━━━━━━━━━━━━━━━━━━━\n📌 *${event.title}*\n${event.subtitle ? `_"${event.subtitle}"_\n` : ''}📅 *Date:* ${dateStr}\n⏰ *Time:* ${timeStr}\n📍 *Venue:* ${event.venue_name}\n👤 *Host:* ${hostName}\n\n👉 *View & RSVP on ProxNet:*\n${url}`;
+
     if (typeof navigator !== "undefined" && navigator.share) {
       navigator.share({
         title: event.title,
