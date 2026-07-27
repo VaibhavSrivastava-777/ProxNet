@@ -1,7 +1,5 @@
-import { ImageResponse } from 'next/og'
+import { ImageResponse } from 'next/og';
 import { createAdminClient } from "@/lib/supabase/admin";
-
-
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -10,20 +8,43 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const supabase = createAdminClient();
     const { data: event } = await supabase
       .from("events")
-      .select("*, rsvps:event_rsvps(status)")
+      .select("*, creator:users!events_creator_id_fkey(full_name, job_title, company), rsvps:event_rsvps(status)")
       .eq("id", id)
       .single();
 
     if (!event) {
-      return new Response('Not Found', { status: 404 })
+      return new Response('Not Found', { status: 404 });
     }
 
     const rsvps = event.rsvps || [];
     const going = rsvps.filter((r: any) => r.status === "yes").length;
     
     const startObj = new Date(event.starts_at);
-    const dateStr = startObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }).toUpperCase();
-    const timeStr = startObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const endObj = new Date(event.ends_at);
+
+    // Format in Indian Standard Time (IST / Asia/Kolkata)
+    const dateStr = startObj.toLocaleDateString("en-US", { 
+      timeZone: "Asia/Kolkata", 
+      weekday: "short", 
+      month: "short", 
+      day: "numeric" 
+    }).toUpperCase();
+
+    const startTimeStr = startObj.toLocaleTimeString("en-US", { 
+      timeZone: "Asia/Kolkata", 
+      hour: "numeric", 
+      minute: "2-digit" 
+    });
+
+    const endTimeStr = endObj.toLocaleTimeString("en-US", { 
+      timeZone: "Asia/Kolkata", 
+      hour: "numeric", 
+      minute: "2-digit" 
+    });
+
+    const timeStr = `${startTimeStr} – ${endTimeStr}`;
+    const hostName = event.creator?.full_name || "Neighbor";
+    const hostTitle = event.creator?.job_title ? `${event.creator.job_title} @ ${event.creator.company || ''}` : '';
 
     return new ImageResponse(
       (
@@ -34,47 +55,79 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'flex-start',
-            justifyContent: 'center',
-            backgroundColor: '#fff',
-            backgroundImage: 'radial-gradient(circle at 25px 25px, lightgray 2%, transparent 0%), radial-gradient(circle at 75px 75px, lightgray 2%, transparent 0%)',
+            justifyContent: 'space-between',
+            backgroundColor: '#ffffff',
+            backgroundImage: 'radial-gradient(circle at 25px 25px, #E5E7EB 2%, transparent 0%), radial-gradient(circle at 75px 75px, #E5E7EB 2%, transparent 0%)',
             backgroundSize: '100px 100px',
-            padding: '80px',
+            padding: '70px 80px',
             fontFamily: 'sans-serif',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
-            <div style={{ display: 'flex', color: '#E56B42', fontSize: 32, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '2px' }}>
+          {/* Header Badge */}
+          <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
+            <div style={{ 
+              display: 'flex', 
+              backgroundColor: '#FFF0EB', 
+              color: '#E56B42', 
+              fontSize: 24, 
+              fontWeight: 800, 
+              textTransform: 'uppercase', 
+              letterSpacing: '1.5px',
+              padding: '8px 20px',
+              borderRadius: '100px',
+              border: '1.5px solid #FFD6C9'
+            }}>
               MEETUP • {dateStr}
             </div>
-          </div>
-          
-          <div style={{ 
-            fontSize: 72, 
-            fontWeight: 900,
-            color: '#111827',
-            lineHeight: 1.1,
-            marginBottom: '30px',
-            maxWidth: '900px'
-          }}>
-            {event.title}
+            
+            <div style={{ display: 'flex', fontSize: 24, fontWeight: 700, color: '#4F46E5' }}>
+              ProxNet
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '30px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', fontSize: 36, color: '#4B5563', fontWeight: 600 }}>
+          {/* Title & Subtitle */}
+          <div style={{ display: 'flex', flexDirection: 'column', marginTop: '20px', marginBottom: '20px', width: '100%' }}>
+            <div style={{ 
+              fontSize: 64, 
+              fontWeight: 900,
+              color: '#111827',
+              lineHeight: 1.15,
+              maxWidth: '1040px'
+            }}>
+              {event.title}
+            </div>
+            {event.subtitle && (
+              <div style={{ fontSize: 28, fontWeight: 600, color: '#4B5563', marginTop: '12px' }}>
+                {event.subtitle}
+              </div>
+            )}
+          </div>
+
+          {/* Venue & Time Details */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '40px', backgroundColor: '#F9FAFB', padding: '20px 30px', borderRadius: '16px', border: '1px solid #E5E7EB', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', fontSize: 28, color: '#1F2937', fontWeight: 700 }}>
               <span>📍 {event.venue_name}</span>
             </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', fontSize: 36, color: '#4B5563', fontWeight: 600, marginLeft: '40px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', fontSize: 28, color: '#1F2937', fontWeight: 700 }}>
               <span>⏰ {timeStr}</span>
             </div>
           </div>
-          
-          <div style={{ display: 'flex', marginTop: '60px', alignItems: 'center' }}>
-            <div style={{ display: 'flex', backgroundColor: '#eef2ff', color: '#4f46e5', padding: '16px 32px', borderRadius: '100px', fontSize: 32, fontWeight: 700 }}>
-              {going} Professionals Going
+
+          {/* Footer Info */}
+          <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between', borderTop: '2px solid #F3F4F6', paddingTop: '24px', marginTop: '20px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#111827' }}>
+                Hosted by {hostName}
+              </div>
+              {hostTitle && (
+                <div style={{ display: 'flex', fontSize: 18, color: '#6B7280', marginTop: '2px' }}>
+                  {hostTitle}
+                </div>
+              )}
             </div>
-            <div style={{ display: 'flex', marginLeft: '30px', fontSize: 28, color: '#6b7280', fontWeight: 500 }}>
-              proxnet.in
+
+            <div style={{ display: 'flex', backgroundColor: '#EEF2FF', color: '#4F46E5', padding: '12px 24px', borderRadius: '100px', fontSize: 22, fontWeight: 800 }}>
+              {going} Going
             </div>
           </div>
         </div>
@@ -83,9 +136,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         width: 1200,
         height: 630,
       }
-    )
+    );
   } catch (e: any) {
-    console.error(e)
-    return new Response(`Failed to generate image`, { status: 500 })
+    console.error(e);
+    return new Response(`Failed to generate image`, { status: 500 });
   }
 }
