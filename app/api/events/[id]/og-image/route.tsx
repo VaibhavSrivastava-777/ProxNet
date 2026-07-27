@@ -22,27 +22,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const startObj = new Date(event.starts_at);
     const endObj = new Date(event.ends_at);
 
-    // Format in Indian Standard Time (IST / Asia/Kolkata)
-    const dateStr = startObj.toLocaleDateString("en-US", { 
-      timeZone: "Asia/Kolkata", 
-      weekday: "short", 
-      month: "short", 
-      day: "numeric" 
-    }).toUpperCase();
+    // Manually shift UTC timestamp to IST (+5 hours 30 minutes) for 100% deterministic rendering in Vercel Edge Runtime
+    const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+    const istStartObj = new Date(startObj.getTime() + IST_OFFSET_MS);
+    const istEndObj = new Date(endObj.getTime() + IST_OFFSET_MS);
 
-    const startTimeStr = startObj.toLocaleTimeString("en-US", { 
-      timeZone: "Asia/Kolkata", 
-      hour: "numeric", 
-      minute: "2-digit" 
-    });
+    const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+    const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-    const endTimeStr = endObj.toLocaleTimeString("en-US", { 
-      timeZone: "Asia/Kolkata", 
-      hour: "numeric", 
-      minute: "2-digit" 
-    });
+    const dateStr = `${days[istStartObj.getUTCDay()]}, ${months[istStartObj.getUTCMonth()]} ${istStartObj.getUTCDate()}`;
 
+    const formatTime12h = (d: Date) => {
+      let hours = d.getUTCHours();
+      const minutes = d.getUTCMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+      return `${hours}:${minutesStr} ${ampm}`;
+    };
+
+    const startTimeStr = formatTime12h(istStartObj);
+    const endTimeStr = formatTime12h(istEndObj);
     const timeStr = `${startTimeStr} – ${endTimeStr}`;
+
     const hostName = event.creator?.full_name || "Neighbor";
     const hostTitle = event.creator?.job_title ? `${event.creator.job_title} @ ${event.creator.company || ''}` : '';
 
