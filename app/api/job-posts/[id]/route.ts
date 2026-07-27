@@ -82,16 +82,30 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   const supabase = createAdminClient();
 
-  const { data: jobPost } = await supabase.from("job_posts").select("creator_id, user_id").eq("id", id).single();
-  if (!jobPost) return NextResponse.json({ error: "Job post not found" }, { status: 404 });
+  const { data: jobPost, error: fetchError } = await supabase
+    .from("job_posts")
+    .select("creator_id, user_id")
+    .eq("id", id)
+    .single();
+
+  if (fetchError || !jobPost) {
+    return NextResponse.json({ error: "Job post not found" }, { status: 404 });
+  }
 
   const creatorId = jobPost.creator_id || jobPost.user_id;
   if (creatorId !== user.id && user.source !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
-  const { error } = await supabase.from("job_posts").delete().eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Delete child records first to avoid foreign key constraints
+  await supabase.from("job_post_interests").delete().eq("job_post_id", id);
+  await supabase.from("job_post_invites").delete().eq("job_post_id", id);
+
+  const { error: deleteError } = await supabase.from("job_posts").delete().eq("id", id);
+  if (deleteError) {
+    console.error("Error deleting job post:", deleteError);
+    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true });
 }
