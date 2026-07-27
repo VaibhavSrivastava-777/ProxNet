@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     .from("job_posts")
     .select(`
       *,
-      creator:users!job_posts_user_id_fkey(full_name, job_title, company, profile_photo_url),
+      creator:users!job_posts_user_id_fkey(full_name, job_title, company, profile_photo_url, home_lat, home_lng),
       interests:job_post_interests(user_id, status)
     `)
     .eq("status", "active")
@@ -45,8 +45,19 @@ export async function GET(request: Request) {
   };
 
   const filteredJobs = (jobPosts || []).filter((j: any) => {
-    if (!j.center_lat || !j.center_lng) return true;
-    const dist = calcDistance(lat, lng, j.center_lat, j.center_lng);
+    let jobLat = j.center_lat;
+    let jobLng = j.center_lng;
+
+    // Fallback to creator's profile location if post location coords are missing
+    if (!jobLat || !jobLng) {
+      jobLat = j.creator?.home_lat;
+      jobLng = j.creator?.home_lng;
+    }
+
+    // If post has no location coordinates at all, exclude it when filtering by radius
+    if (!jobLat || !jobLng) return false;
+
+    const dist = calcDistance(lat, lng, jobLat, jobLng);
     j.distance = dist;
     return dist <= radius;
   });
