@@ -22,6 +22,15 @@ CREATE TABLE IF NOT EXISTS job_posts (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Ensure columns exist if table was created previously without them
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS center_lat DOUBLE PRECISION;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS center_lng DOUBLE PRECISION;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS radius_meters INT DEFAULT 2000;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT true;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS contact_info TEXT;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS experience_years TEXT;
+ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS skills TEXT;
+
 -- Job post interest tracking (RSVP equivalent)
 CREATE TABLE IF NOT EXISTS job_post_interests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -47,14 +56,32 @@ ALTER TABLE job_posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE job_post_interests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE job_post_invites ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow authenticated read on job_posts" ON job_posts FOR SELECT USING (true);
-CREATE POLICY "Allow authenticated insert on job_posts" ON job_posts FOR INSERT WITH CHECK (auth.uid() = creator_id);
-CREATE POLICY "Allow creator update on job_posts" ON job_posts FOR UPDATE USING (auth.uid() = creator_id);
-CREATE POLICY "Allow creator delete on job_posts" ON job_posts FOR DELETE USING (auth.uid() = creator_id);
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated read on job_posts') THEN
+    CREATE POLICY "Allow authenticated read on job_posts" ON job_posts FOR SELECT USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated insert on job_posts') THEN
+    CREATE POLICY "Allow authenticated insert on job_posts" ON job_posts FOR INSERT WITH CHECK (auth.uid() = creator_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow creator update on job_posts') THEN
+    CREATE POLICY "Allow creator update on job_posts" ON job_posts FOR UPDATE USING (auth.uid() = creator_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow creator delete on job_posts') THEN
+    CREATE POLICY "Allow creator delete on job_posts" ON job_posts FOR DELETE USING (auth.uid() = creator_id);
+  END IF;
 
-CREATE POLICY "Allow authenticated read on interests" ON job_post_interests FOR SELECT USING (true);
-CREATE POLICY "Allow authenticated insert on interests" ON job_post_interests FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Allow authenticated update on interests" ON job_post_interests FOR UPDATE USING (auth.uid() = user_id);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated read on interests') THEN
+    CREATE POLICY "Allow authenticated read on interests" ON job_post_interests FOR SELECT USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated insert on interests') THEN
+    CREATE POLICY "Allow authenticated insert on interests" ON job_post_interests FOR INSERT WITH CHECK (auth.uid() = user_id);
+  END IF;
 
-CREATE POLICY "Allow authenticated read on job_invites" ON job_post_invites FOR SELECT USING (true);
-CREATE POLICY "Allow authenticated insert on job_invites" ON job_post_invites FOR INSERT WITH CHECK (auth.uid() = invited_by);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated read on job_invites') THEN
+    CREATE POLICY "Allow authenticated read on job_invites" ON job_post_invites FOR SELECT USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated insert on job_invites') THEN
+    CREATE POLICY "Allow authenticated insert on job_invites" ON job_post_invites FOR INSERT WITH CHECK (auth.uid() = invited_by);
+  END IF;
+END $$;
