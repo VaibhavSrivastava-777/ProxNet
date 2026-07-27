@@ -63,7 +63,16 @@ export function JobPostCard({
     const url = `${window.location.origin}/job-post/${jobPost.id}`;
     const badgeEmoji = isSeeker ? "🔍" : "📢";
     const text = `${badgeEmoji} *${jobPost.role}* ${jobPost.company ? `at ${jobPost.company}` : ''}\n${jobPost.description ? jobPost.description.slice(0, 120) + '...' : ''}\n\n👉 View details on ProxNet:\n${url}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+
+    if (typeof navigator !== "undefined" && navigator.share) {
+      navigator.share({
+        title: jobPost.role,
+        text: text,
+        url: url,
+      }).catch(() => {});
+    } else {
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+    }
   };
 
   const handleShare = async (e: React.MouseEvent) => {

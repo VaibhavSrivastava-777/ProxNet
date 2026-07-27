@@ -8,7 +8,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
   const { data: jobPost } = await supabase
     .from("job_posts")
-    .select("role, company, type, description")
+    .select("role, company, type, description, updated_at, created_at")
     .eq("id", id)
     .single();
 
@@ -19,13 +19,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   }
 
   const isSeeker = jobPost.type === "seeker";
-  const title = isSeeker
-    ? `Looking for Role: ${jobPost.role} | ProxNet`
-    : `Hiring: ${jobPost.role} ${jobPost.company ? `at ${jobPost.company}` : ''} | ProxNet`;
-  const description = jobPost.description
-    ? jobPost.description.slice(0, 160)
-    : `Connect with local professionals on ProxNet for job opportunities and referrals!`;
-  const ogImageUrl = `https://www.proxnet.in/api/job-posts/${id}/og-image`;
+  const badgeText = isSeeker ? "Looking for Role" : "Hiring / Referring";
+  const title = `${badgeText}: ${jobPost.role} ${jobPost.company ? `@ ${jobPost.company}` : ''} | ProxNet`;
+  const description = jobPost.description || `Check out this job opportunity on ProxNet Neighborhood Network!`;
+
+  const version = jobPost.updated_at ? new Date(jobPost.updated_at).getTime() : new Date(jobPost.created_at).getTime();
+  const ogImageUrl = `https://www.proxnet.in/api/job-posts/${id}/og-image?v=${version}`;
 
   return {
     title,

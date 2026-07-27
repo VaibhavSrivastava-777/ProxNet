@@ -8,7 +8,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
   const { data: event } = await supabase
     .from("events")
-    .select("title, subtitle, description, starts_at, venue_name")
+    .select("title, subtitle, description, starts_at, updated_at, venue_name")
     .eq("id", id)
     .single();
 
@@ -19,10 +19,18 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   }
 
   const startObj = new Date(event.starts_at);
-  const dateStr = startObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const dateStr = startObj.toLocaleDateString("en-US", { 
+    timeZone: "Asia/Kolkata", 
+    weekday: "short", 
+    month: "short", 
+    day: "numeric" 
+  });
+
   const title = `Meetup: ${event.title} (${dateStr}) | ProxNet`;
   const description = event.subtitle || event.description || `Join this local meetup at ${event.venue_name} on ProxNet Neighborhood Network!`;
-  const ogImageUrl = `https://www.proxnet.in/api/events/${id}/og-image`;
+  
+  // Cache-busting timestamp so WhatsApp CDN re-fetches the latest OG card image
+  const ogImageUrl = `https://www.proxnet.in/api/events/${id}/og-image?t=${Date.now()}`;
 
   return {
     title,

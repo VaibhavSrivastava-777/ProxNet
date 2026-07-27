@@ -74,8 +74,17 @@ export function LocalForumFeed({
   const handleShareWhatsapp = (e: React.MouseEvent, q: any) => {
     e.stopPropagation();
     const url = `${window.location.origin}/qa/forum/${q.id}`;
-    const text = `💬 *${q.question_text}*\n\n👉 Join conversation on ProxNet:\n${url}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    const text = `💬 *${q.question_text || q.body}*\n\n👉 Join conversation on ProxNet:\n${url}`;
+
+    if (typeof navigator !== "undefined" && navigator.share) {
+      navigator.share({
+        title: "Local Forum Post",
+        text: text,
+        url: url,
+      }).catch(() => {});
+    } else {
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+    }
   };
 
   const handleShare = async (e: React.MouseEvent, q: any) => {

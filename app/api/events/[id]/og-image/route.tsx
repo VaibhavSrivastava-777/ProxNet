@@ -18,32 +18,49 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const rsvps = event.rsvps || [];
     const going = rsvps.filter((r: any) => r.status === "yes").length;
-    
-    const startObj = new Date(event.starts_at);
-    const endObj = new Date(event.ends_at);
 
-    // Manually shift UTC timestamp to IST (+5 hours 30 minutes) for 100% deterministic rendering in Vercel Edge Runtime
-    const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
-    const istStartObj = new Date(startObj.getTime() + IST_OFFSET_MS);
-    const istEndObj = new Date(endObj.getTime() + IST_OFFSET_MS);
-
-    const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-    const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-
-    const dateStr = `${days[istStartObj.getUTCDay()]}, ${months[istStartObj.getUTCMonth()]} ${istStartObj.getUTCDate()}`;
-
-    const formatTime12h = (d: Date) => {
-      let hours = d.getUTCHours();
-      const minutes = d.getUTCMinutes();
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12;
-      const minutesStr = minutes < 10 ? '0' + minutes : minutes;
-      return `${hours}:${minutesStr} ${ampm}`;
+    const formatTimeIST = (isoStr: string) => {
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleTimeString("en-US", {
+          timeZone: "Asia/Kolkata",
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        });
+      } catch (err) {
+        const d = new Date(isoStr);
+        const ist = new Date(d.getTime() + (5.5 * 3600 * 1000));
+        let hours = ist.getUTCHours();
+        const minutes = ist.getUTCMinutes();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+        const minStr = minutes < 10 ? `0${minutes}` : minutes;
+        return `${hours}:${minStr} ${ampm}`;
+      }
     };
 
-    const startTimeStr = formatTime12h(istStartObj);
-    const endTimeStr = formatTime12h(istEndObj);
+    const formatDateIST = (isoStr: string) => {
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleDateString("en-US", {
+          timeZone: "Asia/Kolkata",
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        }).toUpperCase();
+      } catch (err) {
+        const d = new Date(isoStr);
+        const ist = new Date(d.getTime() + (5.5 * 3600 * 1000));
+        const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+        const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+        return `${days[ist.getUTCDay()]}, ${months[ist.getUTCMonth()]} ${ist.getUTCDate()}`;
+      }
+    };
+
+    const dateStr = formatDateIST(event.starts_at);
+    const startTimeStr = formatTimeIST(event.starts_at);
+    const endTimeStr = formatTimeIST(event.ends_at);
     const timeStr = `${startTimeStr} – ${endTimeStr}`;
 
     const hostName = event.creator?.full_name || "Neighbor";
@@ -138,6 +155,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       {
         width: 1200,
         height: 630,
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        }
       }
     );
   } catch (e: any) {

@@ -63,8 +63,17 @@ export function EventCard({
   const handleShareWhatsapp = (e: React.MouseEvent) => {
     e.stopPropagation();
     const url = `${window.location.origin}/event/${event.id}`;
-    const text = `🎉 *${event.title}*\n📅 ${dateStr} • ⏰ ${timeStr}\n📍 ${event.venue_name}\n\n👉 View & RSVP on ProxNet:\n${url}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    const text = `🎉 *${event.title}*\n📅 Date: ${dateStr}\n⏰ Time: ${timeStr}\n📍 Venue: ${event.venue_name}\n\n👉 View & RSVP on ProxNet:\n${url}`;
+    
+    if (typeof navigator !== "undefined" && navigator.share) {
+      navigator.share({
+        title: event.title,
+        text: text,
+        url: url,
+      }).catch(() => {});
+    } else {
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+    }
   };
 
   const handleShare = async (e: React.MouseEvent) => {
