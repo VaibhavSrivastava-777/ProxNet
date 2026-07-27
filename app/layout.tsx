@@ -23,6 +23,10 @@ export const metadata: Metadata = {
   description:
     "Your neighbor could be your next career connection. ProxNet helps you discover professionals living nearby, ask questions anonymously, and network — all without revealing identities.",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icons/icon-96.png",
+    apple: "/icons/icon-192.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

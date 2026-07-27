@@ -6,6 +6,7 @@ import { JobsClient } from "@/components/jobs/JobsClient";
 import { JobInbox } from "@/components/jobs/JobInbox";
 import { HowItWorksModal } from "@/components/HowItWorksModal";
 import { LocalForumFeed } from "@/components/home/LocalForumFeed";
+import { ProximityMap } from "@/components/map/ProximityMap";
 import { GrowClient } from "@/components/grow/GrowClient";
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -14,8 +15,7 @@ export function QAContent() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [directTarget, setDirectTarget] = useState<{ id: string; job_title: string; company: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("/jobs");
-  const [qaSubTab, setQaSubTab] = useState<"referrals" | "qa">("referrals");
+  const [activeTab, setActiveTab] = useState<string>("/network");
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -25,12 +25,14 @@ export function QAContent() {
     const tabParam = searchParams.get("tab");
     let initialTab = tabParam ? `/${tabParam}` : window.location.pathname;
     
-    const tabPaths = ["/jobs", "/qa", "/forum", "/grow"];
+    const tabPaths = ["/jobs", "/network", "/qa", "/forum", "/grow"];
     
     if (tabPaths.includes(initialTab)) {
       setActiveTab(initialTab);
       if (tabParam) {
-        window.history.replaceState(null, "", initialTab);
+        const companyParam = searchParams.get("company");
+        const suffix = companyParam ? `?company=${encodeURIComponent(companyParam)}` : "";
+        window.history.replaceState(null, "", initialTab + suffix);
       }
     }
 
@@ -71,14 +73,14 @@ export function QAContent() {
 
   return (
     <div className="w-full">
-      {/* ── 1. Job Referrals Tab ── */}
+      {/* ── 1. Jobs Tab ── */}
       <div className={activeTab === "/jobs" ? "block" : "hidden"}>
-        <div className="mx-auto max-w-4xl py-6 md:py-8 p-4 md:p-8 animate-fadeIn" style={{ paddingBottom: "6rem" }}>
+        <div className="mx-auto max-w-4xl py-3 md:py-4 p-3 md:p-4 animate-fadeIn" style={{ paddingBottom: "4rem" }}>
           <JobsClient />
 
           {/* Footer links */}
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 text-sm text-[var(--color-text-tertiary)] text-center">
-            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+          <div className="mt-6 flex flex-col items-center justify-center gap-2 text-xs text-[var(--color-text-tertiary)] text-center">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
               <a href="/privacy" className="hover:text-[var(--color-accent)] transition-colors">Privacy</a>
               <span>&bull;</span>
               <a href="/delete-account" className="hover:text-[var(--color-accent)] transition-colors">Delete Account</a>
@@ -94,25 +96,33 @@ export function QAContent() {
         </div>
       </div>
 
-      {/* ── 2. Chats (Q&A) List Tab ── */}
-      <div className={activeTab === "/qa" ? "block" : "hidden"}>
-        <div className="mx-auto max-w-4xl p-4 md:p-8 animate-fadeIn flex flex-col gap-[1.5rem] pb-[3rem]">
-          
-          <div className="flex gap-4 border-b border-border-light pb-2">
-            <button 
-              className={`text-h4 font-bold pb-2 transition-colors ${qaSubTab === 'referrals' ? 'text-primary border-b-2 border-primary' : 'text-text-tertiary hover:text-text'}`}
-              onClick={() => setQaSubTab("referrals")}
-            >
-              Referral Chats
-            </button>
-            <button 
-              className={`text-h4 font-bold pb-2 transition-colors ${qaSubTab === 'qa' ? 'text-primary border-b-2 border-primary' : 'text-text-tertiary hover:text-text'}`}
-              onClick={() => setQaSubTab("qa")}
-            >
-              Q&A Chats
-            </button>
-          </div>
+      {/* ── 2. Network Tab ── */}
+      <div className={activeTab === "/network" ? "block" : "hidden"}>
+        <div className="mx-auto max-w-4xl py-3 md:py-4 p-3 md:p-4 animate-fadeIn" style={{ paddingBottom: "4rem" }}>
+          <ProximityMap />
 
+          {/* Footer links */}
+          <div className="mt-6 flex flex-col items-center justify-center gap-2 text-xs text-[var(--color-text-tertiary)] text-center">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              <a href="/privacy" className="hover:text-[var(--color-accent)] transition-colors">Privacy</a>
+              <span>&bull;</span>
+              <a href="/delete-account" className="hover:text-[var(--color-accent)] transition-colors">Delete Account</a>
+              <span>&bull;</span>
+              <a href="/safety" className="hover:text-[var(--color-accent)] transition-colors">Safety</a>
+              <span>&bull;</span>
+              <a href="/disclaimer" className="hover:text-[var(--color-accent)] transition-colors">Disclaimer</a>
+              <span>&bull;</span>
+              <a href="https://wa.me/918197678983?text=Hi%20ProxNet,%20I%20have%20some%20feedback" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--color-accent)] transition-colors">Contact Us</a>
+            </div>
+            <div>&copy; ProxNet 2026</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3. Chats List Tab ── */}
+      <div className={activeTab === "/qa" ? "block" : "hidden"}>
+        <div className="mx-auto max-w-4xl p-3 md:p-4 animate-fadeIn flex flex-col gap-[0.75rem] pb-[2rem]">
+          
           {formOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
               <div className="bg-[var(--color-surface)] w-full max-w-2xl rounded-xl shadow-xl border border-[var(--color-border)] flex flex-col h-[85vh] max-h-[800px] animate-scaleIn">
@@ -143,17 +153,13 @@ export function QAContent() {
             </div>
           )}
 
-          {qaSubTab === "qa" ? (
-            <QuestionList 
-              refreshKey={refreshKey} 
-              onOpenDirectQuestion={(target) => {
-                setDirectTarget(target || null);
-                setFormOpen(true);
-              }}
-            />
-          ) : (
-            <JobInbox />
-          )}
+          <QuestionList 
+            refreshKey={refreshKey} 
+            onOpenDirectQuestion={(target) => {
+              setDirectTarget(target || null);
+              setFormOpen(true);
+            }}
+          />
         </div>
       </div>
 

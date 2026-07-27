@@ -81,7 +81,7 @@ class SafeCompanyScraper implements CompanyScraper {
 
 export function getScraper(
   companyName: string,
-  config?: { provider: string; board_token_or_url: string }
+  config?: { provider: string; board_token_or_url?: string }
 ): CompanyScraper | null {
   const normalized = companyName.toLowerCase().trim();
   
@@ -105,7 +105,7 @@ export function getScraper(
 
   // 2. Fallback to generic scraper if config is available
   if (config && config.provider) {
-    const fallback = new FallbackScraper(companyName, config.provider, config.board_token_or_url);
+    const fallback = new FallbackScraper(companyName, config.provider, config.board_token_or_url || "");
     return new SafeCompanyScraper(fallback, companyName);
   }
   

@@ -154,14 +154,38 @@ interface Props {
   initialUser: User;
 }
 
+function extractLinkedInHandle(url: string | null | undefined): string {
+  if (!url) return "";
+  let clean = url.trim();
+  if (clean.includes("linkedin.com/in/")) {
+    clean = clean.split("linkedin.com/in/")[1] || "";
+  }
+  clean = clean.replace(/^https?:\/\/[^\/]+\//, "").replace(/^\/+|\/+$/g, "");
+  return clean;
+}
+
 export function ProfileForm({ initialUser }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isOnboarding = searchParams?.get("onboarding") === "true";
   const [user, setUser] = useState({
     ...initialUser,
-    linkedin_profile_url: initialUser.linkedin_profile_url || "https://www.linkedin.com/in/"
+    linkedin_profile_url: initialUser.linkedin_profile_url || ""
   });
+  const [linkedinHandle, setLinkedinHandle] = useState<string>(() => 
+    extractLinkedInHandle(initialUser.linkedin_profile_url)
+  );
+
+  const handleLinkedInInputChange = (val: string) => {
+    let cleanHandle = val.trim();
+    if (cleanHandle.includes("linkedin.com/in/")) {
+      cleanHandle = cleanHandle.split("linkedin.com/in/")[1] || "";
+    }
+    cleanHandle = cleanHandle.replace(/^https?:\/\/[^\/]+\//, "").replace(/^\/+|\/+$/g, "");
+    setLinkedinHandle(cleanHandle);
+    const fullUrl = cleanHandle ? `https://www.linkedin.com/in/${cleanHandle}` : "";
+    setUser(prev => ({ ...prev, linkedin_profile_url: fullUrl }));
+  };
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState(false);
@@ -769,16 +793,22 @@ export function ProfileForm({ initialUser }: Props) {
               <span>LinkedIn profile URL <span className="text-red-500">*</span></span>
               {fetchingLinkedInDetails && <span className="text-xs text-[var(--color-primary)] animate-pulse">Parsing URL details...</span>}
             </label>
-            <input
-              className="input"
-              style={showErrors && !user.linkedin_profile_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-              value={user.linkedin_profile_url ?? ""}
-              placeholder="https://linkedin.com/in/..."
-              onChange={(e) =>
-                setUser({ ...user, linkedin_profile_url: e.target.value })
-              }
-              onBlur={() => handleLinkedInBlur(user.linkedin_profile_url ?? "")}
-            />
+            <div className="flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden focus-within:ring-2 focus-within:ring-[var(--color-primary)]" style={showErrors && !linkedinHandle?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}>
+              <span className="bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] text-xs font-semibold px-3 flex items-center border-r border-[var(--color-border-light)] select-none shrink-0">
+                https://www.linkedin.com/in/
+              </span>
+              <input
+                className="w-full bg-transparent px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none"
+                value={linkedinHandle}
+                placeholder="VaibhavSrivastava777"
+                onChange={(e) => handleLinkedInInputChange(e.target.value)}
+                onBlur={() => {
+                  if (linkedinHandle) {
+                    handleLinkedInBlur(`https://www.linkedin.com/in/${linkedinHandle}`);
+                  }
+                }}
+              />
+            </div>
             {showErrors && !user.linkedin_profile_url?.trim() && (
               <p className="text-xs text-red-500 mt-1">LinkedIn profile URL is required</p>
             )}
@@ -1412,15 +1442,22 @@ export function ProfileForm({ initialUser }: Props) {
                         <span>LinkedIn Profile URL <span className="text-red-500">*</span></span>
                         {fetchingLinkedInDetails && <span className="text-[10px] text-[var(--color-primary)] animate-pulse">Parsing URL details...</span>}
                       </label>
-                      <input
-                        className="input w-full"
-                        style={showErrors && !user.linkedin_profile_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-                        value={user.linkedin_profile_url ?? ""}
-                        placeholder="https://linkedin.com/in/username"
-                        required
-                        onChange={(e) => setUser({ ...user, linkedin_profile_url: e.target.value })}
-                        onBlur={() => handleLinkedInBlur(user.linkedin_profile_url ?? "")}
-                      />
+                      <div className="flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden focus-within:ring-2 focus-within:ring-[var(--color-primary)]" style={showErrors && !linkedinHandle?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}>
+                        <span className="bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] text-xs font-semibold px-3 flex items-center border-r border-[var(--color-border-light)] select-none shrink-0">
+                          https://www.linkedin.com/in/
+                        </span>
+                        <input
+                          className="w-full bg-transparent px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none"
+                          value={linkedinHandle}
+                          placeholder="VaibhavSrivastava777"
+                          onChange={(e) => handleLinkedInInputChange(e.target.value)}
+                          onBlur={() => {
+                            if (linkedinHandle) {
+                              handleLinkedInBlur(`https://www.linkedin.com/in/${linkedinHandle}`);
+                            }
+                          }}
+                        />
+                      </div>
                       {showErrors && !user.linkedin_profile_url?.trim() && (
                         <p className="text-xs text-red-500 mt-1">LinkedIn profile URL is required</p>
                       )}

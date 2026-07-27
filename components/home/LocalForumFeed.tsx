@@ -3,6 +3,10 @@
 import useSWR, { mutate } from "swr";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { EventFormModal } from "@/components/forum/EventFormModal";
+import { EventCard } from "@/components/forum/EventCard";
+import { JobPostModal } from "@/components/forum/JobPostModal";
+import { JobPostCard } from "@/components/forum/JobPostCard";
 
 function formatRelative(ts: string): string {
   const diff = Date.now() - new Date(ts).getTime();
@@ -21,7 +25,7 @@ function formatRelative(ts: string): string {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-const CATEGORIES = ["General", "Recommendations", "Events", "Buy/Sell", "Help Needed"];
+
 
 export function LocalForumFeed() {
   const router = useRouter();
@@ -34,7 +38,7 @@ export function LocalForumFeed() {
   const { data, isLoading } = useSWR(`/api/questions?locationMode=${locationMode}`, fetcher, { 
     refreshInterval: 10000 
   });
-  
+
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [postBody, setPostBody] = useState("");
@@ -42,6 +46,23 @@ export function LocalForumFeed() {
   const [isPosting, setIsPosting] = useState(false);
   const [filter2km, setFilter2km] = useState(true);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [isJobModalOpen, setIsJobModalOpen] = useState(false);
+
+  // Fetch events SWR based on location and radius
+  const eventsUrl = profile 
+    ? `/api/events?lat=${locationMode === "home" ? profile.home_lat : profile.office_lat}&lng=${locationMode === "home" ? profile.home_lng : profile.office_lng}&radius=${filter2km ? 2000 : 50000}`
+    : null;
+  const { data: eventsData } = useSWR(eventsUrl, fetcher, { refreshInterval: 30000 });
+
+  // Fetch job posts SWR based on location and radius
+  const jobPostsUrl = profile
+    ? `/api/job-posts?lat=${locationMode === "home" ? profile.home_lat : profile.office_lat}&lng=${locationMode === "home" ? profile.home_lng : profile.office_lng}&radius=${filter2km ? 2000 : 50000}`
+    : null;
+  const { data: jobPostsData } = useSWR(jobPostsUrl, fetcher, { refreshInterval: 30000 });
+
+  
+
 
   const toggleExpand = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -118,8 +139,10 @@ export function LocalForumFeed() {
         setPostCategory("General");
         setIsModalOpen(false);
         mutate(`/api/questions?locationMode=${locationMode}`);
+        mutate("/api/profile");
       } else {
-        alert("Failed to post.");
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || "Failed to post.");
       }
     } catch (err) {
       alert("An error occurred.");
@@ -138,6 +161,16 @@ export function LocalForumFeed() {
     if (q.distance === null) return false;
     return q.distance <= 2000;
   });
+
+  const eventsList = eventsData?.events || [];
+  const jobPostsList = jobPostsData?.jobPosts || [];
+  
+  // Combine and sort events, job posts, and forum posts
+  const combinedFeed = [
+    ...eventsList.map((e: any) => ({ ...e, _type: 'event' })),
+    ...jobPostsList.map((j: any) => ({ ...j, _type: 'job' })),
+    ...filteredForum.map((f: any) => ({ ...f, _type: 'forum' }))
+  ];
 
   return (
     <div className="flex flex-col gap-4 mt-6 animate-fadeInUp relative min-h-screen pb-20">
@@ -158,24 +191,21 @@ export function LocalForumFeed() {
             Start a post in your neighborhood anonymously...
           </button>
         </div>
-        <div className="flex items-center justify-around gap-2 mt-3 pt-3 border-t border-[var(--color-border-light)]">
-          {[
-            { icon: "💡", label: "Recommend", cat: "Recommendations" },
-            { icon: "🙋‍♂️", label: "Help", cat: "Help Needed" },
-            { icon: "🛒", label: "Buy/Sell", cat: "Buy/Sell" },
-          ].map((act) => (
-            <button
-              key={act.label}
-              onClick={() => {
-                setPostCategory(act.cat);
-                setIsModalOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-primary)] transition-all cursor-pointer bg-transparent border-0"
-            >
-              <span className="text-sm">{act.icon}</span>
-              <span>{act.label}</span>
-            </button>
-          ))}
+        <div className="flex items-center justify-around gap-4 mt-3 pt-3 border-t border-[var(--color-border-light)]">
+          <button
+            onClick={() => setIsJobModalOpen(true)}
+            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)] transition-all cursor-pointer border border-[var(--color-primary-subtle)]"
+          >
+            <span className="text-sm">🔨</span>
+            <span>Jobs</span>
+          </button>
+          <button
+            onClick={() => setIsEventModalOpen(true)}
+            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold text-[#E56B42] hover:bg-[#E56B42]/10 transition-all cursor-pointer border border-[#E56B42]/20"
+          >
+            <span className="text-sm">📅</span>
+            <span>Meetup</span>
+          </button>
         </div>
       </div>
 
@@ -241,13 +271,34 @@ export function LocalForumFeed() {
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          {filteredForum.length === 0 ? (
+          {combinedFeed.length === 0 ? (
             <div className="card p-8 text-center border border-dashed border-[var(--color-border)] flex flex-col items-center justify-center min-h-[200px] bg-[var(--color-surface)]/50 rounded-xl">
-              <p className="text-body text-[var(--color-text-secondary)] font-medium">No posts found near this location.</p>
+              <p className="text-body text-[var(--color-text-secondary)] font-medium">No posts or events found near this location.</p>
               <p className="text-caption text-[var(--color-text-tertiary)] mt-1">Be the first to share an update with your neighbors!</p>
             </div>
           ) : (
-            filteredForum.map((q: any, index: number) => {
+            combinedFeed.map((item: any, index: number) => {
+              if (item._type === 'event') {
+                return (
+                  <EventCard 
+                    key={`ev-${item.id}`} 
+                    event={item} 
+                    currentUserId={profile?.id} 
+                    onRsvpUpdate={() => mutate(eventsUrl)} 
+                  />
+                );
+              }
+              if (item._type === 'job') {
+                return (
+                  <JobPostCard
+                    key={`job-${item.id}`}
+                    jobPost={item}
+                    currentUserId={profile?.id}
+                    onInterestUpdate={() => mutate(jobPostsUrl)}
+                  />
+                );
+              }
+              const q = item;
               // Extract category and raw body
               let displayBody = q.body;
               let displayCategory = "General";
@@ -367,18 +418,7 @@ export function LocalForumFeed() {
             </div>
             
             <form onSubmit={submitPost} className="flex flex-col p-5 gap-4">
-              <div>
-                <label className="text-sm font-semibold text-[var(--color-text-secondary)] mb-1 block">Category</label>
-                <select
-                  value={postCategory}
-                  onChange={(e) => setPostCategory(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)]"
-                >
-                  {CATEGORIES.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
+
 
               <div>
                 <label className="text-sm font-semibold text-[var(--color-text-secondary)] mb-1 block">Message</label>
@@ -409,6 +449,24 @@ export function LocalForumFeed() {
           </div>
         </div>
       )}
+      <EventFormModal 
+        isOpen={isEventModalOpen} 
+        onClose={() => setIsEventModalOpen(false)} 
+        onSuccess={() => {
+          setIsEventModalOpen(false);
+          mutate(eventsUrl);
+          mutate("/api/profile");
+        }} 
+      />
+      <JobPostModal
+        isOpen={isJobModalOpen}
+        onClose={() => setIsJobModalOpen(false)}
+        onSuccess={() => {
+          setIsJobModalOpen(false);
+          mutate(jobPostsUrl);
+          mutate("/api/profile");
+        }}
+      />
     </div>
   );
 }

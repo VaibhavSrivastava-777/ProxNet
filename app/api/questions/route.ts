@@ -65,9 +65,23 @@ export async function GET(request: Request) {
     .select("*, questions(*, question_targets(status, professional_id))")
     .eq("professional_id", user.id);
 
-  const { data: sessions } = await supabase
-    .from("chat_sessions")
-    .select("id, question_id, created_at, chat_messages(body, created_at, sender_id), chat_participants(user_id, alias)");
+  // Fetch ONLY chat sessions where the current user is a participant
+  const { data: userParticipantRecords } = await supabase
+    .from("chat_participants")
+    .select("session_id")
+    .eq("user_id", user.id);
+
+  const mySessionIds = (userParticipantRecords || []).map((p: any) => p.session_id).filter(Boolean);
+
+  let sessions: any[] = [];
+  if (mySessionIds.length > 0) {
+    const { data: mySessions } = await supabase
+      .from("chat_sessions")
+      .select("id, question_id, created_at, chat_messages(body, created_at, sender_id), chat_participants(user_id, alias)")
+      .in("id", mySessionIds);
+
+    sessions = mySessions || [];
+  }
 
   const sessionActivityMap = new Map<string, { time: string; body: string | null; sender_id: string | null; target_alias: string | null; sessionId: string }>();
   let aiSession = null;
@@ -420,11 +434,16 @@ export async function POST(request: Request) {
   let hasLowWallet = false;
   const supabase = createAdminClient();
 
+  // Check credit balance for creating post
+  const { data: userData } = await supabase.from("users").select("wallet").eq("id", user.id).single();
+  const currentWallet = userData?.wallet ?? 0;
+
+  if (currentWallet < 1) {
+    return NextResponse.json({ error: "Insufficient credits. You need at least 1 credit to create a post." }, { status: 402 });
+  }
+
   if (targetUserId) {
-    // Check wallet before proceeding with a new chat
-    const { data: userData } = await supabase.from("users").select("wallet").eq("id", user.id).single();
-    hasLowWallet = !userData || (userData.wallet ?? 0) < 1;
-    // We are no longer blocking if credits are 0, just setting a flag.
+    hasLowWallet = currentWallet < 1;
 
     const { data: existingTargets } = await supabase
       .from("question_targets")
@@ -599,6 +618,9 @@ Never mention that you are an AI assistant or simulated user. Play your characte
     .single();
 
   if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
+
+  // Deduct 1 credit point for creating a post
+  await supabase.from("users").update({ wallet: Math.max(0, currentWallet - 1) }).eq("id", user.id);
 
   // Award points to the inviter if this is the invitee's first question
   if (user.invited_by) {

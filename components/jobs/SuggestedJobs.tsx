@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CompanyLogo } from "@/components/qa/QuestionList";
 
 interface SuggestedJob {
   id: string;
@@ -32,6 +33,8 @@ export function SuggestedJobs() {
   const [profileDigest, setProfileDigest] = useState<ProfileDigest | null>(null);
   const [loading, setLoading] = useState(true);
   const [startingChat, setStartingChat] = useState<string | null>(null);
+  const [activeCompanyModal, setActiveCompanyModal] = useState<CompanyGroup | null>(null);
+  const [isMatchingCompleted, setIsMatchingCompleted] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showSummary, setShowSummary] = useState(true);
@@ -62,11 +65,12 @@ export function SuggestedJobs() {
         if (res.ok) {
           const data = await res.json();
           setCompanies(data.companies || []);
+          setIsMatchingCompleted(data.isMatchingCompleted ?? true);
           if (data.profileDigest) {
             setProfileDigest(data.profileDigest);
           }
         } else {
-          setErrorMsg("Failed to load suggested jobs feed");
+          console.warn("Failed to load suggested jobs feed");
         }
       } catch (e) {
         console.error("Failed to fetch suggested jobs", e);
@@ -77,6 +81,36 @@ export function SuggestedJobs() {
     }
     fetchSuggested();
   }, []);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    async function poll() {
+      try {
+        const res = await fetch("/api/jobs/suggested");
+        if (res.ok) {
+          const data = await res.json();
+          setCompanies(data.companies || []);
+          const completed = data.isMatchingCompleted ?? true;
+          setIsMatchingCompleted(completed);
+          if (data.profileDigest) {
+            setProfileDigest(data.profileDigest);
+          }
+          if (!completed) {
+            timer = setTimeout(poll, 5000);
+          }
+        }
+      } catch (e) {
+        console.warn("Poll failed", e);
+      }
+    }
+
+    if (!isMatchingCompleted) {
+      timer = setTimeout(poll, 5000);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [isMatchingCompleted]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -158,9 +192,13 @@ export function SuggestedJobs() {
 
   if (loading) {
     return (
-      <div className="space-y-4 max-w-3xl mx-auto">
+      <div className="space-y-4 max-w-3xl mx-auto pb-8">
+        {/* Default/Prominent Message */}
+        <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-bold text-center animate-pulse">
+          ⏳ GENERATING THE LATEST MATCH LIST IN THE BACKGROUD
+        </div>
         {[1, 2, 3].map((i) => (
-          <div key={i} className="card p-6 skeleton h-48 animate-pulse" />
+          <div key={i} className="card p-6 skeleton h-24 animate-pulse" />
         ))}
       </div>
     );
@@ -170,13 +208,10 @@ export function SuggestedJobs() {
   const q = searchQuery.toLowerCase().trim();
   const filteredCompanies = companies.filter(c => {
     if (!q) return true;
-    const companyMatch = c.company.toLowerCase().includes(q);
-    const jobMatch = c.jobs.some(j => 
-      j.title.toLowerCase().includes(q) || 
-      (j.description && j.description.toLowerCase().includes(q)) ||
-      (j.location && j.location.toLowerCase().includes(q))
+    return (
+      c.company.toLowerCase().includes(q) ||
+      c.jobs.some(j => j.title.toLowerCase().includes(q))
     );
-    return companyMatch || jobMatch;
   });
 
   return (
@@ -184,6 +219,13 @@ export function SuggestedJobs() {
       {errorMsg && (
         <div className="alert alert-error animate-fadeInUp">
           {errorMsg}
+        </div>
+      )}
+
+      {/* Default/Prominent Message */}
+      {!isMatchingCompleted && (
+        <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-bold text-center animate-pulse">
+          ℹ️ GENERATING THE LATEST MATCH LIST IN THE BACKGROUD
         </div>
       )}
 
@@ -239,130 +281,92 @@ export function SuggestedJobs() {
           <p className="text-caption mt-1">Try updating your Bio on your profile, or adjust your search keywords.</p>
         </div>
       ) : (
-        filteredCompanies.map((group) => (
-          <div key={group.company} className="card p-4 sm:p-5 animate-fadeInUp flex flex-col gap-3 sm:gap-4 border border-border bg-surface shadow-sm">
-            
-            {/* Company Header */}
-            <div className="flex justify-between items-start border-b border-border/60 pb-2">
-              <div>
-                <h3 className="text-h3 font-bold text-text">{group.company}</h3>
-                <div className="flex items-center gap-1.5 mt-1 text-caption text-text-secondary">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                    {group.contactsCount} Referral Contact{group.contactsCount > 1 ? "s" : ""} Available
+        <div className="space-y-3">
+          {filteredCompanies.map((group) => (
+            <div
+              key={group.company}
+              className="card p-3 sm:p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)] transition-all flex items-center justify-between gap-4"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <CompanyLogo company={group.company} size={40} />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm font-bold text-[var(--color-text)] truncate">
+                    {group.company}
                   </span>
+                  <button
+                    onClick={() => setActiveCompanyModal(group)}
+                    className="text-left text-xs font-semibold text-[var(--color-primary)] hover:underline cursor-pointer border-none bg-transparent p-0 mt-0.5"
+                  >
+                    📂 {group.jobs.length} Opening{group.jobs.length > 1 ? "s" : ""} Available
+                  </button>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-1 items-center max-w-[200px] justify-end">
-                {group.referralContacts.map(c => (
-                  <span key={c.id} className="badge bg-surface-elevated text-text-secondary border border-border/80 text-[10px] px-2 py-0.5 rounded font-mono">
-                    @{c.alias}
-                  </span>
-                ))}
+
+              <div className="shrink-0">
+                <button
+                  onClick={() => {
+                    router.push(`/qa?tab=network&company=${encodeURIComponent(group.company)}`);
+                    window.dispatchEvent(new CustomEvent("tabchange", { detail: "/network" }));
+                  }}
+                  className="btn btn-sm btn-primary text-xs cursor-pointer font-bold px-3 py-1.5 rounded-lg"
+                >
+                  {group.contactsCount} Referrars available
+                </button>
               </div>
             </div>
+          ))}
+        </div>
+      )}
 
-            {/* Jobs List inside Company */}
-            <div className="space-y-3">
-              {group.jobs.map((job) => (
-                <div key={job.id} className="p-3 sm:p-4 rounded-lg bg-surface-elevated/20 border border-border/40 hover:border-primary/20 transition-all flex flex-col gap-2.5">
-                  <div className="flex justify-between items-start gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-body font-bold text-text">{job.title}</h4>
-                        <span className="badge bg-primary/10 text-primary border border-primary/20 font-bold text-[10px] px-1.5 rounded">
-                          {job.matchRate}% Match
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2.5 text-caption text-text-secondary mt-1">
-                        <span className="flex items-center gap-1">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
-                          {job.location || "Remote"}
-                        </span>
-                        {job.posted_at && (
-                          <span className="flex items-center gap-1">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                            {new Date(job.posted_at).toLocaleDateString()}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+      {/* Openings Detail Modal */}
+      {activeCompanyModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setActiveCompanyModal(null)}
+        >
+          <div 
+            className="bg-[var(--color-surface)] w-full max-w-lg rounded-xl shadow-xl border border-[var(--color-border)] p-6 animate-scaleIn flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center border-b border-[var(--color-border-light)] pb-2">
+              <h3 className="text-h3 font-bold text-text m-0">Openings at {activeCompanyModal.company}</h3>
+              <button 
+                onClick={() => setActiveCompanyModal(null)} 
+                className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border-0 bg-transparent text-xl cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+              {activeCompanyModal.jobs.map((job) => (
+                <div key={job.id} className="p-4 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col gap-2">
+                  <div className="flex justify-between items-start gap-2">
+                    <h4 className="font-semibold text-sm text-[var(--color-text)] m-0">{job.title}</h4>
+                    <span className="badge bg-primary/10 text-primary border border-primary/20 text-[10px] px-1.5 font-bold shrink-0">
+                      {job.matchRate}% Match
+                    </span>
                   </div>
-
-                  {job.keywords && job.keywords.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {job.keywords.map((kw, i) => (
-                        <span key={i} className="text-[10px] bg-surface-elevated text-text-secondary border border-border px-1.5 py-0.5 rounded uppercase font-semibold">
-                          {kw}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {job.description && (
-                    <p className="text-caption text-text-secondary line-clamp-2">
-                      {decodeHtml(job.description).substring(0, 180)}...
-                    </p>
-                  )}
-
-                  <div className="flex flex-row gap-2 mt-2 w-full pt-2 border-t border-border/30">
-                    {group.referralContacts.map(c => (
-                      <button 
-                        key={c.id}
-                        className="btn btn-sm btn-primary flex-1 text-[11px] sm:text-xs h-8 min-h-0"
-                        onClick={() => handleStartReferral(group, job, c.id)}
-                        disabled={startingChat === job.id}
-                      >
-                        {startingChat === job.id ? "..." : `Ask ${c.alias}`}
-                      </button>
-                    ))}
-                    {job.url && (
-                      <a 
-                        href={job.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        onClick={(e) => { e.preventDefault(); window.open(job.url, '_blank', 'noopener,noreferrer'); }}
-                        className="btn btn-sm btn-outline flex-1 text-[11px] sm:text-xs h-8 min-h-0 text-text-secondary"
-                      >
-                        Apply External
-                      </a>
+                  <div className="flex items-center gap-4 text-xs text-[var(--color-text-secondary)]">
+                    <span>📍 {job.location || "Remote"}</span>
+                    {job.posted_at && (
+                      <span>📅 {new Date(job.posted_at).toLocaleDateString()}</span>
                     )}
                   </div>
+                  {job.url && (
+                    <a 
+                      href={job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-sm btn-primary mt-2 text-center text-xs block py-1.5 no-underline"
+                    >
+                      Apply on Career Website
+                    </a>
+                  )}
                 </div>
               ))}
             </div>
-
-            {/* Network Section */}
-            <div className="mt-2 pt-4 border-t border-border/60">
-              <h4 className="text-sm font-semibold text-text-secondary mb-3 flex items-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                Network at {group.company}
-              </h4>
-              <div className="flex flex-col gap-2">
-                {group.referralContacts.map(c => (
-                  <div key={c.id} className="flex justify-between items-center p-3 rounded-lg bg-surface-elevated/40 border border-border/40 transition-colors hover:border-primary/20">
-                    <span className="text-sm font-medium text-text">@{c.alias}</span>
-                    <div className="flex items-center gap-2">
-                      <button 
-                        className={`btn btn-sm text-[11px] h-7 min-h-0 ${c.is_followed ? 'bg-primary/10 text-primary border-primary/20' : 'btn-outline text-text-secondary'}`}
-                        onClick={() => handleFollowToggle(c.id, group.company, c.is_followed)}
-                      >
-                        {c.is_followed ? "Following" : "Follow"}
-                      </button>
-                      <button 
-                        className="btn btn-sm btn-outline text-text-secondary text-[11px] h-7 min-h-0"
-                        onClick={() => window.dispatchEvent(new CustomEvent('tabchange', { detail: '/qa' }))}
-                      >
-                        Chat
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
           </div>
-        ))
+        </div>
       )}
     </div>
   );

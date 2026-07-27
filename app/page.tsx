@@ -27,7 +27,7 @@ export default async function HomePage({
       redirect("/profile?onboarding=true");
     }
 
-    redirect("/jobs");
+    redirect("/network");
   }
 
   return (

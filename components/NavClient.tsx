@@ -32,10 +32,10 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   };
 
   const navLinks = [
-    { href: "/jobs", label: "Network & Jobs", icon: BriefcaseIcon },
+    { href: "/jobs", label: "Jobs", icon: BriefcaseIcon },
+    { href: "/network", label: "Network", icon: MapPinIcon },
     { href: "/qa", label: "Chats", icon: ChatIcon },
     { href: "/forum", label: "Forum", icon: ForumIcon },
-    { href: "/grow", label: "Grow", icon: GrowIcon },
   ];
 
   // Web Push & In-App Toast States
@@ -419,10 +419,10 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   };
 
   const handleTabClick = async (e: React.MouseEvent, tabHref: string) => {
-    const tabPaths = ["/jobs", "/qa", "/forum", "/grow"];
-    const isOnTabRoute = tabPaths.includes(pathname);
+    const tabPaths = ["/jobs", "/network", "/qa", "/forum", "/", "/proximity"];
+    const isShellRoute = tabPaths.includes(pathname) || pathname === "";
 
-    if (isOnTabRoute && tabPaths.includes(tabHref)) {
+    if (isShellRoute && ["/jobs", "/network", "/qa", "/forum"].includes(tabHref)) {
       e.preventDefault();
       window.dispatchEvent(new CustomEvent("tabchange", { detail: tabHref }));
       window.history.pushState(null, "", tabHref);
@@ -788,6 +788,14 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                       >
                         <UserIcon className="h-4 w-4" /> View Profile
                       </Link>
+                      <Link
+                        href="/grow"
+                        onClick={() => setDesktopMenuOpen(false)}
+                        className="w-full text-left px-4 py-2 hover:bg-[var(--color-surface-hover)] flex items-center gap-2 text-sm text-[var(--color-text)] transition-colors cursor-pointer"
+                        style={{ display: "flex", textDecoration: "none" }}
+                      >
+                        <GrowIcon className="h-4 w-4" /> Grow
+                      </Link>
                       <form action={signOutAction} className="w-full">
                         <button
                           type="submit"
@@ -890,6 +898,14 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                       style={{ display: "flex", textDecoration: "none" }}
                     >
                       <UserIcon className="h-4 w-4" /> View Profile
+                    </Link>
+                    <Link
+                      href="/grow"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="w-full text-left px-4 py-2 hover:bg-[var(--color-surface-hover)] flex items-center gap-2 text-sm text-[var(--color-text)] transition-colors cursor-pointer"
+                      style={{ display: "flex", textDecoration: "none" }}
+                    >
+                      <GrowIcon className="h-4 w-4" /> Grow
                     </Link>
                     <form action={signOutAction} className="w-full">
                       <button

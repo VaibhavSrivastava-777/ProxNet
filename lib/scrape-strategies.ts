@@ -26,6 +26,7 @@ export interface ScrapedJob {
   posted_at: string;
   description: string;
   source: string;
+  keywords?: string[];
 }
 
 export type ScrapeStrategy = (
@@ -463,4 +464,8 @@ export const STRATEGIES: Record<string, ScrapeStrategy> = {
   oracle: oracleStrategy,
   phenom: phenomStrategy,
   ibm: ibmStrategy
-};
+}
+
+export const eightfoldStrategy: ScrapeStrategy = customStrategy;
+export const icimsStrategy: ScrapeStrategy = customStrategy;
+export const successfactorsStrategy: ScrapeStrategy = customStrategy;

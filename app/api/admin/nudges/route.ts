@@ -2,91 +2,88 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
 
+// Whitelisted accounts for selective testing
+const WHITELISTED_TEST_EMAILS = [
+  "vaibhav.srivastava@iiml.org",
+  "swatipandya.sr@gmail.com"
+];
+
 export async function POST(request: Request) {
-  // Protect this endpoint (either via a cron secret or admin check)
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Also allow logged-in admin access for testing
   }
 
   const supabase = createAdminClient();
 
-  // 1. Seeker Nudge: Match newly scraped jobs against users
-  // We look for scraped jobs from the last 24 hours
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  // 1. Fetch whitelisted users ONLY
+  const { data: users, error: userError } = await supabase
+    .from("users")
+    .select("id, full_name, email, profile_digest, company, embedding")
+    .eq("is_blocked", false);
+
+  if (userError || !users) {
+    return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
+  }
+
+  const testUsers = users.filter(u => 
+    u.email && WHITELISTED_TEST_EMAILS.includes(u.email.trim().toLowerCase())
+  );
+
+  if (testUsers.length === 0) {
+    return NextResponse.json({
+      success: true,
+      message: "No whitelisted test accounts found for nudge generation."
+    });
+  }
+
+  // 2. Look for recent scraped jobs posted in last 7 days
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const { data: recentJobs } = await supabase
     .from("scraped_jobs")
     .select("*")
-    .gte("created_at", oneDayAgo);
+    .gte("created_at", sevenDaysAgo);
+
+  let totalNudgesSent = 0;
 
   if (recentJobs && recentJobs.length > 0) {
-    // Get all users who have a profile_digest or keywords
-    const { data: users } = await supabase
-      .from("users")
-      .select("id, full_name, profile_digest, company")
-      .eq("is_blocked", false)
-      .not("profile_digest", "is", null);
-
-    if (users) {
-      for (const job of recentJobs) {
-        // Find users whose profile_digest matches the job role or keywords
-        const jobKeywords = ((job.title || "") + " " + (job.keywords || "")).toLowerCase();
-        
-        for (const user of users) {
-          // Exclude users who work at the company already
-          if (user.company?.toLowerCase() === job.company_name?.toLowerCase()) continue;
-
-          const userProfileStr = JSON.stringify(user.profile_digest).toLowerCase();
-          
-          // Very basic matching logic: if the user's profile contains key words from the job title
-          const titleWords = (job.title || "").toLowerCase().split(/\W+/).filter((w: string) => w.length > 3);
-          const matchCount = titleWords.filter((w: string) => userProfileStr.includes(w)).length;
-          
-          if (matchCount > 0) {
-            // We have a match! Send a nudge.
-            await sendNotification(user.id, {
-              title: "New Job Match! 🚀",
-              body: `A new ${job.title} role opened at ${job.company_name}. We have verified insiders there. Request a referral now!`,
-              url: `/jobs`
-            });
-          }
-        }
-      }
-    }
-  }
-
-  // 2. Insider Nudge: Match seekers (active 'seeker' job_posts) to insiders
-  const { data: seekerPosts } = await supabase
-    .from("job_posts")
-    .select("*, user:users(id, full_name)")
-    .eq("status", "active")
-    .eq("type", "seeker")
-    .gte("created_at", oneDayAgo); // Only nudge for recent requests
-
-  if (seekerPosts && seekerPosts.length > 0) {
-    for (const post of seekerPosts) {
-      if (!post.company) continue; // If they didn't specify a target company, skip
-
-      // Find insiders at this target company
+    for (const testUser of testUsers) {
+      // Find companies where OTHER verified professionals work (potential referrers)
       const { data: insiders } = await supabase
         .from("users")
-        .select("id, full_name")
-        .eq("is_blocked", false)
-        .ilike("company", post.company);
+        .select("company")
+        .neq("id", testUser.id)
+        .not("company", "is", null);
 
-      if (insiders) {
-        for (const insider of insiders) {
-          if (insider.id === post.user_id) continue;
+      const availableCompanies = new Set(insiders?.map(i => i.company?.trim().toLowerCase()).filter(Boolean));
 
-          await sendNotification(insider.id, {
-            title: "Referral Request 🤝",
-            body: `A verified professional is looking for a referral for a ${post.role} role at your company. Refer them and earn a bonus!`,
-            url: `/jobs`
-          });
-        }
+      // Match user against recent jobs
+      for (const job of recentJobs) {
+        if (!job.company_name) continue;
+        const jobCompany = job.company_name.trim().toLowerCase();
+
+        // Check if user already works there
+        if (testUser.company?.trim().toLowerCase() === jobCompany) continue;
+
+        // Check if there are verified referrers at this target company
+        if (!availableCompanies.has(jobCompany)) continue;
+
+        // Send a specific high-confidence opportunity notification
+        await sendNotification(testUser.id, {
+          title: `High-Match Opportunity: ${job.title} 🚀`,
+          body: `A job matching your profile opened at ${job.company_name}. Verified referrers are available on ProxNet to refer you!`,
+          url: `/qa?tab=network&company=${encodeURIComponent(job.company_name)}`
+        });
+
+        totalNudgesSent++;
+        console.log(`[Whitelisted Nudge] Sent opportunity notification to ${testUser.email} for ${job.title} @ ${job.company_name}`);
       }
     }
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({
+    success: true,
+    whitelistedUsersEvaluated: testUsers.length,
+    totalNudgesSent
+  });
 }

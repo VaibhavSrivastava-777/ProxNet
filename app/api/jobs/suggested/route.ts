@@ -146,13 +146,18 @@ Return ONLY a JSON object with:
     }
 
     if (!userEmbedding) {
-      return NextResponse.json({ error: "User profile embedding not available" }, { status: 400 });
+      return NextResponse.json({ 
+        success: true, 
+        isMatchingCompleted: false, 
+        companies: [],
+        profileDigest: null 
+      });
     }
 
     // 3. Match against jobs using the Supabase RPC function
     const { data: matchedJobs, error: matchError } = await supabase.rpc("match_scraped_jobs", {
       query_embedding: userEmbedding,
-      match_threshold: 0.2,
+      match_threshold: 0.6,
       match_count: 100
     });
 
@@ -161,7 +166,7 @@ Return ONLY a JSON object with:
       return NextResponse.json({ error: "Failed to match jobs" }, { status: 500 });
     }
 
-    // Group jobs by company, filter out junior roles & <50% match rate, and verify referral contacts presence.
+    // Group jobs by company, filter out junior roles & <60% match rate, and verify referral contacts presence.
     const companyGroups: Record<string, {
       company: string;
       contactsCount: number;
@@ -184,8 +189,8 @@ Return ONLY a JSON object with:
     for (const row of matchedJobs || []) {
       const matchRate = Math.round(row.similarity * 100);
 
-      // Hide jobs with less than 50% match rate
-      if (matchRate < 50) continue;
+      // Hide jobs with less than 60% match rate
+      if (matchRate < 60) continue;
 
       // Filter out jobs older than 2 weeks
       if (row.posted_at) {
@@ -285,6 +290,8 @@ Return ONLY a JSON object with:
     });
 
     return NextResponse.json({
+      success: true,
+      isMatchingCompleted: true,
       profileDigest,
       companies: finalCompanies
     });

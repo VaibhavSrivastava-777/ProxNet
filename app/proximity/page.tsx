@@ -14,5 +14,5 @@ export default async function ProximityPage() {
     redirect("/profile?onboarding=true");
   }
 
-  redirect("/qa?tab=proximity");
+  redirect("/qa?tab=network");
 }

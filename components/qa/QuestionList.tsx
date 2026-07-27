@@ -235,9 +235,11 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   }, [searchQuery]);
 
   const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[], aiSession?: any }>(`/api/questions?locationMode=${locationMode}&_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000 });
+  const { data: jobInboxData } = useSWR<{ threads: any[] }>("/api/jobs/inbox", fetcher, { refreshInterval: 10000 });
   const { data: notificationsData, mutate: mutateNotifications } = useSWR<{ notifications: any[] }>("/api/notifications", fetcher, { refreshInterval: 5000 });
 
   const asked = data?.asked || [];
+  const referralThreads = jobInboxData?.threads || [];
   const incoming = data?.incoming || [];
   const aiSession = data?.aiSession;
   const suggestions = data?.suggestions || [];
@@ -350,6 +352,11 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
 
   // Unify and sort
   const unified = [
+    ...referralThreads.map(t => ({
+      type: "referral" as const,
+      data: t,
+      ts: new Date(t.latestMessageAt || t.created_at || Date.now()).getTime()
+    })),
     ...asked.map(q => ({ type: "asked" as const, data: q, ts: new Date(q.latest_activity_at).getTime() })),
     ...incoming.map(q => ({ type: "incoming" as const, data: q, ts: new Date(q.latest_activity_at).getTime() }))
   ].sort((a, b) => b.ts - a.ts);
@@ -358,7 +365,13 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   const filteredUnified = unified.filter((item) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
-    if (item.type === "asked") {
+    if (item.type === "referral") {
+      const t = item.data;
+      const alias = (t.otherAlias || "").toLowerCase();
+      const role = (t.postRole || "").toLowerCase();
+      const msg = (t.latestMessage || "").toLowerCase();
+      return alias.includes(query) || role.includes(query) || msg.includes(query);
+    } else if (item.type === "asked") {
       const q = item.data;
       const hasResponse = q.question_targets?.some((t: any) => t.status === "responded");
       const rawTitle = q.target_alias || (hasResponse ? "Responder" : "Nearby Professional");
@@ -383,6 +396,9 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   });
 
   const unreadCount = unified.filter(item => {
+    if (item.type === "referral") {
+      return item.data.unread === true;
+    }
     if (filter2km) {
       if (item.data.distance === null || item.data.distance === undefined || item.data.distance > 2000) {
         return false;
@@ -399,6 +415,12 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   }).length;
 
   const displayedUnified = filteredUnified.filter(item => {
+    if (item.type === "referral") {
+      if (activeTab === "unread") {
+        return item.data.unread === true;
+      }
+      return true;
+    }
     if (filter2km) {
       if (item.data.distance === null || item.data.distance === undefined || item.data.distance > 2000) {
         return false;
@@ -676,7 +698,36 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
             ) : (
               displayedUnified.map((item, idx) => {
                 const isLast = idx === displayedUnified.length - 1;
-                if (item.type === "asked") {
+                if (item.type === "referral") {
+                  const t = item.data;
+                  return (
+                    <div 
+                      key={t.id} 
+                      className={`flex items-center gap-3.5 py-3.5 px-4 cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors ${!isLast ? "border-b border-[var(--color-border-light)]" : ""}`}
+                      onClick={() => router.push(`/jobs/chat/${t.id}`)}
+                    >
+                      <CompanyLogo company={t.postCompany || null} size={48} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-baseline mb-0.5">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <h4 className="text-body font-semibold truncate text-[var(--color-text)] m-0">
+                              {t.otherAlias}
+                            </h4>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 shrink-0">
+                              Referral
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-[var(--color-text-tertiary)] font-normal whitespace-nowrap ml-2">
+                            {formatWhatsAppTime(t.latestMessageAt || t.created_at)}
+                          </span>
+                        </div>
+                        <div className="text-body-sm text-[var(--color-text-secondary)] truncate">
+                          {t.latestMessage || `Regarding: ${t.postRole}`}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                } else if (item.type === "asked") {
                   const q = item.data;
                   const hasResponse = q.question_targets?.some((t: any) => t.status === "responded");
                   const rawTitle = q.target_alias || (hasResponse ? "Responder" : "Nearby Professional");

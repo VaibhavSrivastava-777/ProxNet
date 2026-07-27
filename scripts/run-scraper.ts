@@ -35,9 +35,10 @@ function isJuniorJob(title: string, description: string): boolean {
 
 async function runScraper() {
   console.log("==========================================");
-  console.log("Starting GitHub Actions Job Scraper");
+  console.log("GitHub Actions Job Scraper is DISABLED.");
   console.log("==========================================");
-  
+  return;
+
   const startTime = Date.now();
   let totalProcessed = 0;
   let totalAdded = 0;

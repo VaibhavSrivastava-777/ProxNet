@@ -29,12 +29,7 @@ export function JobInbox() {
   }
 
   if (threads.length === 0) {
-    return (
-      <div className="card p-8 text-center animate-fadeIn border border-dashed border-border-light">
-        <p className="text-body font-medium text-text-secondary">No active job chats yet.</p>
-        <p className="text-caption mt-1">Start a conversation from the Job Feed.</p>
-      </div>
-    );
+    return null;
   }
 
   return (

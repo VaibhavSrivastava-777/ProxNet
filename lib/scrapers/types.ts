@@ -5,6 +5,7 @@ export interface ScrapedJob {
   posted_at: string;
   description: string;
   source: string;
+  keywords?: string[];
 }
 
 export interface CompanyScraper {
