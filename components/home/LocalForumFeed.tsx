@@ -23,9 +23,10 @@ export function LocalForumFeed({
 
   // Active Location Mode: "home" | "office" | "current"
   const [locationMode, setLocationMode] = useState<"home" | "office" | "current">("home");
+  const [filter2km, setFilter2km] = useState(true);
 
-  // Fetch Questions SWR based on locationMode
-  const questionsUrl = `/api/questions?locationMode=${locationMode}`;
+  // Fetch Questions SWR based on locationMode and radius
+  const questionsUrl = `/api/questions?locationMode=${locationMode}&radius=${filter2km ? 2000 : 50000}`;
   const { data, isLoading } = useSWR(
     questionsUrl,
     fetcher,
@@ -39,7 +40,6 @@ export function LocalForumFeed({
   const [postBody, setPostBody] = useState("");
   const [postCategory, setPostCategory] = useState("General");
   const [isPosting, setIsPosting] = useState(false);
-  const [filter2km, setFilter2km] = useState(true);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);

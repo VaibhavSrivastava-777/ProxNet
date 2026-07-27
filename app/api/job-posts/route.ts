@@ -59,7 +59,7 @@ export async function GET(request: Request) {
       jobLng = j.creator?.home_lng;
     }
 
-    if (!jobLat || !jobLng) return true;
+    if (!jobLat || !jobLng) return false;
 
     const dist = calcDistance(lat, lng, jobLat, jobLng);
     j.distance = dist;

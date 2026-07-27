@@ -230,16 +230,26 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false })
     .limit(50);
 
+  const radius = parseInt(searchParams.get("radius") || "2000", 10);
+
   const forumWithActivity = (allForumQuestions ?? [])
     .map((q) => {
       const u = q.users as any;
-      const dist = (myLoc && q.center_lat != null && q.center_lng != null)
-        ? haversineDistanceMeters(Number(q.center_lat), Number(q.center_lng), myLoc.lat, myLoc.lng)
+      let qLat = q.center_lat;
+      let qLng = q.center_lng;
+      if (qLat == null || qLng == null) {
+        qLat = u?.home_lat;
+        qLng = u?.home_lng;
+      }
+
+      const dist = (myLoc && qLat != null && qLng != null)
+        ? haversineDistanceMeters(Number(qLat), Number(qLng), myLoc.lat, myLoc.lng)
         : null;
 
       return {
         id: q.id,
         body: q.body,
+        question_text: q.question_text || q.body,
         anonymous_name: u?.anonymous_name || `Neighbour-${q.asker_id.slice(0, 4)}`,
         poster_title: u?.job_title || "Professional",
         poster_company: u?.company || "Nearby",
@@ -248,6 +258,11 @@ export async function GET(request: Request) {
         comments_count: q.question_comments?.length || 0,
         distance: dist,
       };
+    })
+    .filter((q) => {
+      if (radius >= 50000) return true;
+      if (q.distance == null) return false;
+      return q.distance <= radius;
     });
 
   let suggestions: any[] = [];

@@ -59,7 +59,7 @@ export async function GET(request: Request) {
       eventLng = e.creator?.home_lng;
     }
 
-    if (!eventLat || !eventLng) return true;
+    if (!eventLat || !eventLng) return false;
 
     const dist = calcDistance(lat, lng, eventLat, eventLng);
     e.distance = dist;
