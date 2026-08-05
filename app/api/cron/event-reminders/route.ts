@@ -61,7 +61,7 @@ async function handleEventReminders(request: Request) {
       messageBody = `Reminder: "${event.title}" is in 3 days. ${goingOnly.length} going.`;
     } else if (hoursUntilStart <= 24 && hoursUntilStart > 12) {
       notificationType = "1d";
-      messageBody = `Tomorrow: "${event.title}" at ${new Date(event.starts_at).toLocaleTimeString("en-US", {hour: "numeric", minute: "2-digit"})}.`;
+      messageBody = `Tomorrow: "${event.title}" at ${new Date(event.starts_at).toLocaleTimeString("en-US", {hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata"})}.`;
     } else if (hoursUntilStart <= 4 && hoursUntilStart > 1) {
       notificationType = "4h";
       messageBody = `Starting soon: "${event.title}" at ${event.venue_name}.`;
