@@ -7,6 +7,7 @@ import Link from "next/link";
 
 import { EventInviteModal } from "@/components/forum/EventInviteModal";
 import { EventFormModal } from "@/components/forum/EventFormModal";
+import { EventReminderModal } from "@/components/forum/EventReminderModal";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -26,6 +27,7 @@ export function EventClientPage({ id }: { id: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isReminderOpen, setIsReminderOpen] = useState(false);
 
   // Likes state
   const [hasLiked, setHasLiked] = useState(false);
@@ -254,6 +256,13 @@ export function EventClientPage({ id }: { id: string }) {
               {(isCreator || isAdmin) && (
                 <>
                   <button
+                    onClick={() => setIsReminderOpen(true)}
+                    className="px-3 py-2 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors flex items-center gap-1.5"
+                    title="Send real time reminder"
+                  >
+                    <span>🔔</span> Real-time Reminder
+                  </button>
+                  <button
                     onClick={() => setIsEditOpen(true)}
                     className="px-3 py-2 rounded-xl text-xs font-bold bg-[var(--color-surface-secondary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)] transition-colors"
                   >
@@ -460,6 +469,15 @@ export function EventClientPage({ id }: { id: string }) {
             setIsEditOpen(false);
             mutate();
           }}
+        />
+      )}
+
+      {isReminderOpen && (
+        <EventReminderModal
+          isOpen={isReminderOpen}
+          onClose={() => setIsReminderOpen(false)}
+          event={event}
+          onSuccess={() => mutate()}
         />
       )}
     </div>

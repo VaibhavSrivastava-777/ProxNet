@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { EventReminderModal } from "@/components/forum/EventReminderModal";
 
 export function EventCard({ 
   event, 
@@ -19,6 +20,7 @@ export function EventCard({
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
 
   // Like & Comment state
   const initialLikes = event.likes || [];
@@ -234,6 +236,16 @@ export function EventCard({
           {isCreator && (
             <div className="flex items-center gap-1.5">
               <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowReminderModal(true);
+                }}
+                className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors flex items-center gap-1"
+                title="Send real time reminder"
+              >
+                🔔 Reminder
+              </button>
+              <button
                 onClick={handleEdit}
                 className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--color-surface-secondary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)] transition-colors"
                 title="Edit Meetup"
@@ -399,6 +411,14 @@ export function EventCard({
       <div className="text-[10px] text-[var(--color-text-tertiary)] text-right mt-1">
         Hosted by {event.creator?.full_name || "Neighbor"}
       </div>
+
+      {showReminderModal && (
+        <EventReminderModal
+          isOpen={showReminderModal}
+          onClose={() => setShowReminderModal(false)}
+          event={event}
+        />
+      )}
     </div>
   );
 }
