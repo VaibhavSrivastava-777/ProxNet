@@ -9,6 +9,8 @@ interface Message {
   content: string;
 }
 
+import { RechargeModal } from "@/components/RechargeModal";
+
 function AIChatInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -18,18 +20,12 @@ function AIChatInner() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingHistory, setIsFetchingHistory] = useState(true);
+  const [wallet, setWallet] = useState<number | null>(null);
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   const hasInitialized = useRef(false);
-
-  useEffect(() => {
-    const originalPadding = document.body.style.paddingBottom;
-    document.body.style.paddingBottom = "0px";
-    return () => {
-      document.body.style.paddingBottom = originalPadding;
-    };
-  }, []);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -45,6 +41,10 @@ function AIChatInner() {
         if (res.ok) {
           const data = await res.json();
           setMessages(data.messages || []);
+          if (data.wallet !== undefined) setWallet(data.wallet);
+          if (data.initial_credits_granted && data.wallet <= 0) {
+            setShowRechargeModal(true);
+          }
         }
       } catch (err) {
         console.error("Failed to load AI chat history", err);
@@ -86,8 +86,21 @@ function AIChatInner() {
       if (res.ok) {
         const data = await res.json();
         setMessages((prev) => [...prev, { role: "assistant", content: data.text }]);
+        if (data.wallet !== undefined) setWallet(data.wallet);
       } else {
-        setMessages((prev) => [...prev, { role: "assistant", content: "Sorry, I am having trouble connecting right now." }]);
+        const errData = await res.json().catch(() => ({}));
+        if (res.status === 402 || errData.error === "RECHARGE_REQUIRED") {
+          setShowRechargeModal(true);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: "Your credit balance is exhausted. Please contact **ProxNet.Connect@Gmail.com** to recharge your credits."
+            }
+          ]);
+        } else {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Sorry, I am having trouble connecting right now." }]);
+        }
       }
     } catch (err) {
       setMessages((prev) => [...prev, { role: "assistant", content: "Network error occurred." }]);
@@ -102,7 +115,7 @@ function AIChatInner() {
   }
 
   return (
-    <div className="flex flex-col h-[100dvh] w-full max-w-4xl mx-auto bg-[var(--color-surface)] md:border-x border-[var(--color-border-light)] relative shadow-md">
+    <div className="flex flex-col h-[calc(100dvh-var(--nav-height)-var(--bottom-nav-height)-16px)] md:h-[calc(100vh-var(--nav-height)-32px)] w-full max-w-4xl mx-auto bg-[var(--color-surface)] md:border-x border-[var(--color-border-light)] relative shadow-md rounded-b-xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0">
         <button
@@ -186,6 +199,12 @@ function AIChatInner() {
           </svg>
         </button>
       </form>
+
+      <RechargeModal
+        isOpen={showRechargeModal}
+        onClose={() => setShowRechargeModal(false)}
+        walletBalance={wallet}
+      />
     </div>
   );
 }

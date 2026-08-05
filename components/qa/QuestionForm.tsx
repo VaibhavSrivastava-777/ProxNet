@@ -179,10 +179,6 @@ export function QuestionForm({
       setBody("");
       setIsSuccess(true);
       if (targetUser && data.sessionId) {
-        if (data.walletWarning) {
-          setWalletWarningSessionId(data.sessionId);
-          return;
-        }
         router.push(`/chat/${data.sessionId}`);
         onPosted?.();
         return;

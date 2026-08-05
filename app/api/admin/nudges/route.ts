@@ -9,11 +9,6 @@ const WHITELISTED_TEST_EMAILS = [
 ];
 
 export async function POST(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    // Also allow logged-in admin access for testing
-  }
-
   const supabase = createAdminClient();
 
   // 1. Fetch whitelisted users ONLY
@@ -37,47 +32,52 @@ export async function POST(request: Request) {
     });
   }
 
-  // 2. Look for recent scraped jobs posted in last 7 days
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: recentJobs } = await supabase
-    .from("scraped_jobs")
-    .select("*")
-    .gte("created_at", sevenDaysAgo);
-
   let totalNudgesSent = 0;
 
-  if (recentJobs && recentJobs.length > 0) {
-    for (const testUser of testUsers) {
-      // Find companies where OTHER verified professionals work (potential referrers)
-      const { data: insiders } = await supabase
-        .from("users")
-        .select("company")
-        .neq("id", testUser.id)
-        .not("company", "is", null);
+  for (const testUser of testUsers) {
+    if (!testUser.embedding) continue;
 
-      const availableCompanies = new Set(insiders?.map(i => i.company?.trim().toLowerCase()).filter(Boolean));
+    // Vector match against scraped jobs with > 60% match threshold
+    const { data: matchedJobs, error: matchError } = await supabase.rpc("match_scraped_jobs", {
+      query_embedding: testUser.embedding,
+      match_threshold: 0.6, // strict > 60%
+      match_count: 20
+    });
 
-      // Match user against recent jobs
-      for (const job of recentJobs) {
-        if (!job.company_name) continue;
-        const jobCompany = job.company_name.trim().toLowerCase();
+    if (matchError || !matchedJobs || matchedJobs.length === 0) {
+      // If there is no matching job (> 60%), do NOT send notification
+      continue;
+    }
 
-        // Check if user already works there
-        if (testUser.company?.trim().toLowerCase() === jobCompany) continue;
+    for (const job of matchedJobs) {
+      const matchRate = Math.round((job.similarity || 0) * 100);
+      if (matchRate <= 60) continue;
 
-        // Check if there are verified referrers at this target company
-        if (!availableCompanies.has(jobCompany)) continue;
+      const companyName = (job.company || job.company_name || "").trim();
+      const jobTitle = (job.title || job.role || "").trim();
+      const jobId = job.id;
 
-        // Send a specific high-confidence opportunity notification
-        await sendNotification(testUser.id, {
-          title: `High-Match Opportunity: ${job.title} 🚀`,
-          body: `A job matching your profile opened at ${job.company_name}. Verified referrers are available on ProxNet to refer you!`,
-          url: `/qa?tab=network&company=${encodeURIComponent(job.company_name)}`
-        });
+      if (!companyName || !jobTitle) continue;
 
-        totalNudgesSent++;
-        console.log(`[Whitelisted Nudge] Sent opportunity notification to ${testUser.email} for ${job.title} @ ${job.company_name}`);
-      }
+      // Check if user was already notified for THIS PARTICULAR JOB POSTING
+      const { data: existing } = await supabase
+        .from("in_app_notifications")
+        .select("id")
+        .eq("user_id", testUser.id)
+        .like("url", `%${jobId}%`);
+
+      if (existing && existing.length > 0) continue;
+
+      // Send mobile notification ONLY FOR THIS PARTICULAR JOB POSTING
+      await sendNotification(testUser.id, {
+        title: `🔥 ${matchRate}% Job Match: ${jobTitle} at ${companyName}`,
+        body: `Matching Job: "${jobTitle}" at ${companyName} has a ${matchRate}% match with your profile. Tap to apply!`,
+        url: `/jobs?jobId=${encodeURIComponent(jobId)}&match=${matchRate}`,
+        data: { jobId, matchRate, type: "job_match_60" }
+      });
+
+      totalNudgesSent++;
+      console.log(`[Whitelisted Nudge] Sent ${matchRate}% match notification to ${testUser.email} for ${jobTitle} @ ${companyName}`);
     }
   }
 

@@ -29,8 +29,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const title = `Meetup: ${event.title} (${dateStr}) | ProxNet`;
   const description = event.subtitle || event.description || `Join this local meetup at ${event.venue_name} on ProxNet Neighborhood Network!`;
   
-  // Cache-busting timestamp so WhatsApp CDN re-fetches the latest OG card image
-  const ogImageUrl = `https://www.proxnet.in/api/events/${id}/og-image?t=${Date.now()}`;
+  const version = event.updated_at ? new Date(event.updated_at).getTime() : new Date(event.starts_at).getTime();
+  const ogImageUrl = `https://www.proxnet.in/api/events/${id}/og-image?v=${version}`;
 
   return {
     title,

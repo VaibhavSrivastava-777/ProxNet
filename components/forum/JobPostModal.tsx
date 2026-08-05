@@ -160,9 +160,15 @@ export function JobPostModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-[var(--color-surface)] rounded-2xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="p-4 border-b border-[var(--color-border-light)] flex justify-between items-center shrink-0">
+    <div 
+      onClick={onClose}
+      className="fixed inset-0 z-[1000] overflow-y-auto px-4 py-8 sm:p-8 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-start sm:justify-center animate-fadeIn"
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg bg-[var(--color-surface)] rounded-2xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[75vh] max-h-[75dvh] shrink-0 border border-[var(--color-border)] relative"
+      >
+        <div className="p-4 border-b border-[var(--color-border-light)] flex justify-between items-center shrink-0 bg-[var(--color-surface)]">
           <h3 className="text-h3 font-bold text-[var(--color-text)]">
             {isEditing ? "Edit Job Post" : "Create Job Post"}
           </h3>
@@ -171,7 +177,7 @@ export function JobPostModal({
           </button>
         </div>
         
-        <div className="p-5 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-5 overflow-y-auto flex-1 overscroll-contain">
           <form id="job-post-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
             
             {/* Type selector toggle */}
@@ -329,7 +335,7 @@ export function JobPostModal({
           </form>
         </div>
 
-        <div className="p-4 border-t border-[var(--color-border-light)] shrink-0 flex justify-end gap-3">
+        <div className="p-4 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 flex justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
@@ -341,9 +347,9 @@ export function JobPostModal({
             type="submit"
             form="job-post-form"
             disabled={isSubmitting}
-            className="px-6 py-2.5 rounded-lg text-sm font-bold bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="px-6 py-2.5 rounded-lg text-sm font-bold bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer border-none"
           >
-            {isSubmitting ? "Saving..." : isEditing ? "Save Changes" : "Post Job Opportunity (1 Credit)"}
+            {isSubmitting ? "Saving..." : isEditing ? "Save Changes" : "Post Job Opportunity"}
           </button>
         </div>
       </div>

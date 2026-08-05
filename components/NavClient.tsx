@@ -8,6 +8,8 @@ import { signOutAction } from "@/app/actions";
 import { useEffect, useRef, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { isProfileIncomplete } from "@/lib/profile-validation";
+import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
+import { RechargeModal } from "@/components/RechargeModal";
 
 interface NavClientProps {
   session: boolean;
@@ -21,21 +23,21 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isChatRoom = pathname.startsWith("/chat/") || pathname === "/proxnet-ai";
+  const isChatRoom = pathname.startsWith("/chat/");
   const { theme, resolved, setTheme } = useTheme();
   const isIosUser = typeof window !== "undefined" && (/iphone|ipad|ipod/i.test(window.navigator.userAgent) || (window.navigator.userAgent.includes("Mac") && window.navigator.maxTouchPoints > 0));
 
-  const isDark = resolved === "dark";
-
   const toggleTheme = () => {
-    setTheme(isDark ? "light" : "dark");
+    if (theme === "light") setTheme("dark");
+    else if (theme === "dark") setTheme("system");
+    else setTheme("light");
   };
 
   const navLinks = [
-    { href: "/jobs", label: "Jobs", icon: BriefcaseIcon },
-    { href: "/network", label: "Network", icon: MapPinIcon },
-    { href: "/qa", label: "Chats", icon: ChatIcon },
-    { href: "/forum", label: "Forum", icon: ForumIcon },
+    { href: "/jobs", label: "Jobs", icon: BriefcaseIcon, dataTour: "nav-jobs" },
+    { href: "/network", label: "Network", icon: MapPinIcon, dataTour: "nav-network" },
+    { href: "/qa", label: "Chats", icon: ChatIcon, dataTour: "nav-chats" },
+    { href: "/forum", label: "Forum", icon: ForumIcon, dataTour: "nav-forum" },
   ];
 
   // Web Push & In-App Toast States
@@ -67,6 +69,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
   // Wallet State
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
 
   // Register native Google sign-in global receiver on mount
   useEffect(() => {
@@ -715,6 +718,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                     <Link
                       key={l.href}
                       href={l.href}
+                      data-tour={l.dataTour}
                       onClick={(e) => handleTabClick(e, l.href)}
                       className="flex h-full items-center gap-2 px-4 text-sm font-medium transition-colors hover:bg-[var(--color-surface-hover)] relative"
                       style={{
@@ -745,11 +749,15 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             <div className="flex items-center gap-3">
               <button
                 type="button"
+                data-tour="theme-toggle"
                 onClick={(e) => { e.preventDefault(); toggleTheme(); }}
                 className="btn-icon btn-ghost flex items-center justify-center text-[var(--color-text-secondary)]"
-                aria-label="Toggle theme"
+                aria-label={`Current theme: ${theme}. Click to switch.`}
+                title={`Theme: ${theme === "system" ? `System Auto (${resolved})` : theme === "dark" ? "Dark" : "Light"}`}
               >
-                {isDark ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+                {theme === "light" && <SunIcon className="h-5 w-5" />}
+                {theme === "dark" && <MoonIcon className="h-5 w-5" />}
+                {theme === "system" && <SystemIcon className="h-5 w-5" />}
               </button>
               
               {session ? (
@@ -757,6 +765,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                   <div className="relative" ref={desktopDropdownRef}>
                   <button
                     type="button"
+                    data-tour="user-menu"
                     onClick={() => setDesktopMenuOpen(!desktopMenuOpen)}
                     className="avatar avatar-sm text-[var(--color-primary)] bg-[var(--color-primary-subtle)] hover:scale-105 transition-transform flex items-center justify-center font-bold"
                     style={{ border: "none", outline: "none", padding: 0, cursor: "pointer" }}
@@ -774,10 +783,18 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                         </p>
                         <p className="text-caption truncate text-[var(--color-text-secondary)]">Logged in</p>
                         {walletBalance !== null && (
-                          <div className="mt-2 flex items-center justify-between text-xs font-semibold text-[var(--color-primary)] bg-[var(--color-surface-hover)] px-2 py-1 rounded">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDesktopMenuOpen(false);
+                              setShowRechargeModal(true);
+                            }}
+                            className="mt-2 w-full flex items-center justify-between text-xs font-semibold text-[var(--color-primary)] bg-[var(--color-surface-hover)] hover:bg-[var(--color-primary-subtle)] px-2 py-1 rounded transition-colors cursor-pointer border-none"
+                            title="Click to view or recharge credits"
+                          >
                             <span>Credits</span>
-                            <span>{walletBalance}</span>
-                          </div>
+                            <span>{walletBalance} ⚡</span>
+                          </button>
                         )}
                       </div>
                       <Link
@@ -796,6 +813,42 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                       >
                         <GrowIcon className="h-4 w-4" /> Grow
                       </Link>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDesktopMenuOpen(false);
+                          window.dispatchEvent(new CustomEvent("open-proxnet-tour"));
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-[var(--color-surface-hover)] flex items-center gap-2 text-sm text-[var(--color-text)] transition-colors cursor-pointer border-none bg-transparent"
+                      >
+                        <span>🚀</span> Take a Tour
+                      </button>
+                      <div className="px-4 py-2 border-t border-[var(--color-border-light)] flex flex-col gap-1.5 text-xs text-[var(--color-text-secondary)]">
+                        <span className="font-semibold text-[11px] uppercase tracking-wider text-[var(--color-text-tertiary)]">Theme</span>
+                        <div className="flex bg-[var(--color-surface-hover)] rounded-lg p-0.5 border border-[var(--color-border-light)] justify-between">
+                          <button
+                            type="button"
+                            onClick={() => setTheme("light")}
+                            className={`flex-1 py-1 px-1 rounded text-[11px] font-semibold transition-all text-center cursor-pointer border-none ${theme === "light" ? "bg-[var(--color-primary)] text-white shadow-sm" : "bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}
+                          >
+                            Light
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTheme("dark")}
+                            className={`flex-1 py-1 px-1 rounded text-[11px] font-semibold transition-all text-center cursor-pointer border-none ${theme === "dark" ? "bg-[var(--color-primary)] text-white shadow-sm" : "bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}
+                          >
+                            Dark
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTheme("system")}
+                            className={`flex-1 py-1 px-1 rounded text-[11px] font-semibold transition-all text-center cursor-pointer border-none ${theme === "system" ? "bg-[var(--color-primary)] text-white shadow-sm" : "bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}
+                          >
+                            System
+                          </button>
+                        </div>
+                      </div>
                       <form action={signOutAction} className="w-full">
                         <button
                           type="submit"
@@ -857,17 +910,22 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              data-tour="theme-toggle"
               onClick={(e) => { e.preventDefault(); toggleTheme(); }}
               className="btn-icon btn-ghost flex items-center justify-center text-[var(--color-text-secondary)]"
-              aria-label="Toggle theme"
+              aria-label={`Current theme: ${theme}. Click to switch.`}
+              title={`Theme: ${theme === "system" ? `System Auto (${resolved})` : theme === "dark" ? "Dark" : "Light"}`}
             >
-              {isDark ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+              {theme === "light" && <SunIcon className="h-5 w-5" />}
+              {theme === "dark" && <MoonIcon className="h-5 w-5" />}
+              {theme === "system" && <SystemIcon className="h-5 w-5" />}
             </button>
             {session ? (
                 <>
                 <div className="relative" ref={mobileDropdownRef}>
                 <button
                   type="button"
+                  data-tour="user-menu"
                   onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                   className="avatar avatar-sm text-[var(--color-primary)] bg-[var(--color-primary-subtle)] hover:scale-105 transition-transform flex items-center justify-center font-bold"
                   style={{ border: "none", outline: "none", padding: 0, cursor: "pointer" }}
@@ -885,10 +943,18 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                       </p>
                       <p className="text-caption truncate text-[var(--color-text-secondary)]">Logged in</p>
                       {walletBalance !== null && (
-                        <div className="mt-2 flex items-center justify-between text-xs font-semibold text-[var(--color-primary)] bg-[var(--color-surface-hover)] px-2 py-1 rounded">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMobileMenuOpen(false);
+                            setShowRechargeModal(true);
+                          }}
+                          className="mt-2 w-full flex items-center justify-between text-xs font-semibold text-[var(--color-primary)] bg-[var(--color-surface-hover)] hover:bg-[var(--color-primary-subtle)] px-2 py-1 rounded transition-colors cursor-pointer border-none"
+                          title="Click to view or recharge credits"
+                        >
                           <span>Credits</span>
-                          <span>{walletBalance}</span>
-                        </div>
+                          <span>{walletBalance} ⚡</span>
+                        </button>
                       )}
                     </div>
                     <Link
@@ -905,8 +971,44 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                       className="w-full text-left px-4 py-2 hover:bg-[var(--color-surface-hover)] flex items-center gap-2 text-sm text-[var(--color-text)] transition-colors cursor-pointer"
                       style={{ display: "flex", textDecoration: "none" }}
                     >
-                      <GrowIcon className="h-4 w-4" /> Grow
+                      <GrowIcon className="h-4 w-4" /> Earn Points & Badges
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        window.dispatchEvent(new CustomEvent("open-proxnet-tour"));
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-[var(--color-surface-hover)] flex items-center gap-2 text-sm text-[var(--color-text)] transition-colors cursor-pointer border-none bg-transparent"
+                    >
+                      <span>🚀</span> Take a Tour
+                    </button>
+                    <div className="px-4 py-2 border-t border-[var(--color-border-light)] mt-1">
+                      <p className="text-[11px] font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-1">Theme</p>
+                      <div className="flex bg-[var(--color-surface-secondary)] p-0.5 rounded-md border border-[var(--color-border-light)]">
+                        <button
+                          type="button"
+                          onClick={() => setTheme("light")}
+                          className={`flex-1 py-1 px-1 rounded text-[11px] font-semibold transition-all text-center cursor-pointer border-none ${theme === "light" ? "bg-[var(--color-primary)] text-white shadow-sm" : "bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}
+                        >
+                          Light
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTheme("dark")}
+                          className={`flex-1 py-1 px-1 rounded text-[11px] font-semibold transition-all text-center cursor-pointer border-none ${theme === "dark" ? "bg-[var(--color-primary)] text-white shadow-sm" : "bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}
+                        >
+                          Dark
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTheme("system")}
+                          className={`flex-1 py-1 px-1 rounded text-[11px] font-semibold transition-all text-center cursor-pointer border-none ${theme === "system" ? "bg-[var(--color-primary)] text-white shadow-sm" : "bg-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}
+                        >
+                          System
+                        </button>
+                      </div>
+                    </div>
                     <form action={signOutAction} className="w-full">
                       <button
                         type="submit"
@@ -923,14 +1025,55 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
               ) : (
                 <button
                   onClick={() => setShowLoginModal(true)}
-                  className="btn btn-primary btn-sm px-3 py-1"
+                  className="btn btn-primary btn-sm flex items-center gap-1.5 font-bold"
                 >
-                  Login
+                  Sign In
                 </button>
               )}
           </div>
         </header>
       )}
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[var(--color-surface)] w-full max-w-sm rounded-xl p-6 shadow-xl border border-[var(--color-border)] relative animate-scaleIn">
+            <button
+              onClick={() => setShowLoginModal(false)}
+              className="absolute top-4 right-4 text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+            <div className="text-center mb-6">
+              <img src="/logo.png" alt="ProxNet" className="w-12 h-12 rounded-xl shadow-sm mb-4 mx-auto" />
+              <h3 className="text-lg font-bold text-[var(--color-text)] text-center mb-1">Sign in to ProxNet</h3>
+              <p className="text-xs text-[var(--color-text-secondary)]">Choose your preferred login method</p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLoginModal(false);
+                  signIn("linkedin", { callbackUrl: window.location.href });
+                }}
+                className="w-full flex items-center justify-center font-bold px-4 py-3 rounded-xl bg-[#0A66C2] text-white hover:bg-[#004182] transition-colors shadow-sm cursor-pointer border-none text-sm"
+              >
+                <svg className="w-5 h-5 mr-2 fill-current" viewBox="0 0 24 24">
+                  <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
+                </svg>
+                Sign in with LinkedIn
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {session && <OnboardingTour />}
+      <RechargeModal
+        isOpen={showRechargeModal}
+        onClose={() => setShowRechargeModal(false)}
+        walletBalance={walletBalance}
+      />
 
       {/* Profile Completion Reminder Banner */}
       {showProfileReminder && (
@@ -996,6 +1139,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
               <Link
                 key={l.href}
                 href={l.href}
+                data-tour={l.dataTour}
                 onClick={(e) => handleTabClick(e, l.href)}
                 className="flex flex-1 flex-col items-center justify-center gap-1 h-full transition-colors relative"
                 style={{
@@ -1203,26 +1347,6 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             </div>
 
             <div className="flex flex-col gap-3">
-              {/* LinkedIn Button */}
-              <button
-                onClick={() => {
-                  setShowLoginModal(false);
-                  signIn("linkedin", { callbackUrl: "/profile" });
-                }}
-                className="w-full flex items-center justify-center py-2.5 px-4 rounded-xl font-semibold text-sm transition-all shadow-sm cursor-pointer"
-                style={{
-                  backgroundColor: "#0A66C2",
-                  color: "#ffffff",
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = "#004182")}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = "#0A66C2")}
-              >
-                <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
-                </svg>
-                Sign in with LinkedIn
-              </button>
-
               {/* Google Button */}
               <button
                 onClick={() => {
@@ -1243,10 +1367,26 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                 </svg>
                 Sign in with Google
               </button>
+
+              {/* LinkedIn Button */}
+              <button
+                onClick={() => {
+                  setShowLoginModal(false);
+                  signIn("linkedin", { callbackUrl: "/profile" });
+                }}
+                className="w-full flex items-center justify-center py-2.5 px-4 rounded-xl font-semibold text-sm bg-[#0A66C2] text-white hover:bg-[#004182] transition-all shadow-sm cursor-pointer"
+              >
+                <svg className="w-5 h-5 mr-2 fill-current" viewBox="0 0 24 24">
+                  <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
+                </svg>
+                Sign in with LinkedIn
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {session && <OnboardingTour />}
     </>
   );
 }
@@ -1305,6 +1445,14 @@ function MoonIcon(props: any) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+    </svg>
+  );
+}
+
+function SystemIcon(props: any) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25Z" />
     </svg>
   );
 }

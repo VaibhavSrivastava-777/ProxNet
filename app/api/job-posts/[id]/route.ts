@@ -15,7 +15,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       interests:job_post_interests(
         status,
         user:users(id, full_name, job_title, company, profile_photo_url)
-      )
+      ),
+      likes:job_post_likes(id, user_id),
+      comments:job_post_comments(id)
     `)
     .eq("id", id)
     .single();

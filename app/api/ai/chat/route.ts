@@ -11,6 +11,12 @@ export async function GET(request: Request) {
   const supabase = createAdminClient();
   const { sessionId } = await getOrCreateAISession(supabase, user.id);
 
+  const { data: userData } = await supabase
+    .from("users")
+    .select("wallet, initial_credits_granted")
+    .eq("id", user.id)
+    .single();
+
   const { data: messages } = await supabase
     .from("chat_messages")
     .select("id, body, created_at, sender_id")
@@ -22,7 +28,11 @@ export async function GET(request: Request) {
     content: m.body
   }));
 
-  return NextResponse.json({ messages: formattedMessages });
+  return NextResponse.json({
+    messages: formattedMessages,
+    wallet: userData?.wallet ?? 0,
+    initial_credits_granted: userData?.initial_credits_granted ?? false
+  });
 }
 
 export async function POST(request: Request) {
@@ -39,21 +49,32 @@ export async function POST(request: Request) {
     const supabase = createAdminClient();
     const { sessionId, aiUserId } = await getOrCreateAISession(supabase, user.id);
 
-    // Charge the session (costs 1 credit for new sessions, 0 for existing)
-    const { data: charged, error: chargeError } = await supabase.rpc("charge_session", {
-      p_user_id: user.id,
-      p_session_id: sessionId,
-      amount: 1
-    });
+    // Fetch user wallet balance and initial_credits_granted status
+    const { data: userData } = await supabase
+      .from("users")
+      .select("wallet, initial_credits_granted")
+      .eq("id", user.id)
+      .single();
 
-    if (chargeError) {
-      console.error("Wallet charge error:", chargeError);
-      return NextResponse.json({ error: "Failed to process payment." }, { status: 500 });
+    const currentWallet = userData?.wallet ?? 0;
+    const initialCreditsGranted = userData?.initial_credits_granted ?? false;
+
+    // If initial credits were granted and credits go to <= 0, require recharge
+    if (initialCreditsGranted && currentWallet <= 0) {
+      return NextResponse.json({
+        error: "RECHARGE_REQUIRED",
+        message: "Your credit balance is exhausted. Please contact ProxNet.Connect@Gmail.com to recharge your credits.",
+        wallet: currentWallet,
+        initial_credits_granted: true
+      }, { status: 402 });
     }
 
-    if (!charged) {
-      return NextResponse.json({ error: "Insufficient credits" }, { status: 402 });
-    }
+    // Deduct 1 credit point for every ProxNet AI prompt
+    const newWallet = currentWallet - 1;
+    await supabase
+      .from("users")
+      .update({ wallet: newWallet })
+      .eq("id", user.id);
 
     // Save User message
     await supabase.from("chat_messages").insert({

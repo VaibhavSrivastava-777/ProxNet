@@ -144,6 +144,8 @@
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-y: contain;
 }
 
 body {
@@ -156,6 +158,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
   font-size: 14px;
+  touch-action: manipulation;
+}
+
+/* Prevent auto-zooming when tapping inputs on iOS Safari */
+@media screen and (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
 }
 
 ::selection {

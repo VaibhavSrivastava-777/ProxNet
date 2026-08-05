@@ -61,8 +61,17 @@ export async function GET(request: Request) {
 
     // Filter by tag if requested
     if (tagFilter) {
-      if (!u.tags || !u.tags.some(t => t.toLowerCase() === tagFilter || t.toLowerCase().includes(tagFilter))) {
-        continue;
+      const cleanFilter = tagFilter.replace(/^#+/, "").trim().toLowerCase();
+      if (cleanFilter) {
+        if (
+          !u.tags ||
+          !u.tags.some((t: string) => {
+            const cleanT = String(t).replace(/^#+/, "").trim().toLowerCase();
+            return cleanT.includes(cleanFilter) || cleanFilter.includes(cleanT);
+          })
+        ) {
+          continue;
+        }
       }
     }
 

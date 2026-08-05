@@ -9,6 +9,20 @@ import { isOnboardingIncomplete } from "@/lib/profile-validation";
 
 import { LandingStoreButtons } from "@/components/auth/LandingStoreButtons";
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "ProxNet",
+  "operatingSystem": "Web, Android, iOS",
+  "applicationCategory": "BusinessApplication, SocialNetworkingApplication",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "description": "Privacy-first local professional networking app. Request anonymous job referrals from verified insiders, ask candid career questions, join local forums and meetups with nearby neighbors."
+};
+
 export default async function HomePage({
   searchParams,
 }: {
@@ -32,6 +46,10 @@ export default async function HomePage({
 
   return (
     <div className="min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {isInvite && (
         <div 
           style={{
@@ -61,33 +79,78 @@ export default async function HomePage({
           </div>
           <div className="flex flex-col items-center justify-center gap-4">
 
-
             <LoginButton className="btn btn-linkedin btn-lg shadow-xl shadow-black/20" />
-            <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • LINKEDIN VERIFIED • FREE TO USE</p>
+            <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • GOOGLE VERIFIED • FREE TO USE</p>
           </div>
         </div>
       </section>
 
       {/* Network Hub Features */}
       <section className="px-4 py-20 bg-[var(--color-bg)]">
-        <div className="mx-auto max-w-4xl">
-          <h2 className="text-h2 text-center mb-12">Explore the Network Hub</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 stagger-children max-w-2xl mx-auto">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="text-h2 text-center mb-3">Explore the Proximity Network</h2>
+          <p className="text-body text-[var(--color-text-secondary)] text-center mb-12 max-w-xl mx-auto">
+            Everything you need to network, get referred, and grow your career locally — while keeping your identity private.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 stagger-children max-w-4xl mx-auto">
             <Link href="/jobs" className="card p-6 flex flex-col gap-3 bg-[var(--color-surface)] border-b-[5px] border-[var(--color-primary)] hover:-translate-y-1 hover:shadow-[var(--shadow-lg)] active:translate-y-1 active:border-b-2 transition-all duration-200">
               <div className="w-10 h-10 rounded-full bg-[var(--color-primary-subtle)] text-[var(--color-primary)] flex items-center justify-center shadow-inner">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.896 1.982-2.007 1.982H5.757c-1.111 0-2.007-.888-2.007-1.982v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v3.896m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
               </div>
-              <h2 className="text-h3 font-semibold m-0">Job Referrals</h2>
-              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">Browse open roles and request anonymous referrals from verified insiders.</p>
+              <h3 className="text-h3 font-semibold m-0">Anonymous Job Referrals</h3>
+              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">Browse open roles and request anonymous employee referrals from verified insiders at top companies living near you.</p>
             </Link>
 
             <Link href="/qa" className="card p-6 flex flex-col gap-3 bg-[var(--color-surface)] border-b-[5px] border-[var(--color-accent)] hover:-translate-y-1 hover:shadow-[var(--shadow-lg)] active:translate-y-1 active:border-b-2 transition-all duration-200">
               <div className="w-10 h-10 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent)] flex items-center justify-center shadow-inner">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg>
               </div>
-              <h2 className="text-h3 font-semibold m-0">Anonymous Chats</h2>
-              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">Ask questions and chat with nearby professionals.</p>
+              <h3 className="text-h3 font-semibold m-0">Anonymous Career Chats</h3>
+              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">Ask your awkward career questions to specific companies or roles. Get candid answers with 100% identity privacy.</p>
             </Link>
+
+            <Link href="/forum" className="card p-6 flex flex-col gap-3 bg-[var(--color-surface)] border-b-[5px] border-purple-500 hover:-translate-y-1 hover:shadow-[var(--shadow-lg)] active:translate-y-1 active:border-b-2 transition-all duration-200">
+              <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center shadow-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94-3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" /></svg>
+              </div>
+              <h3 className="text-h3 font-semibold m-0">Local Forum & Meetups</h3>
+              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">Discuss tech trends, host local AMAs, or join neighborhood professional meetups with peers in your area.</p>
+            </Link>
+
+            <Link href="/network" className="card p-6 flex flex-col gap-3 bg-[var(--color-surface)] border-b-[5px] border-emerald-500 hover:-translate-y-1 hover:shadow-[var(--shadow-lg)] active:translate-y-1 active:border-b-2 transition-all duration-200">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center shadow-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
+              </div>
+              <h3 className="text-h3 font-semibold m-0">Hyper-Local Map</h3>
+              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">View an interactive map of nearby professionals clustered by company, alumni network, and shared tech interests.</p>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="px-4 py-20 bg-[var(--color-surface)] text-center border-t border-[var(--color-border-light)]">
+        <div className="mx-auto max-w-4xl">
+          <h2 className="text-h2 mb-4">How ProxNet Works</h2>
+          <p className="text-body text-[var(--color-text-secondary)] mb-12 max-w-lg mx-auto">
+            3 simple steps to unlock your professional neighborhood anonymously.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-lg flex items-center justify-center shadow">1</div>
+              <h3 className="text-h3 font-semibold m-0">Sign In Privately</h3>
+              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">Log in with Google. Your actual name and email are kept strictly confidential.</p>
+            </div>
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent)] font-bold text-lg flex items-center justify-center shadow">2</div>
+              <h3 className="text-h3 font-semibold m-0">Discover Nearby Peers</h3>
+              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">See professionals, alumni, and company insiders living within your neighborhood radius.</p>
+            </div>
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-purple-100 text-purple-600 font-bold text-lg flex items-center justify-center shadow">3</div>
+              <h3 className="text-h3 font-semibold m-0">Connect & Get Referred</h3>
+              <p className="text-body-sm text-[var(--color-text-secondary)] m-0">Ask candid questions or request anonymous job referrals. Reveal yourself only when ready.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -95,7 +158,7 @@ export default async function HomePage({
       {/* Social Proof */}
       <section className="px-4 py-16 bg-[var(--color-accent-subtle)] text-center">
         <div className="mx-auto max-w-4xl grid grid-cols-1 md:grid-cols-3 gap-8">
-          {[["500+", "Professionals"], ["50+", "Companies"], ["100%", "Anonymous"]].map(([val, label]) => (
+          {[["500+", "Neighborhood Professionals"], ["50+", "Companies Represented"], ["100%", "Anonymous & Private"]].map(([val, label]) => (
             <div key={label}>
               <div className="text-display font-bold text-[var(--color-accent)]">{val}</div>
               <div className="text-body-sm font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mt-2">{label}</div>
@@ -106,9 +169,10 @@ export default async function HomePage({
 
       {/* Bottom CTA */}
       <section className="px-4 py-24 text-center bg-[var(--color-surface)] flex flex-col items-center">
-        <h2 className="text-h2 mb-8">Ready to get referred?</h2>
-        
-
+        <h2 className="text-h2 mb-4">Ready to unlock your professional neighborhood?</h2>
+        <p className="text-body text-[var(--color-text-secondary)] mb-8 max-w-md">
+          Join now to ask your awkward career questions anonymously and get referred to top companies!
+        </p>
 
         <LoginButton className="btn btn-linkedin btn-lg" />
       </section>

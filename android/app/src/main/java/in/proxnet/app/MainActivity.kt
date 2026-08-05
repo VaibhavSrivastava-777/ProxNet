@@ -98,8 +98,8 @@ class MainActivity : AppCompatActivity() {
         settings.useWideViewPort = true
         
         // Support zoom
-        settings.setSupportZoom(true)
-        settings.builtInZoomControls = true
+        settings.setSupportZoom(false)
+        settings.builtInZoomControls = false
         settings.displayZoomControls = false
 
         // Override User-Agent to mock Mobile Chrome. 

@@ -20,6 +20,20 @@ export function JobPostCard({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Like & Comment state
+  const initialLikes = jobPost.likes || [];
+  const initialHasLiked = currentUserId ? initialLikes.some((l: any) => l.user_id === currentUserId) : false;
+  const [hasLiked, setHasLiked] = useState(initialHasLiked);
+  const [likesCount, setLikesCount] = useState(initialLikes.length);
+  const [isLiking, setIsLiking] = useState(false);
+
+  const [showComments, setShowComments] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [commentsCount, setCommentsCount] = useState(jobPost.comments?.length || 0);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+
   const creatorId = jobPost.creator_id || jobPost.user_id;
   const isCreator = currentUserId && currentUserId === creatorId;
 
@@ -58,17 +72,99 @@ export function JobPostCard({
     }
   };
 
+  const handleLike = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentUserId) {
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/job-post/${jobPost.id}`)}`);
+      return;
+    }
+    if (isLiking) return;
+
+    setIsLiking(true);
+    const newLiked = !hasLiked;
+    setHasLiked(newLiked);
+    setLikesCount((prev: number) => (newLiked ? prev + 1 : Math.max(0, prev - 1)));
+
+    try {
+      const res = await fetch(`/api/job-posts/${jobPost.id}/like`, { method: "POST" });
+      if (!res.ok) {
+        setHasLiked(!newLiked);
+        setLikesCount((prev: number) => (newLiked ? Math.max(0, prev - 1) : prev + 1));
+      }
+    } catch (err) {
+      console.error(err);
+      setHasLiked(!newLiked);
+      setLikesCount((prev: number) => (newLiked ? Math.max(0, prev - 1) : prev + 1));
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
+  const toggleComments = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const nextState = !showComments;
+    setShowComments(nextState);
+
+    if (nextState && comments.length === 0) {
+      setLoadingComments(true);
+      try {
+        const res = await fetch(`/api/job-posts/${jobPost.id}/comments`);
+        const data = await res.json();
+        if (data.comments) {
+          setComments(data.comments);
+          setCommentsCount(data.comments.length);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoadingComments(false);
+      }
+    }
+  };
+
+  const handlePostComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!currentUserId) {
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/job-post/${jobPost.id}`)}`);
+      return;
+    }
+    if (!commentText.trim() || postingComment) return;
+
+    setPostingComment(true);
+    try {
+      const res = await fetch(`/api/job-posts/${jobPost.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: commentText.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.comment) {
+        setComments((prev: any[]) => [...prev, data.comment]);
+        setCommentsCount((prev: number) => prev + 1);
+        setCommentText("");
+      } else {
+        alert(data.error || "Failed to post comment");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setPostingComment(false);
+    }
+  };
+
   const handleShareWhatsapp = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = `${window.location.origin}/job-post/${jobPost.id}`;
-    const badgeEmoji = isSeeker ? "🔍" : "📢";
-    const text = `${badgeEmoji} *${jobPost.role}* ${jobPost.company ? `at ${jobPost.company}` : ''}\n${jobPost.description ? jobPost.description.slice(0, 120) + '...' : ''}\n\n👉 View details on ProxNet:\n${url}`;
+    const shortUrl = `${window.location.origin}/j/${jobPost.id}`;
+    const actionLabel = isSeeker ? "📩 Contact Candidate / Refer" : "🚀 Express Interest / Apply";
+    
+    const text = `${isSeeker ? "🔍" : "📢"} *${jobPost.role}* ${jobPost.company ? `at *${jobPost.company}*` : ''}\n${jobPost.location ? `📍 ${jobPost.location}\n` : ''}${jobPost.description ? `_"${jobPost.description.slice(0, 110)}..."_\n` : ''}\n${actionLabel}:\n${shortUrl}?action=interested`;
 
     if (typeof navigator !== "undefined" && navigator.share) {
       navigator.share({
         title: jobPost.role,
         text: text,
-        url: url,
+        url: shortUrl,
       }).catch(() => {});
     } else {
       window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
@@ -98,7 +194,7 @@ export function JobPostCard({
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this Job post?")) return;
+    if (!confirm("Are you sure you want to delete this job post?")) return;
 
     setIsDeleting(true);
     try {
@@ -123,100 +219,127 @@ export function JobPostCard({
     if (onEdit) onEdit(jobPost);
   };
 
-  const skillsList = jobPost.skills 
-    ? jobPost.skills.split(",").map((s: string) => s.trim()).filter(Boolean)
-    : [];
-
   return (
     <div 
       onClick={() => router.push(`/job-post/${jobPost.id}`)}
-      className="card p-5 bg-[var(--color-surface)] border border-[var(--color-border-light)] hover:shadow-md transition-all cursor-pointer rounded-2xl flex flex-col gap-3 group relative overflow-hidden"
+      className="card p-5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-sm hover:shadow-md transition-shadow cursor-pointer flex flex-col gap-3 relative overflow-hidden group"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] flex items-center justify-center font-bold text-sm border border-[var(--color-border)] shadow-sm shrink-0">
-            {jobPost.creator?.profile_photo_url ? (
-              <img src={jobPost.creator.profile_photo_url} alt={jobPost.creator.full_name} className="w-full h-full object-cover rounded-full" />
-            ) : (
-              <span>💼</span>
-            )}
-          </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-sm font-semibold text-[var(--color-text)] truncate">
-              {jobPost.creator?.full_name || "Neighbor"}
-            </span>
-            <span className="text-xs text-[var(--color-text-secondary)] truncate">
-              {jobPost.creator?.job_title} @ {jobPost.creator?.company}
-            </span>
-          </div>
-        </div>
+      {/* Top Bar: Badge & Creator Actions */}
+      <div className="flex justify-between items-start">
+        <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${badgeBg}`}>
+          {badgeText}
+        </span>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {isCreator && (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handleEdit}
-                className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--color-surface-secondary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)] transition-colors"
-                title="Edit Job Post"
-              >
-                ✏️ Edit
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors disabled:opacity-50"
-                title="Delete Job Post"
-              >
-                🗑️ Delete
-              </button>
-            </div>
-          )}
-
-          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${badgeBg} uppercase tracking-wider`}>
-            {badgeText}
-          </span>
-        </div>
+        {isCreator && (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleEdit}
+              className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--color-surface-secondary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)] transition-colors"
+              title="Edit Job Post"
+            >
+              ✏️ Edit
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+              title="Delete Job Post"
+            >
+              🗑️ Delete
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-col gap-1 mt-1">
-        <h3 className="text-lg font-bold text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors leading-snug">
-          {jobPost.role}
-        </h3>
+      {/* Role & Company Header */}
+      <div className="flex flex-col gap-0.5">
+        <h3 className="text-lg font-bold text-[var(--color-text)] leading-tight group-hover:text-[var(--color-primary)] transition-colors">{jobPost.role}</h3>
         {jobPost.company && (
-          <p className="text-xs text-[var(--color-text-secondary)] font-medium">
-            🏢 {jobPost.company} {jobPost.experience_years ? `• ⌛ ${jobPost.experience_years}` : ''}
+          <p className="text-sm font-semibold text-[var(--color-primary)] m-0 flex items-center gap-1">
+            <span>🏢</span> {jobPost.company}
           </p>
         )}
       </div>
 
+      {/* Metadata pills (Experience & Skills) */}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+        {jobPost.experience_years && (
+          <span className="bg-[var(--color-surface-secondary)] px-2 py-0.5 rounded font-medium border border-[var(--color-border-light)]">
+            ⏳ {jobPost.experience_years}
+          </span>
+        )}
+        {jobPost.skills && (
+          <span className="bg-[var(--color-surface-secondary)] px-2 py-0.5 rounded font-medium border border-[var(--color-border-light)] truncate max-w-[200px]">
+            🛠️ {jobPost.skills}
+          </span>
+        )}
+      </div>
+
+      {/* Description Snippet */}
       {jobPost.description && (
-        <p className="text-xs text-[var(--color-text-secondary)] line-clamp-2 leading-relaxed">
+        <p className="text-xs text-[var(--color-text-secondary)] line-clamp-2 m-0 leading-relaxed">
           {jobPost.description}
         </p>
       )}
 
-      {skillsList.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-1">
-          {skillsList.slice(0, 4).map((skill: string, i: number) => (
-            <span key={i} className="px-2 py-0.5 rounded-md bg-[var(--color-surface-secondary)] text-[10px] font-semibold text-[var(--color-text-secondary)] border border-[var(--color-border-light)]">
-              {skill}
-            </span>
-          ))}
-          {skillsList.length > 4 && (
-            <span className="text-[10px] text-[var(--color-text-tertiary)] self-center font-medium">
-              +{skillsList.length - 4} more
+      {/* Action Bar */}
+      <div className="flex items-center justify-between mt-2 pt-3 border-t border-[var(--color-border-light)]">
+        <div className="flex items-center gap-2">
+          {/* Role Specific RSVP Action Button */}
+          <button
+            disabled={isSubmitting}
+            onClick={handleInterest}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border-none ${
+              isInterested
+                ? "bg-emerald-600 text-white shadow-sm"
+                : isSeeker
+                ? "bg-[var(--color-primary)] text-white hover:opacity-90"
+                : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+            }`}
+          >
+            {isInterested
+              ? "✓ Interest Registered"
+              : isSeeker
+              ? "📩 Contact / Offer Referral"
+              : "🚀 Interested in Opportunity"}
+          </button>
+          
+          {interestedCount > 0 && (
+            <span className="text-xs font-semibold text-[var(--color-text-secondary)]">
+              {interestedCount} interested
             </span>
           )}
+
+          {/* Like Button */}
+          <button
+            onClick={handleLike}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors ${
+              hasLiked ? "bg-red-500/10 text-red-600 border border-red-200 dark:border-red-800" : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+            }`}
+            title="Like this Job Post"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={hasLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+            <span>{likesCount}</span>
+          </button>
+
+          {/* Comment Toggle Button */}
+          <button
+            onClick={toggleComments}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors ${
+              showComments ? "bg-[var(--color-primary-subtle)] text-[var(--color-primary)]" : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+            }`}
+            title="Comment on this Job Post"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span>{commentsCount}</span>
+          </button>
         </div>
-      )}
 
-      <div className="flex items-center justify-between mt-2 pt-3 border-t border-[var(--color-border-light)]">
-        <span className="text-xs text-[var(--color-text-tertiary)] font-medium flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
-          {interestedCount} Interested
-        </span>
-
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={handleShareWhatsapp}
             className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-[#25D366]/10 text-[#128C7E] hover:bg-[#25D366]/20 transition-colors flex items-center gap-1.5 cursor-pointer border border-[#25D366]/20"
@@ -228,26 +351,66 @@ export function JobPostCard({
             <span>WhatsApp</span>
           </button>
 
-          <button
+          <button 
             onClick={handleShare}
             className="p-1.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)] transition-colors rounded-lg hover:bg-[var(--color-primary-subtle)] flex items-center gap-1 text-xs font-semibold"
             title="Share with apps"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-          </button>
-
-          <button
-            onClick={handleInterest}
-            disabled={isSubmitting}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              isInterested
-                ? "bg-emerald-500/10 text-emerald-600 border border-emerald-300"
-                : "bg-[var(--color-primary)] text-white hover:opacity-90 shadow-sm"
-            }`}
-          >
-            {isInterested ? "✓ Interested" : "I'm Interested"}
+            <span className="hidden sm:inline">Share</span>
           </button>
         </div>
+      </div>
+
+      {/* Collapsible Inline Comments Section */}
+      {showComments && (
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="mt-3 pt-3 border-t border-[var(--color-border-light)] flex flex-col gap-3 animate-fadeIn"
+        >
+          <h4 className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Comments ({commentsCount})</h4>
+          
+          {loadingComments ? (
+            <div className="text-xs text-[var(--color-text-tertiary)] py-2">Loading comments...</div>
+          ) : comments.length === 0 ? (
+            <div className="text-xs text-[var(--color-text-tertiary)] italic">No comments yet. Be the first to comment!</div>
+          ) : (
+            <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+              {comments.map((c) => (
+                <div key={c.id} className="bg-[var(--color-surface-secondary)] p-2.5 rounded-lg border border-[var(--color-border-light)] flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-[var(--color-text)]">{c.user?.full_name || "Neighbor"}</span>
+                    <span className="text-[10px] text-[var(--color-text-tertiary)]">{new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <p className="text-xs text-[var(--color-text-secondary)] m-0">{c.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Comment Form */}
+          <form onSubmit={handlePostComment} className="flex gap-2 mt-1">
+            <input
+              type="text"
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="Write a comment..."
+              className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+            />
+            <button
+              type="submit"
+              disabled={postingComment || !commentText.trim()}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+            >
+              Send
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Creator Info */}
+      <div className="text-[10px] text-[var(--color-text-tertiary)] text-right mt-1">
+        Posted by {jobPost.creator?.full_name || "Neighbor"}
       </div>
     </div>
   );

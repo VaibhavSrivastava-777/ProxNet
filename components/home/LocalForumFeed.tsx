@@ -32,6 +32,8 @@ export function LocalForumFeed({
     fetcher,
     {
       refreshInterval: 30000,
+      revalidateOnFocus: false,
+      keepPreviousData: true,
     }
   );
 
@@ -51,11 +53,11 @@ export function LocalForumFeed({
 
   // Fetch events SWR based on location and radius
   const eventsUrl = `/api/events?lat=${activeLat ?? ''}&lng=${activeLng ?? ''}&radius=${filter2km ? 2000 : 50000}`;
-  const { data: eventsData } = useSWR(eventsUrl, fetcher, { refreshInterval: 30000 });
+  const { data: eventsData } = useSWR(eventsUrl, fetcher, { refreshInterval: 30000, revalidateOnFocus: false, keepPreviousData: true });
 
   // Fetch job posts SWR based on location and radius
   const jobPostsUrl = `/api/job-posts?lat=${activeLat ?? ''}&lng=${activeLng ?? ''}&radius=${filter2km ? 2000 : 50000}`;
-  const { data: jobPostsData } = useSWR(jobPostsUrl, fetcher, { refreshInterval: 30000 });
+  const { data: jobPostsData } = useSWR(jobPostsUrl, fetcher, { refreshInterval: 30000, revalidateOnFocus: false, keepPreviousData: true });
 
   const toggleExpand = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -422,57 +424,67 @@ export function LocalForumFeed({
 
       {/* Modal for creating General Post */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-[var(--color-surface)] rounded-2xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-[var(--color-border-light)] flex justify-between items-center">
-              <h3 className="text-h3 font-bold text-[var(--color-text)]">Create Forum Post (1 Credit)</h3>
+        <div 
+          onClick={() => setIsModalOpen(false)}
+          className="fixed inset-0 z-[1000] overflow-y-auto px-4 py-8 sm:p-8 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-start sm:justify-center animate-fadeIn"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[var(--color-surface)] rounded-2xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[75vh] max-h-[75dvh] shrink-0 border border-[var(--color-border)] relative"
+          >
+            <div className="p-4 border-b border-[var(--color-border-light)] flex justify-between items-center shrink-0 bg-[var(--color-surface)]">
+              <h3 className="text-h3 font-bold text-[var(--color-text)]">Create Forum Post</h3>
               <button onClick={() => setIsModalOpen(false)} className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] rounded-full hover:bg-[var(--color-surface-hover)]">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </button>
             </div>
-            <form onSubmit={handleCreatePost} className="p-5 flex flex-col gap-4">
-              <div>
-                <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Category</label>
-                <select
-                  value={postCategory}
-                  onChange={(e) => setPostCategory(e.target.value)}
-                  className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none bg-[var(--color-surface)]"
-                >
-                  <option value="General">General</option>
-                  <option value="Advice">Advice</option>
-                  <option value="Recommendation">Recommendation</option>
-                </select>
-              </div>
+            
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 overscroll-contain">
+              <form id="general-post-form" onSubmit={handleCreatePost} className="flex flex-col gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Category</label>
+                  <select
+                    value={postCategory}
+                    onChange={(e) => setPostCategory(e.target.value)}
+                    className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none bg-[var(--color-surface)]"
+                  >
+                    <option value="General">General</option>
+                    <option value="Advice">Advice</option>
+                    <option value="Recommendation">Recommendation</option>
+                  </select>
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Post Content *</label>
-                <textarea
-                  required
-                  rows={4}
-                  value={postBody}
-                  onChange={(e) => setPostBody(e.target.value)}
-                  placeholder="Share an update, ask for recommendations, or start a discussion with your neighbors..."
-                  className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none resize-none bg-[var(--color-surface)]"
-                />
-              </div>
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Post Content *</label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={postBody}
+                    onChange={(e) => setPostBody(e.target.value)}
+                    placeholder="Share an update, ask for recommendations, or start a discussion with your neighbors..."
+                    className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none resize-none bg-[var(--color-surface)]"
+                  />
+                </div>
+              </form>
+            </div>
 
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPosting || !postBody.trim()}
-                  className="px-6 py-2 rounded-xl bg-[var(--color-primary)] text-white font-bold disabled:opacity-50 hover:bg-[var(--color-primary-hover)] transition-colors"
-                >
-                  {isPosting ? "Posting..." : "Post (1 Credit)"}
-                </button>
-              </div>
-            </form>
+            <div className="p-4 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="general-post-form"
+                disabled={isPosting || !postBody.trim()}
+                className="px-6 py-2 rounded-xl bg-[var(--color-primary)] text-white font-bold disabled:opacity-50 hover:bg-[var(--color-primary-hover)] transition-colors cursor-pointer border-none"
+              >
+                {isPosting ? "Posting..." : "Post Message"}
+              </button>
+            </div>
           </div>
         </div>
       )}

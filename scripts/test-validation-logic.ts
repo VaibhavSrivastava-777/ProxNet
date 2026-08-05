@@ -34,11 +34,11 @@ runTest("Null full_name", { ...completeUser, full_name: null }, true);
 runTest("Missing email", { ...completeUser, email: "" }, true);
 runTest("Null email", { ...completeUser, email: null }, true);
 
-runTest("Missing company", { ...completeUser, company: "" }, true);
-runTest("Null company", { ...completeUser, company: null }, true);
+runTest("Missing company", { ...completeUser, company: "" }, false);
+runTest("Null company", { ...completeUser, company: null }, false);
 
-runTest("Missing job_title", { ...completeUser, job_title: "" }, true);
-runTest("Null job_title", { ...completeUser, job_title: null }, true);
+runTest("Missing job_title", { ...completeUser, job_title: "" }, false);
+runTest("Null job_title", { ...completeUser, job_title: null }, false);
 
 runTest("Missing resume_url", { ...completeUser, resume_url: "" }, false);
 runTest("Null resume_url", { ...completeUser, resume_url: null }, false);

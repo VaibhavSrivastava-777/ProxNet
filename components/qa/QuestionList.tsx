@@ -234,9 +234,9 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[], aiSession?: any }>(`/api/questions?locationMode=${locationMode}&_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000 });
-  const { data: jobInboxData } = useSWR<{ threads: any[] }>("/api/jobs/inbox", fetcher, { refreshInterval: 10000 });
-  const { data: notificationsData, mutate: mutateNotifications } = useSWR<{ notifications: any[] }>("/api/notifications", fetcher, { refreshInterval: 5000 });
+  const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[], aiSession?: any }>(`/api/questions?locationMode=${locationMode}&_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000, revalidateOnFocus: false, keepPreviousData: true });
+  const { data: jobInboxData } = useSWR<{ threads: any[] }>("/api/jobs/inbox", fetcher, { refreshInterval: 10000, revalidateOnFocus: false, keepPreviousData: true });
+  const { data: notificationsData, mutate: mutateNotifications } = useSWR<{ notifications: any[] }>("/api/notifications", fetcher, { refreshInterval: 5000, revalidateOnFocus: false, keepPreviousData: true });
 
   const asked = data?.asked || [];
   const referralThreads = jobInboxData?.threads || [];

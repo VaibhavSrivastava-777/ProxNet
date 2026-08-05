@@ -1,7 +1,8 @@
 {
   "name": "ProxNet",
   "short_name": "ProxNet",
-  "description": "Discover professionals living nearby, ask questions anonymously, and network.",
+  "description": "ProxNet connects you with verified professionals in your neighborhood — anonymously. Get insider job referrals, ask candid career questions, join local forums and meetups, and build genuine connections — all without revealing your identity.",
+  "lang": "en",
   "start_url": "/",
   "id": "/",
   "display": "standalone",

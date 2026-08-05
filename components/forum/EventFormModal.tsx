@@ -165,9 +165,15 @@ export function EventFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-[var(--color-surface)] rounded-2xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="p-4 border-b border-[var(--color-border-light)] flex justify-between items-center shrink-0">
+    <div 
+      onClick={onClose}
+      className="fixed inset-0 z-[1000] overflow-y-auto px-4 py-8 sm:p-8 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-start sm:justify-center animate-fadeIn"
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg bg-[var(--color-surface)] rounded-2xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[75vh] max-h-[75dvh] shrink-0 border border-[var(--color-border)] relative"
+      >
+        <div className="p-4 border-b border-[var(--color-border-light)] flex justify-between items-center shrink-0 bg-[var(--color-surface)]">
           <h3 className="text-h3 font-bold text-[var(--color-text)]">
             {isEditing ? "Edit Meetup" : "Create Meetup Event"}
           </h3>
@@ -176,7 +182,7 @@ export function EventFormModal({
           </button>
         </div>
         
-        <div className="p-5 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-5 overflow-y-auto flex-1 overscroll-contain">
           <form id="event-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Event Title *</label>
@@ -201,9 +207,20 @@ export function EventFormModal({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Provide event details, agenda, target audience, or prerequisites..."
+                rows={3}
+                className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none resize-none bg-[var(--color-surface)]"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Start Time *</label>
+                <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Starts At *</label>
                 <input
                   type="datetime-local"
                   required
@@ -213,10 +230,9 @@ export function EventFormModal({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">End Time *</label>
+                <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Ends At</label>
                 <input
                   type="datetime-local"
-                  required
                   value={endsAt}
                   onChange={(e) => setEndsAt(e.target.value)}
                   className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none bg-[var(--color-surface)]"
@@ -225,37 +241,26 @@ export function EventFormModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Venue Name *</label>
+              <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Venue Name / Location *</label>
               <LocationAutocomplete
                 value={venueName}
-                onChange={(address) => setVenueName(address)}
-                onSelect={(loc) => {
+                onChange={(val) => setVenueName(val)}
+                onSelect={(loc: any) => {
                   setVenueName(loc.name);
                   setVenueCoords({ lat: loc.lat, lng: loc.lng });
                 }}
-                placeholder="Search venue name or location..."
+                placeholder="e.g. Third Wave Coffee, HSR Sector 6"
+                className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none bg-[var(--color-surface)]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Pin Location on Map *</label>
+              <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Pin Map Location (Optional)</label>
               <LocationPicker
                 legend="Venue location Pin"
                 lat={venueCoords?.lat?.toString() || ""}
                 lng={venueCoords?.lng?.toString() || ""}
-                defaultShowMap={true}
                 onChange={(latStr, lngStr) => setVenueCoords({ lat: Number(latStr), lng: Number(lngStr) })}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Details about the agenda, who should attend, coffee arrangements, etc."
-                rows={3}
-                className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none resize-none bg-[var(--color-surface)]"
               />
             </div>
 
@@ -317,7 +322,7 @@ export function EventFormModal({
           </form>
         </div>
 
-        <div className="p-4 border-t border-[var(--color-border-light)] shrink-0 flex justify-end gap-3">
+        <div className="p-4 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 flex justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
@@ -329,9 +334,9 @@ export function EventFormModal({
             type="submit"
             form="event-form"
             disabled={isSubmitting}
-            className="px-6 py-2.5 rounded-lg text-sm font-bold bg-[#E56B42] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="px-6 py-2.5 rounded-lg text-sm font-bold bg-[#E56B42] text-white hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer border-none"
           >
-            {isSubmitting ? "Saving..." : isEditing ? "Save Changes" : "Create Meetup (1 Credit)"}
+            {isSubmitting ? "Saving..." : isEditing ? "Save Changes" : "Create Meetup"}
           </button>
         </div>
       </div>

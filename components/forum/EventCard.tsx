@@ -20,6 +20,20 @@ export function EventCard({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Like & Comment state
+  const initialLikes = event.likes || [];
+  const initialHasLiked = currentUserId ? initialLikes.some((l: any) => l.user_id === currentUserId) : false;
+  const [hasLiked, setHasLiked] = useState(initialHasLiked);
+  const [likesCount, setLikesCount] = useState(initialLikes.length);
+  const [isLiking, setIsLiking] = useState(false);
+
+  const [showComments, setShowComments] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [commentsCount, setCommentsCount] = useState(event.comments?.length || 0);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+
   const isCreator = currentUserId && (currentUserId === event.creator_id || currentUserId === event.user_id);
 
   // Parse attendees
@@ -32,7 +46,8 @@ export function EventCard({
   const handleRsvp = async (e: React.MouseEvent, status: string) => {
     e.stopPropagation();
     if (!currentUserId) {
-      alert("You must be logged in to RSVP.");
+      const cb = encodeURIComponent(`/event/${event.id}?auto_rsvp=${status}`);
+      router.push(`/login?callbackUrl=${cb}`);
       return;
     }
     
@@ -55,6 +70,88 @@ export function EventCard({
     }
   };
 
+  const handleLike = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentUserId) {
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/event/${event.id}`)}`);
+      return;
+    }
+    if (isLiking) return;
+
+    setIsLiking(true);
+    const newLiked = !hasLiked;
+    setHasLiked(newLiked);
+    setLikesCount((prev: number) => (newLiked ? prev + 1 : Math.max(0, prev - 1)));
+
+    try {
+      const res = await fetch(`/api/events/${event.id}/like`, { method: "POST" });
+      if (!res.ok) {
+        // Revert on error
+        setHasLiked(!newLiked);
+        setLikesCount((prev: number) => (newLiked ? Math.max(0, prev - 1) : prev + 1));
+      }
+    } catch (err) {
+      console.error(err);
+      setHasLiked(!newLiked);
+      setLikesCount((prev: number) => (newLiked ? Math.max(0, prev - 1) : prev + 1));
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
+  const toggleComments = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const nextState = !showComments;
+    setShowComments(nextState);
+
+    if (nextState && comments.length === 0) {
+      setLoadingComments(true);
+      try {
+        const res = await fetch(`/api/events/${event.id}/comments`);
+        const data = await res.json();
+        if (data.comments) {
+          setComments(data.comments);
+          setCommentsCount(data.comments.length);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoadingComments(false);
+      }
+    }
+  };
+
+  const handlePostComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!currentUserId) {
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/event/${event.id}`)}`);
+      return;
+    }
+    if (!commentText.trim() || postingComment) return;
+
+    setPostingComment(true);
+    try {
+      const res = await fetch(`/api/events/${event.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: commentText.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.comment) {
+        setComments((prev: any[]) => [...prev, data.comment]);
+        setCommentsCount((prev: number) => prev + 1);
+        setCommentText("");
+      } else {
+        alert(data.error || "Failed to post comment");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setPostingComment(false);
+    }
+  };
+
   const startObj = new Date(event.starts_at);
   const endObj = new Date(event.ends_at);
   const dateStr = startObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }).toUpperCase();
@@ -62,15 +159,16 @@ export function EventCard({
 
   const handleShareWhatsapp = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = `${window.location.origin}/event/${event.id}`;
+    const shortUrl = `${window.location.origin}/e/${event.id}`;
     const hostName = event.creator?.full_name || "Neighbor";
-    const text = `🤝 *PROXNET MEETUP*\n━━━━━━━━━━━━━━━━━━━\n📌 *${event.title}*\n${event.subtitle ? `_"${event.subtitle}"_\n` : ''}📅 *Date:* ${dateStr}\n⏰ *Time:* ${timeStr}\n📍 *Venue:* ${event.venue_name}\n👤 *Host:* ${hostName}\n\n👉 *View & RSVP on ProxNet:*\n${url}`;
+    
+    const text = `📌 *${event.title}*\n${event.subtitle ? `_"${event.subtitle}"_\n` : ''}\n📅 ${dateStr} • ${timeStr}\n📍 ${event.venue_name}\n👤 Hosted by ${hostName}\n\nRSVP in 1-tap:\n✅ Going: ${shortUrl}?auto_rsvp=yes\n❓ Maybe: ${shortUrl}?auto_rsvp=maybe`;
 
     if (typeof navigator !== "undefined" && navigator.share) {
       navigator.share({
         title: event.title,
         text: text,
-        url: url,
+        url: shortUrl,
       }).catch(() => {});
     } else {
       window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
@@ -183,7 +281,7 @@ export function EventCard({
 
       {/* Action Bar */}
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-border-light)]">
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <button 
             disabled={isSubmitting}
             onClick={(e) => handleRsvp(e, "yes")}
@@ -197,6 +295,34 @@ export function EventCard({
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${myRsvp === "maybe" ? "bg-[var(--color-border)] text-[var(--color-text)]" : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"}`}
           >
             ? Maybe
+          </button>
+
+          {/* Like Button */}
+          <button
+            onClick={handleLike}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors ${
+              hasLiked ? "bg-red-500/10 text-red-600 border border-red-200 dark:border-red-800" : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+            }`}
+            title="Like this Meetup"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={hasLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+            <span>{likesCount}</span>
+          </button>
+
+          {/* Comment Toggle Button */}
+          <button
+            onClick={toggleComments}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors ${
+              showComments ? "bg-[var(--color-primary-subtle)] text-[var(--color-primary)]" : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+            }`}
+            title="Comment on this Meetup"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span>{commentsCount}</span>
           </button>
         </div>
         
@@ -222,6 +348,52 @@ export function EventCard({
           </button>
         </div>
       </div>
+
+      {/* Collapsible Inline Comments Section */}
+      {showComments && (
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="mt-3 pt-3 border-t border-[var(--color-border-light)] flex flex-col gap-3 animate-fadeIn"
+        >
+          <h4 className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Comments ({commentsCount})</h4>
+          
+          {loadingComments ? (
+            <div className="text-xs text-[var(--color-text-tertiary)] py-2">Loading comments...</div>
+          ) : comments.length === 0 ? (
+            <div className="text-xs text-[var(--color-text-tertiary)] italic">No comments yet. Be the first to comment!</div>
+          ) : (
+            <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+              {comments.map((c) => (
+                <div key={c.id} className="bg-[var(--color-surface-secondary)] p-2.5 rounded-lg border border-[var(--color-border-light)] flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-[var(--color-text)]">{c.user?.full_name || "Neighbor"}</span>
+                    <span className="text-[10px] text-[var(--color-text-tertiary)]">{new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <p className="text-xs text-[var(--color-text-secondary)] m-0">{c.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Comment Form */}
+          <form onSubmit={handlePostComment} className="flex gap-2 mt-1">
+            <input
+              type="text"
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="Write a comment..."
+              className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)]"
+            />
+            <button
+              type="submit"
+              disabled={postingComment || !commentText.trim()}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+            >
+              Send
+            </button>
+          </form>
+        </div>
+      )}
       
       {/* Creator Info */}
       <div className="text-[10px] text-[var(--color-text-tertiary)] text-right mt-1">

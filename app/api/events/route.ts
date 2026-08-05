@@ -24,7 +24,9 @@ export async function GET(request: Request) {
     .select(`
       *,
       creator:users!events_creator_id_fkey(full_name, job_title, company, anonymous_name, home_lat, home_lng),
-      rsvps:event_rsvps(user_id, status)
+      rsvps:event_rsvps(user_id, status),
+      likes:event_likes(id, user_id, comment_id),
+      comments:event_comments(id)
     `)
     .eq("status", "active")
     .gte("ends_at", new Date().toISOString())
@@ -82,14 +84,6 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
 
-  // Check credit balance
-  const { data: userData } = await supabase.from("users").select("wallet").eq("id", user.id).single();
-  const currentWallet = userData?.wallet ?? 0;
-
-  if (currentWallet < 1) {
-    return NextResponse.json({ error: "Insufficient credits. You need at least 1 credit to create a Meetup." }, { status: 402 });
-  }
-
   const { data: event, error } = await supabase
     .from("events")
     .insert({
@@ -112,9 +106,6 @@ export async function POST(request: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
-  // Deduct 1 credit point
-  await supabase.from("users").update({ wallet: Math.max(0, currentWallet - 1) }).eq("id", user.id);
 
   // Auto RSVP creator as yes
   await supabase.from("event_rsvps").insert({

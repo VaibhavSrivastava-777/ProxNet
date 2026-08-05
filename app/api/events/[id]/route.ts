@@ -17,7 +17,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       rsvps:event_rsvps(
         status,
         user:users!event_rsvps_user_id_fkey(id, full_name, job_title, company, profile_photo_url)
-      )
+      ),
+      likes:event_likes(id, user_id, comment_id),
+      comments:event_comments(id)
     `)
     .eq("id", id)
     .single();

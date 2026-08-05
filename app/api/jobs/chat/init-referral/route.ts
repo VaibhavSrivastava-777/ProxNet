@@ -106,12 +106,5 @@ export async function POST(request: Request) {
     body: initialMsg
   });
 
-  // Attempt to charge the initiator 1 credit (fails gracefully if insufficient funds)
-  await supabase.rpc("charge_session", {
-    p_user_id: user.id,
-    p_session_id: thread.id,
-    amount: 1
-  });
-
-  return NextResponse.json({ threadId: thread.id, walletWarning: hasLowWallet });
+  return NextResponse.json({ threadId: thread.id, walletWarning: false });
 }

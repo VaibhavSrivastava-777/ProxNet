@@ -222,8 +222,6 @@ export function ProfileForm({ initialUser }: Props) {
   const hasMissingFields =
     showName ||
     showEmail ||
-    showCompany ||
-    showJobTitle ||
     showPhoto ||
     showLinkedIn ||
     showHomeLocation;
@@ -409,8 +407,6 @@ export function ProfileForm({ initialUser }: Props) {
 
   const isNameValid = !!user.full_name?.trim();
   const isEmailValid = !!user.email?.trim();
-  const isCompanyValid = !!user.company?.trim();
-  const isJobTitleValid = !!user.job_title?.trim();
   const isPhotoValid = !!user.profile_photo_url?.trim();
   const isLinkedInValid = !!user.linkedin_profile_url?.trim();
   const isHomeLocationValid = user.home_lat != null && user.home_lng != null;
@@ -418,8 +414,6 @@ export function ProfileForm({ initialUser }: Props) {
   const missingFields: string[] = [];
   if (!isNameValid) missingFields.push("Full Name");
   if (!isEmailValid) missingFields.push("Email Address");
-  if (!isCompanyValid) missingFields.push("Company");
-  if (!isJobTitleValid) missingFields.push("Designation");
   if (!isHomeLocationValid) missingFields.push("Home Location");
   if (!isLinkedInValid) missingFields.push("LinkedIn Link");
   if (!isPhotoValid) missingFields.push("Avatar Photo");
@@ -427,8 +421,6 @@ export function ProfileForm({ initialUser }: Props) {
   const canSubmit =
     isNameValid &&
     isEmailValid &&
-    isCompanyValid &&
-    isJobTitleValid &&
     isPhotoValid &&
     isLinkedInValid &&
     isHomeLocationValid &&
@@ -442,6 +434,22 @@ export function ProfileForm({ initialUser }: Props) {
     }
     setSaving(true);
     setMessage("");
+    const commitTags = (pendingText: string, currentTags: string[]) => {
+      if (!pendingText || !pendingText.trim()) return currentTags;
+      const parts = pendingText.split(",").map(p => p.trim()).filter(Boolean);
+      const updated = [...currentTags];
+      for (const raw of parts) {
+        let clean = raw.trim();
+        if (!clean) continue;
+        if (!clean.startsWith("#")) clean = `#${clean}`;
+        if (!updated.includes(clean)) updated.push(clean);
+      }
+      return updated;
+    };
+
+    const finalTags = commitTags(tagInput, user.tags || []);
+    setTagInput("");
+
     const res = await fetch("/api/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -463,7 +471,7 @@ export function ProfileForm({ initialUser }: Props) {
         office_lng: user.office_lng ? Number(user.office_lng) : null,
         office_name: user.office_name,
         anonymous_name: user.anonymous_name,
-        tags: user.tags || [],
+        tags: finalTags,
         active_location: "home",
         visibility,
       }),
@@ -526,6 +534,22 @@ export function ProfileForm({ initialUser }: Props) {
 
     setSaving(true);
     setMessage("");
+    const commitTags = (pendingText: string, currentTags: string[]) => {
+      if (!pendingText || !pendingText.trim()) return currentTags;
+      const parts = pendingText.split(",").map(p => p.trim()).filter(Boolean);
+      const updated = [...currentTags];
+      for (const raw of parts) {
+        let clean = raw.trim();
+        if (!clean) continue;
+        if (!clean.startsWith("#")) clean = `#${clean}`;
+        if (!updated.includes(clean)) updated.push(clean);
+      }
+      return updated;
+    };
+
+    const finalTags = commitTags(tagInput, user.tags || []);
+    setTagInput("");
+
     const res = await fetch("/api/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -547,7 +571,7 @@ export function ProfileForm({ initialUser }: Props) {
         office_lat: user.office_lat ? Number(user.office_lat) : null,
         office_lng: user.office_lng ? Number(user.office_lng) : null,
         anonymous_name: user.anonymous_name,
-        tags: user.tags || [],
+        tags: finalTags,
         active_location: "home",
         visibility,
       }),
@@ -622,7 +646,7 @@ export function ProfileForm({ initialUser }: Props) {
               clipRule="evenodd"
             />
           </svg>
-          <span>Complete your profile details. All 9 fields (Name, Email, Company, Job Title, Resume, Photo, LinkedIn, Home and Office locations) are required.</span>
+          <span>Complete your profile details. All required fields (Name, Email) must be filled.</span>
         </div>
       )}
 
@@ -868,31 +892,23 @@ export function ProfileForm({ initialUser }: Props) {
           </div>
 
           <div>
-            <label className="label">Company <span className="text-red-500">*</span></label>
+            <label className="label">Company</label>
             <input
               className="input"
-              style={showErrors && !user.company?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
               value={user.company ?? ""}
               placeholder="Where do you work?"
               onChange={(e) => setUser({ ...user, company: e.target.value })}
             />
-            {showErrors && !user.company?.trim() && (
-              <p className="text-xs text-red-500 mt-1">Company name is required</p>
-            )}
           </div>
 
           <div>
-            <label className="label">Job title <span className="text-red-500">*</span></label>
+            <label className="label">Job title</label>
             <input
               className="input"
-              style={showErrors && !user.job_title?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
               value={user.job_title ?? ""}
               placeholder="Your current role"
               onChange={(e) => setUser({ ...user, job_title: e.target.value })}
             />
-            {showErrors && !user.job_title?.trim() && (
-              <p className="text-xs text-red-500 mt-1">Job title is required</p>
-            )}
           </div>
 
           <div style={{ gridColumn: "1 / -1" }}>
@@ -901,33 +917,68 @@ export function ProfileForm({ initialUser }: Props) {
               <input
                 className="input"
                 value={tagInput}
-                placeholder="e.g. IIM Lucknow (Press Enter to add)"
-                onChange={(e) => setTagInput(e.target.value)}
+                placeholder="e.g. #IIM Lucknow, #FinTech (Press Enter or Comma to add)"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val.includes(",")) {
+                    const parts = val.split(",");
+                    const lastPart = parts.pop() || "";
+                    let updated = [...(user.tags || [])];
+                    for (const p of parts) {
+                      let clean = p.trim();
+                      if (!clean) continue;
+                      if (!clean.startsWith("#")) clean = `#${clean}`;
+                      if (!updated.includes(clean)) updated.push(clean);
+                    }
+                    setUser({ ...user, tags: updated });
+                    setTagInput(lastPart);
+                  } else {
+                    setTagInput(val);
+                  }
+                }}
+                onBlur={() => {
+                  if (tagInput.trim()) {
+                    let clean = tagInput.trim().replace(/^,|,$/g, "");
+                    if (clean) {
+                      if (!clean.startsWith("#")) clean = `#${clean}`;
+                      if (!(user.tags || []).includes(clean)) {
+                        setUser({ ...user, tags: [...(user.tags || []), clean] });
+                      }
+                    }
+                    setTagInput("");
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === ",") {
                     e.preventDefault();
-                    const val = tagInput.trim().replace(/^,|,$/g, "");
-                    if (val && !(user.tags || []).includes(val)) {
-                      setUser({ ...user, tags: [...(user.tags || []), val] });
+                    let clean = tagInput.trim().replace(/^,|,$/g, "");
+                    if (clean) {
+                      if (!clean.startsWith("#")) clean = `#${clean}`;
+                      if (!(user.tags || []).includes(clean)) {
+                        setUser({ ...user, tags: [...(user.tags || []), clean] });
+                      }
                     }
                     setTagInput("");
                   }
                 }}
               />
               <div className="flex flex-wrap gap-2">
-                {(user.tags || []).map((t) => (
-                  <span key={t} className="badge badge-primary flex items-center gap-1" style={{ padding: "4px 8px" }}>
-                    {t}
-                    <button
-                      type="button"
-                      onClick={() => setUser({ ...user, tags: user.tags.filter(tag => tag !== t) })}
-                      className="border-none bg-transparent text-white cursor-pointer hover:opacity-80"
-                      style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
-                    >
-                      &times;
-                    </button>
-                  </span>
-                ))}
+                {(user.tags || []).map((t) => {
+                  const displayTag = t.startsWith("#") ? t : `#${t}`;
+                  return (
+                    <span key={t} className="badge badge-primary flex items-center gap-1 font-semibold" style={{ padding: "4px 10px" }}>
+                      {displayTag}
+                      <button
+                        type="button"
+                        onClick={() => setUser({ ...user, tags: user.tags.filter(tag => tag !== t) })}
+                        className="border-none bg-transparent text-white cursor-pointer hover:opacity-80 ml-0.5"
+                        style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  );
+                })}
               </div>
             </div>
             <p className="text-[10px] text-[var(--color-text-secondary)] mt-1">
@@ -1482,11 +1533,11 @@ export function ProfileForm({ initialUser }: Props) {
                 </div>
               )}
 
-              {/* Professional & Personal Details Section (if name, company or designation is missing) */}
-              {(showName || showCompany || showJobTitle) && (
+              {/* Personal Details Section (if name is missing) */}
+              {showName && (
                 <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-4">
                   <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5">
-                    💼 Personal & Professional Details
+                    💼 Personal Details
                   </h4>
                   {showName && (
                     <div>
@@ -1501,38 +1552,6 @@ export function ProfileForm({ initialUser }: Props) {
                       />
                       {showErrors && !user.full_name?.trim() && (
                         <p className="text-xs text-red-500 mt-1">Full name is required</p>
-                      )}
-                    </div>
-                  )}
-                  {showCompany && (
-                    <div>
-                      <label className="label font-semibold text-xs mb-1">Company Name <span className="text-red-500">*</span></label>
-                      <input
-                        className="input w-full"
-                        style={showErrors && !user.company?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-                        value={user.company ?? ""}
-                        placeholder="e.g. Google, Microsoft, Lenovo"
-                        required
-                        onChange={(e) => setUser({ ...user, company: e.target.value })}
-                      />
-                      {showErrors && !user.company?.trim() && (
-                        <p className="text-xs text-red-500 mt-1">Company name is required</p>
-                      )}
-                    </div>
-                  )}
-                  {showJobTitle && (
-                    <div>
-                      <label className="label font-semibold text-xs mb-1">Job Title / Designation <span className="text-red-500">*</span></label>
-                      <input
-                        className="input w-full"
-                        style={showErrors && !user.job_title?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-                        value={user.job_title ?? ""}
-                        placeholder="e.g. Senior Software Engineer"
-                        required
-                        onChange={(e) => setUser({ ...user, job_title: e.target.value })}
-                      />
-                      {showErrors && !user.job_title?.trim() && (
-                        <p className="text-xs text-red-500 mt-1">Job title is required</p>
                       )}
                     </div>
                   )}

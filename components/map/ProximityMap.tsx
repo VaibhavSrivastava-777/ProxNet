@@ -206,9 +206,9 @@ export function ProximityMap() {
     ? `/api/events?lat=${center.lat}&lng=${center.lng}&radius=${filter2km ? 2000 : 50000}`
     : null;
 
-  const { data: clusterData, isLoading: clustersLoading, mutate: mutateClusters } = useSWR<{ clusters: CompanyCluster[] }>(aggregateApiUrl, fetcher);
-  const { data: peopleData, isLoading: peopleLoading, mutate: mutatePeople } = useSWR<{ people: any[] }>(peopleApiUrl, fetcher);
-  const { data: eventsData } = useSWR(eventsApiUrl, fetcher);
+  const { data: clusterData, isLoading: clustersLoading, mutate: mutateClusters } = useSWR<{ clusters: CompanyCluster[] }>(aggregateApiUrl, fetcher, { revalidateOnFocus: false, keepPreviousData: true });
+  const { data: peopleData, isLoading: peopleLoading, mutate: mutatePeople } = useSWR<{ people: any[] }>(peopleApiUrl, fetcher, { revalidateOnFocus: false, keepPreviousData: true });
+  const { data: eventsData } = useSWR(eventsApiUrl, fetcher, { revalidateOnFocus: false, keepPreviousData: true });
 
   const clusters = clusterData?.clusters ?? [];
   const people = peopleData?.people ?? [];
@@ -305,7 +305,66 @@ export function ProximityMap() {
         </div>
       )}
 
-      {/* ── 1. Consolidated Search Scope Card ── */}
+      {/* ── 1. Dedicated ProxNet AI Chat Card (Own Line on Network Tab) ── */}
+      <div className="flex flex-col gap-2.5 p-3.5 sm:p-4 rounded-xl border border-[var(--color-primary)]/20 bg-gradient-to-r from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-primary-subtle)]/30 shadow-sm animate-fadeInUp">
+        <div className="flex items-center justify-between cursor-pointer" onClick={() => router.push("/proxnet-ai")}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img src="/logo.png" alt="ProxNet AI" className="w-7 h-7 rounded-lg shadow-xs shrink-0" />
+            <div className="min-w-0">
+              <h4 className="text-body font-bold text-[var(--color-text)] flex items-center gap-1.5 m-0 leading-tight">
+                ProxNet AI Chat
+                <span className="text-[10px] font-semibold bg-[var(--color-primary-subtle)] text-[var(--color-primary)] px-2 py-0.5 rounded-full border border-[var(--color-primary)]/20 shrink-0">Assistant</span>
+              </h4>
+              <p className="text-[11px] text-[var(--color-text-secondary)] m-0 mt-0.5 truncate">Ask questions or search nearby professionals</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push("/proxnet-ai");
+            }}
+            className="text-xs font-semibold text-[var(--color-primary)] hover:underline flex items-center gap-1 shrink-0 bg-transparent border-none cursor-pointer"
+          >
+            Open Chat
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!aiQuery.trim()) return;
+            router.push(`/proxnet-ai?q=${encodeURIComponent(aiQuery.trim())}`);
+          }} 
+          className="relative w-full"
+        >
+          <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--color-primary)]">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <input
+            type="text"
+            className="w-full pl-10 pr-10 py-2.5 bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded-xl focus:outline-none focus:border-[var(--color-primary)] text-xs font-medium text-[var(--color-text)]"
+            placeholder={animatedPlaceholder}
+            value={aiQuery}
+            onChange={(e) => setAiQuery(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={!aiQuery.trim()}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-lg bg-[var(--color-primary)] text-white disabled:opacity-50 border-none cursor-pointer"
+            title="Send query to ProxNet AI"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+              <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+            </svg>
+          </button>
+        </form>
+      </div>
+
+      {/* ── 2. Consolidated Search Scope Card ── */}
       <div className="flex flex-col gap-2.5 p-3 sm:p-3.5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-sm animate-fadeInUp">
         <div className="flex flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
@@ -319,18 +378,27 @@ export function ProximityMap() {
             </div>
             <div>
               <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider">Search Scope</div>
-              <div className="text-body font-bold text-[var(--color-primary)] flex items-center gap-2">
-                <span>{locationMode === "home" ? "Home" : "Office"} &bull; {radiusLabel}</span>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <button
-                    type="button"
-                    onClick={() => setFiltersExpanded(!filtersExpanded)}
-                    className={`p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer border-none flex items-center justify-center ${filtersExpanded ? 'text-[var(--color-primary)] bg-[var(--color-primary-subtle)]' : 'text-[var(--color-text-secondary)] bg-transparent'}`}
-                    title="Filter Search Scope"
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                  </button>
-                </div>
+              <div className="text-body font-bold text-[var(--color-primary)] flex items-center gap-2 flex-wrap mt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setFilter2km(!filter2km)}
+                  className={`flex items-center gap-1.5 font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer text-xs border border-[var(--color-border-light)] ${
+                    filter2km
+                      ? "bg-[var(--color-primary-subtle)] text-[var(--color-primary)] shadow-xs"
+                      : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]"
+                  }`}
+                >
+                  <span>📍</span>
+                  <span>{filter2km ? "Within 2 km" : "All Distances"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltersExpanded(!filtersExpanded)}
+                  className={`p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer border-none flex items-center justify-center ${filtersExpanded ? 'text-[var(--color-primary)] bg-[var(--color-primary-subtle)]' : 'text-[var(--color-text-secondary)] bg-transparent'}`}
+                  title="Filter Search Scope"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                </button>
               </div>
             </div>
           </div>
@@ -373,38 +441,6 @@ export function ProximityMap() {
               </svg>
             </button>
           </div>
-
-          {/* Expanded AI Search Bar */}
-          <div className="w-full">
-            <form 
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!aiQuery.trim()) return;
-                router.push(`/proxnet-ai?q=${encodeURIComponent(aiQuery.trim())}`);
-              }} 
-              className="relative w-full"
-            >
-              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                <img src="/logo.png" alt="ProxNet AI" className="w-5 h-5 opacity-70 grayscale" />
-              </div>
-              <input
-                type="text"
-                className="w-full pl-10 pr-10 py-2.5 bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded-xl focus:outline-none focus:border-[var(--color-primary)] text-xs font-medium"
-                placeholder={animatedPlaceholder}
-                value={aiQuery}
-                onChange={(e) => setAiQuery(e.target.value)}
-              />
-              <button
-                type="submit"
-                disabled={!aiQuery.trim()}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-lg bg-[var(--color-primary)] text-white disabled:opacity-50 border-none"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
-                  <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
-                </svg>
-              </button>
-            </form>
-          </div>
         </div>
 
         {/* Collapsible filters pane inside the card */}
@@ -423,33 +459,43 @@ export function ProximityMap() {
               </select>
             </div>
 
-            <div style={{ flex: "1 1 200px", display: "flex", alignItems: "center", height: "38px" }}>
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-[var(--color-text)]">
-                <input
-                  type="checkbox"
-                  checked={filter2km}
-                  onChange={(e) => setFilter2km(e.target.checked)}
-                  style={{
-                    width: "16px",
-                    height: "16px",
-                    accentColor: "var(--color-primary)",
-                    cursor: "pointer",
-                  }}
-                />
-                <span>Limit search scope to 2 km</span>
-              </label>
+            <div style={{ flex: "1 1 180px" }}>
+              <label className="label text-[10px] font-bold uppercase tracking-wider mb-1 block">Distance Scope</label>
+              <button
+                type="button"
+                onClick={() => setFilter2km(!filter2km)}
+                className={`w-full flex items-center justify-center gap-2 font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-xs border border-[var(--color-border-light)] ${
+                  filter2km
+                    ? "bg-[var(--color-primary-subtle)] text-[var(--color-primary)] shadow-xs"
+                    : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]"
+                }`}
+              >
+                <span>📍</span>
+                <span>{filter2km ? "Within 2 km" : "All Distances"}</span>
+              </button>
             </div>
 
-            <div style={{ flex: "1 1 160px" }}>
+            <div style={{ flex: "1 1 180px" }}>
               <label className="label text-[10px] font-bold uppercase tracking-wider mb-1 block">Filter by Tag</label>
-              <input
-                type="text"
-                className="input w-full py-1.5 text-xs rounded-lg"
-                value={tagFilter}
-                onChange={(e) => setTagFilter(e.target.value)}
-                placeholder="e.g. IIM Lucknow"
-                style={{ color: "var(--color-text)", backgroundColor: "var(--color-surface-secondary)" }}
-              />
+              <div className="relative w-full">
+                <input
+                  type="text"
+                  className="input w-full py-1.5 text-xs rounded-lg pr-7"
+                  value={tagFilter}
+                  onChange={(e) => setTagFilter(e.target.value)}
+                  placeholder="e.g. #IIM Lucknow"
+                  style={{ color: "var(--color-text)", backgroundColor: "var(--color-surface-secondary)" }}
+                />
+                {tagFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setTagFilter("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border-none bg-transparent cursor-pointer"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
             </div>
 
             <button

@@ -1,11 +1,23 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
+import { getAdminSession } from "@/lib/admin-session";
+
+export async function GET(request: Request) {
+  return handleEventReminders(request);
+}
 
 export async function POST(request: Request) {
-  // Check authorization header
+  return handleEventReminders(request);
+}
+
+async function handleEventReminders(request: Request) {
+  // Authorization check (Vercel Cron Secret or Admin Session)
   const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  const adminSession = await getAdminSession();
+
+  if (!isCron && !adminSession) {
     return new Response('Unauthorized', { status: 401 });
   }
 

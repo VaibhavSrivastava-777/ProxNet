@@ -156,9 +156,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         width: 1200,
         height: 630,
         headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
-          'Pragma': 'no-cache',
-          'Expires': '0',
+          'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
         }
       }
     );

@@ -446,19 +446,9 @@ export async function POST(request: Request) {
   }
 
   let sessionId: string | undefined = undefined;
-  let hasLowWallet = false;
   const supabase = createAdminClient();
 
-  // Check credit balance for creating post
-  const { data: userData } = await supabase.from("users").select("wallet").eq("id", user.id).single();
-  const currentWallet = userData?.wallet ?? 0;
-
-  if (currentWallet < 1) {
-    return NextResponse.json({ error: "Insufficient credits. You need at least 1 credit to create a post." }, { status: 402 });
-  }
-
   if (targetUserId) {
-    hasLowWallet = currentWallet < 1;
 
     const { data: existingTargets } = await supabase
       .from("question_targets")
@@ -634,9 +624,6 @@ Never mention that you are an AI assistant or simulated user. Play your characte
 
   if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
 
-  // Deduct 1 credit point for creating a post
-  await supabase.from("users").update({ wallet: Math.max(0, currentWallet - 1) }).eq("id", user.id);
-
   // Award points to the inviter if this is the invitee's first question
   if (user.invited_by) {
     const { count } = await supabase
@@ -726,13 +713,6 @@ Never mention that you are an AI assistant or simulated user. Play your characte
           { session_id: session.id, user_id: user.id, alias: getAlias(asker, "resident") },
           { session_id: session.id, user_id: targetUserId, alias: getAlias(pro, "professional") },
         ]);
-
-        // Attempt to charge the initiator 1 credit (fails gracefully if insufficient funds)
-        await supabase.rpc("charge_session", {
-          p_user_id: user.id,
-          p_session_id: session.id,
-          amount: 1
-        });
       }
     } else {
       const { data: users } = await supabase
@@ -777,7 +757,7 @@ Never mention that you are an AI assistant or simulated user. Play your characte
         console.error("Bulk notifications trigger error:", err);
       }
     }
-    return NextResponse.json({ question, targetCount: targets.length, sessionId, walletWarning: targetUserId && hasLowWallet });
+    return NextResponse.json({ question, targetCount: targets.length, sessionId, walletWarning: false });
   }
 
   return NextResponse.json({ question, targetCount: 0 });

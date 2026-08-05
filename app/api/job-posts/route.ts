@@ -24,7 +24,9 @@ export async function GET(request: Request) {
     .select(`
       *,
       creator:users!job_posts_user_id_fkey(full_name, job_title, company, profile_photo_url, home_lat, home_lng),
-      interests:job_post_interests(user_id, status)
+      interests:job_post_interests(user_id, status),
+      likes:job_post_likes(id, user_id),
+      comments:job_post_comments(id)
     `)
     .eq("status", "active")
     .order("created_at", { ascending: false });
@@ -82,14 +84,6 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
 
-  // Check credit balance
-  const { data: userData } = await supabase.from("users").select("wallet").eq("id", user.id).single();
-  const currentWallet = userData?.wallet ?? 0;
-
-  if (currentWallet < 1) {
-    return NextResponse.json({ error: "Insufficient credits. You need at least 1 credit to create a Job Post." }, { status: 402 });
-  }
-
   const finalLat = centerLat || user.home_lat || 28.6139;
   const finalLng = centerLng || user.home_lng || 77.2090;
 
@@ -115,9 +109,6 @@ export async function POST(request: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
-  // Deduct 1 credit point
-  await supabase.from("users").update({ wallet: Math.max(0, currentWallet - 1) }).eq("id", user.id);
 
   // Auto add creator as interested
   await supabase.from("job_post_interests").insert({
