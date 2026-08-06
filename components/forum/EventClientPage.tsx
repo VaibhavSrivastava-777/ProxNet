@@ -195,11 +195,18 @@ export function EventClientPage({ id }: { id: string }) {
   const handleShareWhatsapp = () => {
     const shortUrl = `${window.location.origin}/e/${event.id}`;
     const hostName = event.creator?.full_name || "Neighbor";
-    
-    const agenda = event.subtitle || (event.description ? (event.description.length > 120 ? event.description.substring(0, 120) + '...' : event.description) : '');
-    const agendaLine = agenda ? `📋 *Agenda:* ${agenda}\n` : '';
 
-    const text = `📌 *${event.title}*\n${agendaLine}📅 ${dateStr} • ${timeStr}\n📍 ${event.venue_name}\n👤 Hosted by ${hostName}\n\nRSVP in 1-tap:\n✅ Going: ${shortUrl}?auto_rsvp=yes\n❓ Maybe: ${shortUrl}?auto_rsvp=maybe`;
+    const titleLine = `📌 *${event.title.trim()}*`;
+    const subtitleLine = event.subtitle?.trim() ? `\n🔹 *${event.subtitle.trim()}*` : "";
+
+    const rawDesc = event.description?.trim() || "";
+    const agendaText = rawDesc.length > 200 ? `${rawDesc.substring(0, 200)}...` : rawDesc;
+    const agendaLine = agendaText ? `\n📋 *Agenda:* *${agendaText}*` : "";
+
+    const eventInfo = `\n\n📅 ${dateStr} • ${timeStr}\n📍 ${event.venue_name}\n👤 Hosted by ${hostName}`;
+    const rsvpBlock = `\n\n*RSVP in 1-tap:*\n\n✅ Going:\n${shortUrl}?auto_rsvp=yes\n\n❓ Maybe:\n${shortUrl}?auto_rsvp=maybe`;
+
+    const text = `${titleLine}${subtitleLine}${agendaLine}${eventInfo}${rsvpBlock}`;
 
     if (typeof navigator !== "undefined" && navigator.share) {
       navigator.share({
