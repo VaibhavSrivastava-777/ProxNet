@@ -159,15 +159,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const dateStr = startObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "Asia/Kolkata" });
   const timeStr = startObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 
-  const rawAgenda = event.subtitle || event.description || "";
-  const agendaText = rawAgenda.trim()
-    ? ` Agenda: "${rawAgenda.trim().length > 70 ? rawAgenda.trim().substring(0, 70) + '...' : rawAgenda.trim()}"`
+  const notificationTitle = targetMode === "radius_2km"
+    ? `Meetup Nearby: ${event.title} • ${dateStr}, ${timeStr} @ ${event.venue_name}`
+    : `Reminder: ${event.title} • ${dateStr}, ${timeStr} @ ${event.venue_name}`;
+
+  const rawAgenda = (event.description || "").trim();
+  const agendaText = rawAgenda
+    ? `📋 Agenda: ${rawAgenda.length > 120 ? rawAgenda.substring(0, 120) + "..." : rawAgenda}`
     : "";
 
-  const notificationTitle = targetMode === "radius_2km" ? `Meetup Nearby: ${event.title}` : `Reminder: ${event.title}`;
   const notificationBody = targetMode === "radius_2km"
-    ? `ProxNet Meetup alert: "${event.title}" is happening near you on ${dateStr} at ${timeStr} (${event.venue_name}).${agendaText} Tap to view and RSVP!`
-    : `Organizer Reminder: "${event.title}" is coming up on ${dateStr} at ${timeStr} (${event.venue_name}).${agendaText}`;
+    ? (agendaText ? `${agendaText} • Tap to view & RSVP!` : `ProxNet Meetup alert: Happening near you on ${dateStr} at ${timeStr}. Tap to view & RSVP!`)
+    : (agendaText ? `${agendaText}` : `Organizer Reminder: "${event.title}" is coming up on ${dateStr} at ${timeStr}.`);
 
   for (const targetUserId of Array.from(targetUserIds)) {
     await sendNotification(targetUserId, {

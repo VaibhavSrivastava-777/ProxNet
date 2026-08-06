@@ -56,23 +56,33 @@ async function handleEventReminders(request: Request) {
     const goingAndMaybe = rsvps.filter((r: any) => ["yes", "maybe"].includes(r.status));
     const goingOnly = rsvps.filter((r: any) => r.status === "yes");
 
-    const rawAgenda = event.subtitle || event.description || "";
-    const agendaText = rawAgenda.trim()
-      ? ` Agenda: "${rawAgenda.trim().length > 60 ? rawAgenda.trim().substring(0, 60) + '...' : rawAgenda.trim()}"`
+    const startObj = new Date(event.starts_at);
+    const dateStr = startObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "Asia/Kolkata" });
+    const timeStr = startObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+
+    const rawAgenda = (event.description || "").trim();
+    const agendaText = rawAgenda
+      ? `📋 Agenda: ${rawAgenda.length > 100 ? rawAgenda.substring(0, 100) + "..." : rawAgenda}`
       : "";
+
+    let notificationTitle = "";
 
     if (hoursUntilStart <= 72 && hoursUntilStart > 48) {
       notificationType = "3d";
-      messageBody = `Reminder: "${event.title}" is in 3 days.${agendaText} ${goingOnly.length} going.`;
+      notificationTitle = `Meetup in 3 Days: ${event.title} • ${dateStr}, ${timeStr} @ ${event.venue_name}`;
+      messageBody = agendaText ? `${agendaText} • ${goingOnly.length} going.` : `${goingOnly.length} going. Tap to view details!`;
     } else if (hoursUntilStart <= 24 && hoursUntilStart > 12) {
       notificationType = "1d";
-      messageBody = `Tomorrow: "${event.title}" at ${new Date(event.starts_at).toLocaleTimeString("en-US", {hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata"})}.${agendaText}`;
+      notificationTitle = `Meetup Tomorrow: ${event.title} • ${dateStr}, ${timeStr} @ ${event.venue_name}`;
+      messageBody = agendaText ? `${agendaText}` : `Meetup is tomorrow at ${timeStr}.`;
     } else if (hoursUntilStart <= 4 && hoursUntilStart > 1) {
       notificationType = "4h";
-      messageBody = `Starting soon: "${event.title}" at ${event.venue_name}.${agendaText}`;
+      notificationTitle = `Meetup Soon (4h): ${event.title} • Today, ${timeStr} @ ${event.venue_name}`;
+      messageBody = agendaText ? `${agendaText}` : `Starting in 4 hours at ${event.venue_name}.`;
     } else if (hoursUntilStart <= 0.25) {
       notificationType = "start";
-      messageBody = `Happening now: "${event.title}".${agendaText} Tap for directions.`;
+      notificationTitle = `Meetup Starting Now: ${event.title} @ ${event.venue_name}`;
+      messageBody = agendaText ? `${agendaText} • Tap for directions.` : `Happening now at ${event.venue_name}. Tap for directions.`;
     }
 
     if (!notificationType) continue;
@@ -94,7 +104,7 @@ async function handleEventReminders(request: Request) {
       if (!existingLog) {
         // Send and log
         await sendNotification(targetUserId, {
-          title: "Meetup Update",
+          title: notificationTitle,
           body: messageBody,
           url: `/event/${event.id}`
         });

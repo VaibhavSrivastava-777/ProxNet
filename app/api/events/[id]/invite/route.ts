@@ -17,12 +17,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const supabase = createAdminClient();
 
-  const { data: event } = await supabase.from("events").select("title, subtitle, description").eq("id", id).single();
+  const { data: event } = await supabase.from("events").select("title, starts_at, venue_name, description").eq("id", id).single();
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
-  const rawAgenda = event.subtitle || event.description || "";
-  const agendaText = rawAgenda.trim()
-    ? ` Agenda: "${rawAgenda.trim().length > 60 ? rawAgenda.trim().substring(0, 60) + '...' : rawAgenda.trim()}"`
+  const startObj = new Date(event.starts_at);
+  const dateStr = startObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "Asia/Kolkata" });
+  const timeStr = startObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+
+  const notificationTitle = `Event Invite: ${event.title} • ${dateStr}, ${timeStr} @ ${event.venue_name}`;
+
+  const rawAgenda = (event.description || "").trim();
+  const agendaText = rawAgenda
+    ? `📋 Agenda: ${rawAgenda.length > 100 ? rawAgenda.substring(0, 100) + "..." : rawAgenda}`
     : "";
 
   const invitesToInsert = userIds.map((targetId: string) => ({
@@ -45,8 +51,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   for (const targetId of userIds) {
     if (targetId !== user.id) {
       await sendNotification(targetId, {
-        title: "New Event Invite",
-        body: `${user.full_name} invited you to "${event.title}".${agendaText}`,
+        title: notificationTitle,
+        body: `${user.full_name} invited you to this meetup.${agendaText ? ` ${agendaText}` : ""}`,
         url: `/event/${id}`,
       }).catch(e => console.error("Push failed for", targetId, e));
     }

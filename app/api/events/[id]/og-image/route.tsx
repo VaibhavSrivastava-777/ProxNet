@@ -115,7 +115,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           </div>
 
           {/* Agenda Section */}
-          {(event.description || event.subtitle) && (
+          {event.description?.trim() && (
             <div style={{ 
               display: 'flex', 
               flexDirection: 'column', 
@@ -128,13 +128,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
               marginBottom: '12px'
             }}>
               <div style={{ display: 'flex', fontSize: 16, fontWeight: 800, color: '#4F46E5', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>
-                📋 Agenda / Overview
+                📋 Agenda
               </div>
               <div style={{ display: 'flex', fontSize: 20, fontWeight: 600, color: '#1E1B4B', lineHeight: 1.35 }}>
-                {(() => {
-                  const text = event.description || event.subtitle;
-                  return text.length > 140 ? `${text.substring(0, 140)}...` : text;
-                })()}
+                {event.description.trim().length > 140 ? `${event.description.trim().substring(0, 140)}...` : event.description.trim()}
               </div>
             </div>
           )}
