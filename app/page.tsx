@@ -80,7 +80,7 @@ export default async function HomePage({
           <div className="flex flex-col items-center justify-center gap-4">
 
             <LoginButton className="btn btn-linkedin btn-lg shadow-xl shadow-black/20" />
-            <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • GOOGLE VERIFIED • FREE TO USE</p>
+            <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • GOOGLE & LINKEDIN VERIFIED • FREE TO USE</p>
           </div>
         </div>
       </section>

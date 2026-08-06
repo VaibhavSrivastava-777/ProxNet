@@ -226,7 +226,8 @@ export function ProximityMap() {
       (p.profile_digest?.skills && p.profile_digest.skills.some((s: string) => s.toLowerCase().includes(qFilter)))
     );
   }
-  const loading = clustersLoading || peopleLoading;
+  const isInitializing = !profile || !center;
+  const loading = isInitializing || clustersLoading || peopleLoading || (!peopleData && !localError);
   const error = localError;
 
   const refreshAll = () => {
@@ -527,9 +528,19 @@ export function ProximityMap() {
         /* ── LIST VIEW: scrollable nearby people sorted by similarity ── */
         <div className="flex flex-col gap-3 min-h-[300px]">
           {loading && people.length === 0 ? (
-            <div className="flex flex-col gap-3">
-              <div className="skeleton h-20 rounded-xl" />
-              <div className="skeleton h-20 rounded-xl" />
+            <div className="card p-8 text-center border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/50 rounded-xl flex flex-col items-center justify-center gap-3 animate-fadeIn py-12">
+              <div className="relative w-10 h-10 flex items-center justify-center">
+                <span className="spinner w-8 h-8 text-[var(--color-primary)]" />
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <p className="text-body font-bold text-[var(--color-text)] m-0">Connecting to your local network...</p>
+                <p className="text-caption text-[var(--color-text-secondary)] m-0">Finding verified professionals near your location</p>
+              </div>
+              <div className="w-full max-w-md flex flex-col gap-2.5 mt-3">
+                <div className="skeleton h-16 rounded-xl w-full" />
+                <div className="skeleton h-16 rounded-xl w-full opacity-70" />
+                <div className="skeleton h-16 rounded-xl w-full opacity-40" />
+              </div>
             </div>
           ) : filteredPeople.length === 0 ? (
             <div className="card p-8 text-center border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/50 rounded-xl">
