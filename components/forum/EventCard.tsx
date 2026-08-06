@@ -164,7 +164,10 @@ export function EventCard({
     const shortUrl = `${window.location.origin}/e/${event.id}`;
     const hostName = event.creator?.full_name || "Neighbor";
     
-    const text = `📌 *${event.title}*\n${event.subtitle ? `_"${event.subtitle}"_\n` : ''}\n📅 ${dateStr} • ${timeStr}\n📍 ${event.venue_name}\n👤 Hosted by ${hostName}\n\nRSVP in 1-tap:\n✅ Going: ${shortUrl}?auto_rsvp=yes\n❓ Maybe: ${shortUrl}?auto_rsvp=maybe`;
+    const agenda = event.subtitle || (event.description ? (event.description.length > 120 ? event.description.substring(0, 120) + '...' : event.description) : '');
+    const agendaLine = agenda ? `📋 *Agenda:* ${agenda}\n` : '';
+
+    const text = `📌 *${event.title}*\n${agendaLine}📅 ${dateStr} • ${timeStr}\n📍 ${event.venue_name}\n👤 Hosted by ${hostName}\n\nRSVP in 1-tap:\n✅ Going: ${shortUrl}?auto_rsvp=yes\n❓ Maybe: ${shortUrl}?auto_rsvp=maybe`;
 
     if (typeof navigator !== "undefined" && navigator.share) {
       navigator.share({

@@ -31,7 +31,7 @@ async function handleEventReminders(request: Request) {
   const { data: events, error } = await supabase
     .from("events")
     .select(`
-      id, title, starts_at, venue_name,
+      id, title, subtitle, description, starts_at, venue_name,
       rsvps:event_rsvps(user_id, status)
     `)
     .eq("status", "active")
@@ -56,18 +56,23 @@ async function handleEventReminders(request: Request) {
     const goingAndMaybe = rsvps.filter((r: any) => ["yes", "maybe"].includes(r.status));
     const goingOnly = rsvps.filter((r: any) => r.status === "yes");
 
+    const rawAgenda = event.subtitle || event.description || "";
+    const agendaText = rawAgenda.trim()
+      ? ` Agenda: "${rawAgenda.trim().length > 60 ? rawAgenda.trim().substring(0, 60) + '...' : rawAgenda.trim()}"`
+      : "";
+
     if (hoursUntilStart <= 72 && hoursUntilStart > 48) {
       notificationType = "3d";
-      messageBody = `Reminder: "${event.title}" is in 3 days. ${goingOnly.length} going.`;
+      messageBody = `Reminder: "${event.title}" is in 3 days.${agendaText} ${goingOnly.length} going.`;
     } else if (hoursUntilStart <= 24 && hoursUntilStart > 12) {
       notificationType = "1d";
-      messageBody = `Tomorrow: "${event.title}" at ${new Date(event.starts_at).toLocaleTimeString("en-US", {hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata"})}.`;
+      messageBody = `Tomorrow: "${event.title}" at ${new Date(event.starts_at).toLocaleTimeString("en-US", {hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata"})}.${agendaText}`;
     } else if (hoursUntilStart <= 4 && hoursUntilStart > 1) {
       notificationType = "4h";
-      messageBody = `Starting soon: "${event.title}" at ${event.venue_name}.`;
+      messageBody = `Starting soon: "${event.title}" at ${event.venue_name}.${agendaText}`;
     } else if (hoursUntilStart <= 0.25) {
       notificationType = "start";
-      messageBody = `Happening now: "${event.title}". Tap for directions.`;
+      messageBody = `Happening now: "${event.title}".${agendaText} Tap for directions.`;
     }
 
     if (!notificationType) continue;

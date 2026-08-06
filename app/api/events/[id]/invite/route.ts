@@ -17,8 +17,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const supabase = createAdminClient();
 
-  const { data: event } = await supabase.from("events").select("title").eq("id", id).single();
+  const { data: event } = await supabase.from("events").select("title, subtitle, description").eq("id", id).single();
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
+
+  const rawAgenda = event.subtitle || event.description || "";
+  const agendaText = rawAgenda.trim()
+    ? ` Agenda: "${rawAgenda.trim().length > 60 ? rawAgenda.trim().substring(0, 60) + '...' : rawAgenda.trim()}"`
+    : "";
 
   const invitesToInsert = userIds.map((targetId: string) => ({
     event_id: id,
@@ -41,7 +46,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (targetId !== user.id) {
       await sendNotification(targetId, {
         title: "New Event Invite",
-        body: `${user.full_name} invited you to ${event.title}`,
+        body: `${user.full_name} invited you to "${event.title}".${agendaText}`,
         url: `/event/${id}`,
       }).catch(e => console.error("Push failed for", targetId, e));
     }

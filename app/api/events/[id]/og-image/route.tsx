@@ -97,9 +97,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           </div>
 
           {/* Title & Subtitle */}
-          <div style={{ display: 'flex', flexDirection: 'column', marginTop: '16px', marginBottom: '16px', width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', marginTop: '12px', marginBottom: '12px', width: '100%' }}>
             <div style={{ 
-              fontSize: 56, 
+              fontSize: 52, 
               fontWeight: 900,
               color: '#111827',
               lineHeight: 1.15,
@@ -108,11 +108,36 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
               {event.title}
             </div>
             {event.subtitle && (
-              <div style={{ fontSize: 26, fontWeight: 600, color: '#4B5563', marginTop: '10px' }}>
+              <div style={{ fontSize: 24, fontWeight: 600, color: '#4B5563', marginTop: '8px' }}>
                 {event.subtitle}
               </div>
             )}
           </div>
+
+          {/* Agenda Section */}
+          {(event.description || event.subtitle) && (
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              width: '100%', 
+              backgroundColor: '#EEF2FF', 
+              padding: '16px 24px', 
+              borderRadius: '16px', 
+              borderLeft: '5px solid #4F46E5',
+              marginTop: '8px',
+              marginBottom: '12px'
+            }}>
+              <div style={{ display: 'flex', fontSize: 16, fontWeight: 800, color: '#4F46E5', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>
+                📋 Agenda / Overview
+              </div>
+              <div style={{ display: 'flex', fontSize: 20, fontWeight: 600, color: '#1E1B4B', lineHeight: 1.35 }}>
+                {(() => {
+                  const text = event.description || event.subtitle;
+                  return text.length > 140 ? `${text.substring(0, 140)}...` : text;
+                })()}
+              </div>
+            </div>
+          )}
 
           {/* Snapshot Grid: Venue & Time */}
           <div style={{ 
