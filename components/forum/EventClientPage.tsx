@@ -52,12 +52,12 @@ export function EventClientPage({ id }: { id: string }) {
   }, [data, currentUserId]);
 
   useEffect(() => {
-    if (autoRsvp && isLoggedIn && data?.event) {
+    if (autoRsvp && data?.event) {
       handleRsvp(autoRsvp);
       const newUrl = `/event/${id}`;
       window.history.replaceState({}, "", newUrl);
     }
-  }, [autoRsvp, isLoggedIn, data]);
+  }, [autoRsvp, data]);
 
   if (isLoading) {
     return (
@@ -84,12 +84,6 @@ export function EventClientPage({ id }: { id: string }) {
   const maybe = rsvps.filter((r: any) => r.status === "maybe");
 
   const handleRsvp = async (status: string) => {
-    if (!isLoggedIn) {
-      const cb = encodeURIComponent(`/event/${event.id}?auto_rsvp=${status}`);
-      router.push(`/login?callbackUrl=${cb}`);
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       const res = await fetch(`/api/events/${event.id}/rsvp`, {

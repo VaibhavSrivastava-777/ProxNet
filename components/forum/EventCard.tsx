@@ -47,12 +47,6 @@ export function EventCard({
 
   const handleRsvp = async (e: React.MouseEvent, status: string) => {
     e.stopPropagation();
-    if (!currentUserId) {
-      const cb = encodeURIComponent(`/event/${event.id}?auto_rsvp=${status}`);
-      router.push(`/login?callbackUrl=${cb}`);
-      return;
-    }
-    
     setIsSubmitting(true);
     try {
       const res = await fetch(`/api/events/${event.id}/rsvp`, {

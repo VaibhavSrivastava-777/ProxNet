@@ -3,6 +3,7 @@ import { normalizeLinkedInUrl } from "./linkedin/normalize-url";
 import { isSupabaseConfigured } from "./supabase/is-configured";
 import { awardPoints } from "./award-points";
 import type { User, UserVisibility } from "./types";
+import { cookies } from "next/headers";
 
 /**
  * Generate a unique 8-character invite code prefixed with "PX-".
@@ -62,6 +63,46 @@ export async function findUserById(id: string) {
   return data as User | null;
 }
 
+async function claimAnonymousRsvps(userId: string) {
+  try {
+    const cookieStore = await cookies();
+    const anonId = cookieStore.get("proxnet_anon_id")?.value;
+    if (!anonId) return;
+
+    const supabase = createAdminClient();
+    const { data: anonUser } = await supabase
+      .from("users")
+      .select("id")
+      .eq("linkedin_sub", anonId)
+      .maybeSingle();
+
+    if (anonUser) {
+      const { data: anonRsvps } = await supabase
+        .from("event_rsvps")
+        .select("id, event_id, status")
+        .eq("user_id", anonUser.id);
+
+      if (anonRsvps && anonRsvps.length > 0) {
+        for (const r of anonRsvps) {
+          await supabase.from("event_rsvps").upsert(
+            {
+              event_id: r.event_id,
+              user_id: userId,
+              status: r.status,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "event_id,user_id" }
+          );
+        }
+        await supabase.from("event_rsvps").delete().eq("user_id", anonUser.id);
+        await supabase.from("users").delete().eq("id", anonUser.id);
+      }
+    }
+  } catch (err) {
+    console.error("Error claiming anonymous RSVPs:", err);
+  }
+}
+
 export async function upsertOAuthUser(params: {
   sub: string;
   email?: string | null;
@@ -117,6 +158,7 @@ export async function upsertOAuthUser(params: {
       .select("*")
       .single();
     if (error) throw error;
+    await claimAnonymousRsvps(existing.id);
     return data as User;
   }
 
@@ -167,6 +209,8 @@ export async function upsertOAuthUser(params: {
     .select("*")
     .single();
   if (error) throw error;
+
+  await claimAnonymousRsvps(data.id);
 
   // Post-signup: award points to the inviter & update invite_events
   if (invitedBy && data) {
