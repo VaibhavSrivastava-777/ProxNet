@@ -156,19 +156,16 @@ export function EventCard({
   const handleShareWhatsapp = (e: React.MouseEvent) => {
     e.stopPropagation();
     const shortUrl = `${window.location.origin}/e/${event.id}`;
-    const hostName = event.creator?.full_name || "Neighbor";
 
-    const titleLine = `📌 *${event.title.trim()}*`;
-    const subtitleLine = event.subtitle?.trim() ? `\n🔹 *${event.subtitle.trim()}*` : "";
+    const rawDesc = event.description?.trim() || event.subtitle?.trim() || "";
+    const agendaBlock = rawDesc ? `📋 *Agenda:*\n${rawDesc}` : "";
 
-    const rawDesc = event.description?.trim() || "";
-    const agendaText = rawDesc.length > 200 ? `${rawDesc.substring(0, 200)}...` : rawDesc;
-    const agendaLine = agendaText ? `\n📋 *Agenda:* *${agendaText}*` : "";
+    const eventInfo = `📅 ${dateStr} • ${timeStr}\n📍 ${event.venue_name}`;
+    const rsvpBlock = `*RSVP in 1-tap:*\n\n✅ Going:\n${shortUrl}?auto_rsvp=yes\n\n❓ Maybe:\n${shortUrl}?auto_rsvp=maybe`;
 
-    const eventInfo = `\n\n📅 ${dateStr} • ${timeStr}\n📍 ${event.venue_name}\n👤 Hosted by ${hostName}`;
-    const rsvpBlock = `\n\n*RSVP in 1-tap:*\n\n✅ Going:\n${shortUrl}?auto_rsvp=yes\n\n❓ Maybe:\n${shortUrl}?auto_rsvp=maybe`;
-
-    const text = `${titleLine}${subtitleLine}${agendaLine}${eventInfo}${rsvpBlock}`;
+    const text = agendaBlock 
+      ? `${agendaBlock}\n\n${eventInfo}\n\n${rsvpBlock}`
+      : `${eventInfo}\n\n${rsvpBlock}`;
 
     if (typeof navigator !== "undefined" && navigator.share) {
       navigator.share({
