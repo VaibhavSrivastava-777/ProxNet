@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
+import { isPastEvent } from "@/lib/date";
 import type { CompanyCluster } from "@/lib/types";
 import { QuestionForm } from "@/components/qa/QuestionForm";
 import useSWR, { mutate } from "swr";
@@ -276,33 +277,49 @@ export function ProximityMap() {
 
   const radiusLabel = filter2km ? "2.0km" : "Unfiltered";
 
-  const upcomingEvents = eventsData?.events || [];
+  const upcomingEvents = (eventsData?.events || [])
+    .filter((e: any) => !isPastEvent(e))
+    .sort((a: any, b: any) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
   const nextEvent = upcomingEvents.length > 0 ? upcomingEvents[0] : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       
-      {/* Upcoming Event Banner */}
+      {/* Next Future Meetup Event Banner */}
       {nextEvent && (
         <div 
           onClick={() => router.push(`/event/${nextEvent.id}`)}
-          className="bg-gradient-to-r from-[var(--color-primary-subtle)] to-[var(--color-surface)] border border-[var(--color-primary)]/20 p-3 rounded-xl flex items-center justify-between cursor-pointer hover:shadow-md transition-shadow animate-fadeInUp"
+          className="bg-gradient-to-r from-[var(--color-primary-subtle)] via-[var(--color-surface)] to-[var(--color-surface)] border border-[var(--color-primary)]/30 p-3.5 rounded-xl flex items-center justify-between cursor-pointer hover:shadow-md transition-all animate-fadeInUp group"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center text-xl shrink-0">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#E56B42] to-[#FF8C61] text-white flex items-center justify-center text-xl shrink-0 shadow-sm group-hover:scale-105 transition-transform">
               📅
             </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-[#E56B42] uppercase">Upcoming Meetup</span>
-              <span className="font-bold text-[var(--color-text)] leading-tight">{nextEvent.title}</span>
-              <span className="text-[10px] text-[var(--color-text-secondary)]">
-                {new Date(nextEvent.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-[#E56B42] uppercase tracking-wider bg-[#E56B42]/10 px-2 py-0.5 rounded-full border border-[#E56B42]/20">
+                  Next Meetup
+                </span>
+                <span className="text-[11px] font-semibold text-[var(--color-primary)]">
+                  {new Date(nextEvent.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                </span>
+              </div>
+              <span className="font-bold text-[var(--color-text)] leading-tight text-sm mt-0.5 truncate">
+                {nextEvent.title}
               </span>
+              {nextEvent.venue_name && (
+                <span className="text-[11px] text-[var(--color-text-secondary)] mt-0.5 truncate flex items-center gap-1">
+                  <span>📍</span> {nextEvent.venue_name}
+                </span>
+              )}
             </div>
           </div>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--color-primary)] opacity-70">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
+          <div className="flex items-center gap-1.5 shrink-0 text-xs font-semibold text-[var(--color-primary)] group-hover:translate-x-0.5 transition-transform">
+            <span>View Meetup</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
         </div>
       )}
 

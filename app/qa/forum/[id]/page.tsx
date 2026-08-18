@@ -129,10 +129,26 @@ export default function ForumThreadPage() {
 
       <div className="card p-6 flex flex-col gap-4">
         <div className="flex items-center gap-3">
-          <div className="avatar avatar-md bg-primary/10 text-primary">{question.asker_alias.slice(9,11).toUpperCase()}</div>
+          <div className="avatar avatar-md bg-primary/10 text-primary overflow-hidden flex items-center justify-center font-bold text-xs">
+            {question.asker_photo ? (
+              <img src={question.asker_photo} alt={question.asker_name} className="w-full h-full object-cover" />
+            ) : (
+              (question.asker_name || question.asker_alias || "U").substring(0, 2).toUpperCase()
+            )}
+          </div>
           <div className="flex flex-col">
-            <span className="font-semibold text-[var(--color-primary)]">{question.asker_alias}</span>
-            <span className="text-xs text-[var(--color-text-tertiary)]">{formatDistanceToNow(new Date(question.created_at))} ago</span>
+            <span className="font-semibold text-[var(--color-text)]">
+              {question.asker_name || question.asker_alias}
+            </span>
+            {!question.is_anonymous && question.asker_title && (
+              <span className="text-xs font-medium text-[var(--color-primary)]">
+                {question.asker_title} {question.asker_company ? `@ ${question.asker_company}` : ""}
+              </span>
+            )}
+            <span className="text-xs text-[var(--color-text-tertiary)]">
+              {formatDistanceToNow(new Date(question.created_at))} ago
+              {question.is_edited && <span className="ml-1 text-[var(--color-text-tertiary)] italic">• Edited</span>}
+            </span>
           </div>
         </div>
         <p className="text-lg text-[var(--color-text)] whitespace-pre-wrap">{question.body}</p>

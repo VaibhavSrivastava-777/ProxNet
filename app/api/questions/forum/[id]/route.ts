@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyUsersWithin2km } from "@/lib/notifications";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,7 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // Fetch the question
   const { data: question, error: qError } = await supabase
     .from("questions")
-    .select("*")
+    .select("*, users(full_name, anonymous_name, job_title, company, profile_photo_url)")
     .eq("id", id)
     .single();
 
@@ -40,11 +41,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const likedQuestion = myLikes?.some(l => l.question_id === id && !l.comment_id) || false;
   const likedComments = new Set(myLikes?.filter(l => l.comment_id).map(l => l.comment_id));
 
+  const u = question.users as any;
+  const isAnon = question.is_anonymous !== false;
+
   return NextResponse.json({
     isAdmin: user.source === "admin",
     question: {
       ...question,
-      asker_alias: `Neighbor-${question.asker_id.slice(0, 4)}`,
+      is_anonymous: isAnon,
+      is_edited: question.is_edited ?? false,
+      asker_name: isAnon ? (u?.anonymous_name || `Neighbor-${question.asker_id.slice(0, 4)}`) : (u?.full_name || u?.anonymous_name || "Neighbor"),
+      asker_alias: isAnon ? (u?.anonymous_name || `Neighbor-${question.asker_id.slice(0, 4)}`) : (u?.full_name || u?.anonymous_name || "Neighbor"),
+      asker_title: isAnon ? null : u?.job_title,
+      asker_company: isAnon ? null : u?.company,
+      asker_photo: isAnon ? null : u?.profile_photo_url,
       has_liked: likedQuestion
     },
     comments: (comments ?? []).map(c => ({
@@ -54,18 +64,89 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   });
 }
 
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const supabase = createAdminClient();
+  const body = await request.json();
+  const { questionText, questionBody, isAnonymous } = body;
+
+  const qText = (questionBody || questionText || "").trim();
+  if (!qText) {
+    return NextResponse.json({ error: "Post content cannot be empty" }, { status: 400 });
+  }
+
+  const { data: existing } = await supabase.from("questions").select("asker_id").eq("id", id).single();
+  if (!existing) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  if (existing.asker_id !== user.id && user.source !== "admin") {
+    return NextResponse.json({ error: "Forbidden: You can only edit your own posts" }, { status: 403 });
+  }
+
+  let { data: updated, error } = await supabase
+    .from("questions")
+    .update({
+      body: qText,
+      is_anonymous: isAnonymous ?? true,
+      is_edited: true,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error && (error.message.includes("is_edited") || error.code === "PGRST204" || error.code === "42703")) {
+    const retry = await supabase
+      .from("questions")
+      .update({
+        body: qText,
+        is_anonymous: isAnonymous ?? true,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    updated = retry.data;
+    error = retry.error;
+  }
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (updated) {
+    const cLat = Number(updated.center_lat || user.home_lat || user.office_lat || 28.6139);
+    const cLng = Number(updated.center_lng || user.home_lng || user.office_lng || 77.2090);
+    notifyUsersWithin2km({
+      creatorId: user.id,
+      centerLat: cLat,
+      centerLng: cLng,
+      title: "Updated Forum Post nearby",
+      body: qText.length > 80 ? `${qText.slice(0, 80)}...` : qText,
+      url: `/qa/forum/${updated.id}`,
+      data: { questionId: updated.id, isEdit: true }
+    }).catch(err => console.error("2km notification error for edited post:", err));
+  }
+
+  return NextResponse.json({ question: updated });
+}
+
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getCurrentUser();
-  if (!user || user.source !== "admin") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = createAdminClient();
+
+  const { data: existing } = await supabase.from("questions").select("asker_id").eq("id", id).single();
+  if (!existing) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+
+  if (existing.asker_id !== user.id && user.source !== "admin") {
+    return NextResponse.json({ error: "Forbidden: You can only delete your own posts" }, { status: 403 });
+  }
 
   const { error } = await supabase
     .from("questions")
     .delete()
-    .eq("id", id)
-    .eq("type", "forum");
+    .eq("id", id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

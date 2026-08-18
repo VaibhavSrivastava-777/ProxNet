@@ -79,7 +79,7 @@ export function EventInviteModal({
   };
 
   const shareWhatsApp = () => {
-    const text = `Join me at "${eventTitle}"\n${window.location.origin}/event/${eventId}`;
+    const text = `Join me at "${eventTitle}"\n👉 RSVP: ${window.location.origin}/e/${eventId}?rsvp=true`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   };
 

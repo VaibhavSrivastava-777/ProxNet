@@ -83,18 +83,36 @@ const KNOWN_BOARDS: Record<string, { provider: string; board: string }> = {
   "linear": { provider: "ashby", board: "linear" },
   "zscaler": { provider: "greenhouse", board: "zscaler" },
 
-  // Indian Conglomerates
+  // Indian Conglomerates & IT Giants
   "tata": { provider: "custom", board: "https://www.tata.com/careers" },
+  "tcs": { provider: "custom", board: "https://ibegin.tcs.com/iBegin/" },
+  "tata consultancy services": { provider: "custom", board: "https://ibegin.tcs.com/iBegin/" },
+  "tata consultancy services limited": { provider: "custom", board: "https://ibegin.tcs.com/iBegin/" },
   "infosys": { provider: "custom", board: "https://career.infosys.com/" },
   "wipro": { provider: "custom", board: "https://careers.wipro.com/" },
-  "tcs": { provider: "custom", board: "https://ibegin.tcs.com/iBegin/" },
   "hcl": { provider: "custom", board: "https://www.hcltech.com/careers" },
+  "hcl tech": { provider: "custom", board: "https://www.hcltech.com/careers" },
+  "hcl technologies": { provider: "custom", board: "https://www.hcltech.com/careers" },
   "tech mahindra": { provider: "custom", board: "https://careers.techmahindra.com/" },
   "l&t": { provider: "custom", board: "https://careers.larsentoubro.com/" },
   "cognizant": { provider: "custom", board: "https://careers.cognizant.com/" },
+  "cognizant technology solutions": { provider: "custom", board: "https://careers.cognizant.com/" },
+  "dell": { provider: "custom", board: "https://jobs.dell.com/" },
+  "dell technologies": { provider: "custom", board: "https://jobs.dell.com/" },
+
+  // Additional Indian Tech & Enterprise
+  "hdfc bank": { provider: "custom", board: "https://www.hdfcbank.com/personal/about-us/careers" },
+  "hdfcbank": { provider: "custom", board: "https://www.hdfcbank.com/personal/about-us/careers" },
+  "curefit": { provider: "lever", board: "curefit" },
+  "cure.fit": { provider: "lever", board: "curefit" },
+  "cultfit": { provider: "lever", board: "curefit" },
+  "cult.fit": { provider: "lever", board: "curefit" },
+  "jio": { provider: "custom", board: "https://careers.jio.com/" },
+  "jio platforms": { provider: "custom", board: "https://careers.jio.com/" },
+  "reliance jio": { provider: "custom", board: "https://careers.jio.com/" },
 };
 
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 5000) {
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 2000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -109,25 +127,18 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
 
 /**
  * Generate common board name variants for a company name.
- * e.g., "Urban Company" -> ["urbancompany", "urban-company", "urban_company", "urbancompanycareers", ...]
+ * e.g., "Urban Company" -> ["urbancompany", "urban-company", "urban_company", ...]
  */
 function generateBoardVariants(companyName: string): string[] {
   const base = companyName.toLowerCase().trim();
   const stripped = base.replace(/[^a-z0-9]/g, "");
   const hyphenated = base.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-  const underscored = base.replace(/[^a-z0-9]+/g, "_").replace(/(^_|_$)/g, "");
 
   const variants = new Set([
     stripped,
     hyphenated,
-    underscored,
     stripped + "careers",
     stripped + "jobs",
-    stripped + "hq",
-    stripped + "inc",
-    stripped + "io",
-    stripped + "tech",
-    hyphenated + "-careers",
   ]);
 
   return Array.from(variants);
@@ -140,75 +151,13 @@ export async function discoverAts(companyName: string): Promise<{ provider: stri
     return KNOWN_BOARDS[normalizedKey];
   }
 
-  // 2. Generate variants and probe ATS APIs
+  // 2. Generate variants and probe fast ATS APIs first (Lever, Greenhouse, Ashby, SmartRecruiters)
   const variants = generateBoardVariants(companyName);
 
   for (const guess of variants) {
-    // Workday Probing (multi-trial subdomain/site variants)
-    const wdSubdomains = [
-      "myworkdayjobs.com", 
-      "wd3.myworkdayjobs.com", 
-      "wd1.myworkdayjobs.com", 
-      "wd5.myworkdayjobs.com", 
-      "wd103.myworkdayjobs.com", 
-      "wd101.myworkdayjobs.com"
-    ];
-
-    const tenantVariants = [guess];
-    if (guess.endsWith("careers")) {
-      tenantVariants.push(guess.replace(/careers$/, ""));
-    }
-    if (guess.endsWith("jobs")) {
-      tenantVariants.push(guess.replace(/jobs$/, ""));
-    }
-
-    const uniqueTenants = Array.from(new Set(tenantVariants));
-
-    for (const tenant of uniqueTenants) {
-      for (const subdomain of wdSubdomains) {
-        const siteVariants = [
-          `${tenant.charAt(0).toUpperCase() + tenant.slice(1)}Careers`,
-          `${tenant.charAt(0).toUpperCase() + tenant.slice(1)}Jobs`,
-          `${tenant}careers`,
-          `${tenant}jobs`,
-          tenant,
-          `careers`,
-          `Careers`
-        ];
-
-        for (const site of siteVariants) {
-          const checkUrl = `https://${tenant}.${subdomain}/wday/cxs/${tenant}/${site}/jobs`;
-          try {
-            const res = await fetchWithTimeout(checkUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-              },
-              body: JSON.stringify({
-                appliedFacets: {},
-                limit: 1,
-                offset: 0,
-                searchText: ""
-              })
-            }, 3000); // 3 seconds timeout per probe
-
-            if (res.status === 200) {
-              console.log(`[ATS Discover] Match found for Workday: ${tenant}.${subdomain}/wday/cxs/${tenant}/${site}/jobs`);
-              return {
-                provider: "workday",
-                board: `${tenant}.${subdomain}/wday/cxs/${tenant}/${site}/jobs`
-              };
-            }
-          } catch (e) {}
-        }
-      }
-    }
-
     // Lever
     try {
-      const leverRes = await fetchWithTimeout(`https://api.lever.co/v0/postings/${guess}?mode=json`);
+      const leverRes = await fetchWithTimeout(`https://api.lever.co/v0/postings/${guess}?mode=json`, {}, 1500);
       if (leverRes.ok) {
         const data = await leverRes.json();
         if (Array.isArray(data) && data.length > 0) return { provider: "lever", board: guess };
@@ -217,7 +166,7 @@ export async function discoverAts(companyName: string): Promise<{ provider: stri
 
     // Greenhouse
     try {
-      const ghRes = await fetchWithTimeout(`https://boards-api.greenhouse.io/v1/boards/${guess}/jobs?content=true`);
+      const ghRes = await fetchWithTimeout(`https://boards-api.greenhouse.io/v1/boards/${guess}/jobs?content=true`, {}, 1500);
       if (ghRes.ok) {
         const data = await ghRes.json();
         if (data && data.jobs && data.jobs.length > 0) return { provider: "greenhouse", board: guess };
@@ -226,7 +175,7 @@ export async function discoverAts(companyName: string): Promise<{ provider: stri
 
     // Ashby
     try {
-      const ashbyRes = await fetchWithTimeout(`https://api.ashbyhq.com/posting-api/job-board/${guess}`);
+      const ashbyRes = await fetchWithTimeout(`https://api.ashbyhq.com/posting-api/job-board/${guess}`, {}, 1500);
       if (ashbyRes.ok) {
         const data = await ashbyRes.json();
         if (data && data.jobs && data.jobs.length > 0) return { provider: "ashby", board: guess };
@@ -235,42 +184,42 @@ export async function discoverAts(companyName: string): Promise<{ provider: stri
 
     // SmartRecruiters
     try {
-      const srRes = await fetchWithTimeout(`https://api.smartrecruiters.com/v1/companies/${guess}/postings`);
+      const srRes = await fetchWithTimeout(`https://api.smartrecruiters.com/v1/companies/${guess}/postings`, {}, 1500);
       if (srRes.ok) {
         const data = await srRes.json();
         if (data && data.content && data.content.length > 0) return { provider: "smartrecruiters", board: guess };
       }
     } catch (e) {}
+  }
 
-    // Workable
-    try {
-      const workableRes = await fetchWithTimeout(`https://www.workable.com/api/accounts/${guess}?details=true`);
-      if (workableRes.ok) {
-        const data = await workableRes.json();
-        if (data && Array.isArray(data.jobs) && data.jobs.length > 0) return { provider: "workable", board: guess };
+  // 3. Workday Probing (only 2 main subdomains, 1s timeout per check)
+  for (const guess of variants.slice(0, 2)) {
+    const wdSubdomains = ["myworkdayjobs.com", "wd3.myworkdayjobs.com"];
+    const siteVariants = [`${guess}careers`, `${guess}jobs`, guess, `careers`];
+
+    for (const subdomain of wdSubdomains) {
+      for (const site of siteVariants) {
+        const checkUrl = `https://${guess}.${subdomain}/wday/cxs/${guess}/${site}/jobs`;
+        try {
+          const res = await fetchWithTimeout(checkUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            },
+            body: JSON.stringify({ appliedFacets: {}, limit: 1, offset: 0, searchText: "" })
+          }, 1000);
+
+          if (res.status === 200) {
+            return {
+              provider: "workday",
+              board: `${guess}.${subdomain}/wday/cxs/${guess}/${site}/jobs`
+            };
+          }
+        } catch (e) {}
       }
-    } catch (e) {}
-
-    // Breezy
-    try {
-      const breezyRes = await fetchWithTimeout(`https://${guess}.breezy.hr/json`);
-      if (breezyRes.ok) {
-        const data = await breezyRes.json();
-        if (Array.isArray(data) && data.length > 0) return { provider: "breezy", board: guess };
-      }
-    } catch (e) {}
-
-    // Recruitee
-    try {
-      const recruiteeRes = await fetchWithTimeout(`https://${guess}.recruitee.com/api/offers`);
-      if (recruiteeRes.ok) {
-        const data = await recruiteeRes.json();
-        if (data && Array.isArray(data.offers) && data.offers.length > 0) return { provider: "recruitee", board: guess };
-      }
-    } catch (e) {}
-
-    // Add a tiny delay between variants to be polite
-    await new Promise(r => setTimeout(r, 100));
+    }
   }
 
   return null;

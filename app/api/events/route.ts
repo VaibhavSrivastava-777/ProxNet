@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isPastEvent } from "@/lib/date";
+import { notifyUsersWithin2km } from "@/lib/notifications";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -29,7 +31,6 @@ export async function GET(request: Request) {
       comments:event_comments(id)
     `)
     .eq("status", "active")
-    .gte("ends_at", new Date().toISOString())
     .order("starts_at", { ascending: true });
 
   if (error) {
@@ -113,6 +114,20 @@ export async function POST(request: Request) {
     user_id: user.id,
     status: "yes"
   });
+
+  if (event) {
+    const cLat = Number(event.center_lat || event.venue_lat || user.home_lat || 0);
+    const cLng = Number(event.center_lng || event.venue_lng || user.home_lng || 0);
+    notifyUsersWithin2km({
+      creatorId: user.id,
+      centerLat: cLat,
+      centerLng: cLng,
+      title: `New Meetup nearby: ${title}`,
+      body: `${venueName}${subtitle ? ` · ${subtitle}` : ""}`,
+      url: `/event/${event.id}`,
+      data: { eventId: event.id }
+    }).catch(err => console.error("2km notification error for event:", err));
+  }
 
   return NextResponse.json({ event });
 }

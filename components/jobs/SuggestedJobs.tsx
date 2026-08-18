@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CompanyLogo } from "@/components/qa/QuestionList";
+import { TargetCompanyManager } from "./TargetCompanyManager";
 
 interface SuggestedJob {
   id: string;
@@ -228,6 +229,19 @@ export function SuggestedJobs() {
           ℹ️ GENERATING THE LATEST MATCH LIST IN THE BACKGROUD
         </div>
       )}
+
+      {/* Target Company Management (Add & Remove Target Companies) */}
+      <TargetCompanyManager
+        onCompaniesChanged={async () => {
+          try {
+            const res = await fetch("/api/jobs/suggested");
+            if (res.ok) {
+              const data = await res.json();
+              setCompanies(data.companies || []);
+            }
+          } catch (e) {}
+        }}
+      />
 
       {/* Bio Digest (Minimal Header) */}
       <div className="flex flex-col gap-4">

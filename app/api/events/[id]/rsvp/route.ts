@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { cookies } from "next/headers";
+import { isPastEvent } from "@/lib/date";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getCurrentUser();
-  const cookieStore = await cookies();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized. Please sign in to RSVP." }, { status: 401 });
+  }
+
   const supabase = createAdminClient();
 
   const body = await request.json();
@@ -16,48 +19,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  // Validate event exists
-  const { data: event } = await supabase.from("events").select("id").eq("id", id).single();
+  // Validate event exists and is not ended
+  const { data: event } = await supabase.from("events").select("id, starts_at, ends_at").eq("id", id).single();
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
-
-  let targetUserId = user?.id;
-  let newAnonCookie: string | null = null;
-
-  if (!targetUserId) {
-    // Unauthenticated user -> get or create proxnet_anon_id
-    let anonId = cookieStore.get("proxnet_anon_id")?.value;
-    if (!anonId) {
-      anonId = `anon_${crypto.randomUUID()}`;
-      newAnonCookie = anonId;
-    }
-
-    // Ensure anonymous user record exists in Supabase users table
-    let { data: anonUser } = await supabase
-      .from("users")
-      .select("id")
-      .eq("linkedin_sub", anonId)
-      .maybeSingle();
-
-    if (!anonUser) {
-      const { data: createdUser, error: createUserErr } = await supabase
-        .from("users")
-        .insert({
-          linkedin_sub: anonId,
-          full_name: "Anonymous Professional",
-          job_title: "Verified Member",
-          company: "Local Network",
-          source: "oauth"
-        })
-        .select("id")
-        .single();
-
-      if (createUserErr || !createdUser) {
-        return NextResponse.json({ error: "Failed to create anonymous session" }, { status: 500 });
-      }
-      anonUser = createdUser;
-    }
-
-    targetUserId = anonUser.id;
+  if (isPastEvent(event)) {
+    return NextResponse.json({ error: "This meetup has already ended. RSVPs are closed." }, { status: 400 });
   }
 
   // Upsert RSVP
@@ -66,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .upsert(
       { 
         event_id: id, 
-        user_id: targetUserId, 
+        user_id: user.id, 
         status, 
         updated_at: new Date().toISOString() 
       },
@@ -79,15 +45,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const response = NextResponse.json({ rsvp, userRsvp: status });
-
-  if (newAnonCookie) {
-    response.cookies.set("proxnet_anon_id", newAnonCookie, {
-      path: "/",
-      maxAge: 365 * 24 * 60 * 60,
-      sameSite: "lax",
-    });
-  }
-
-  return response;
+  return NextResponse.json({ rsvp, userRsvp: status });
 }

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { EventInviteModal } from "@/components/forum/EventInviteModal";
 import { EventFormModal } from "@/components/forum/EventFormModal";
 import { EventReminderModal } from "@/components/forum/EventReminderModal";
+import { parseSafeDate, isPastEvent } from "@/lib/date";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -15,6 +16,7 @@ export function EventClientPage({ id }: { id: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const autoRsvp = searchParams?.get("auto_rsvp");
+  const rsvpParam = searchParams?.get("rsvp");
   
   // Try fetching current user session to see if logged in
   const { data: profile } = useSWR("/api/profile", fetcher, { 
@@ -53,11 +55,15 @@ export function EventClientPage({ id }: { id: string }) {
 
   useEffect(() => {
     if (autoRsvp && data?.event) {
+      if (!isLoggedIn) {
+        router.push(`/login?callbackUrl=${encodeURIComponent(`/event/${id}?auto_rsvp=${autoRsvp}`)}`);
+        return;
+      }
       handleRsvp(autoRsvp);
       const newUrl = `/event/${id}`;
       window.history.replaceState({}, "", newUrl);
     }
-  }, [autoRsvp, data]);
+  }, [autoRsvp, data, isLoggedIn, id, router]);
 
   if (isLoading) {
     return (
@@ -84,6 +90,11 @@ export function EventClientPage({ id }: { id: string }) {
   const maybe = rsvps.filter((r: any) => r.status === "maybe");
 
   const handleRsvp = async (status: string) => {
+    if (isPast) return;
+    if (!isLoggedIn) {
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/event/${event.id}?auto_rsvp=${status}`)}`);
+      return;
+    }
     setIsSubmitting(true);
     try {
       const res = await fetch(`/api/events/${event.id}/rsvp`, {
@@ -91,6 +102,10 @@ export function EventClientPage({ id }: { id: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
       });
+      if (res.status === 401) {
+        router.push(`/login?callbackUrl=${encodeURIComponent(`/event/${event.id}?auto_rsvp=${status}`)}`);
+        return;
+      }
       if (res.ok) {
         mutate();
       } else {
@@ -176,8 +191,9 @@ export function EventClientPage({ id }: { id: string }) {
     }
   };
 
-  const startObj = new Date(event.starts_at);
-  const endObj = new Date(event.ends_at);
+  const startObj = parseSafeDate(event.starts_at) || new Date();
+  const endObj = parseSafeDate(event.ends_at) || new Date();
+  const isPast = isPastEvent(event);
   const dateStr = startObj.toLocaleDateString("en-US", { 
     weekday: "short", 
     month: "short", 
@@ -193,7 +209,7 @@ export function EventClientPage({ id }: { id: string }) {
     const agendaBlock = rawDesc ? `📋 *Agenda:*\n${rawDesc}` : "";
 
     const eventInfo = `📅 ${dateStr} • ${timeStr}\n📍 ${event.venue_name}`;
-    const rsvpBlock = `*RSVP in 1-tap:*\n\n✅ Going:\n${shortUrl}?auto_rsvp=yes\n\n❓ Maybe:\n${shortUrl}?auto_rsvp=maybe`;
+    const rsvpBlock = `👉 RSVP for Meetup:\n${shortUrl}?rsvp=true`;
 
     const text = agendaBlock 
       ? `${agendaBlock}\n\n${eventInfo}\n\n${rsvpBlock}`
@@ -230,9 +246,16 @@ export function EventClientPage({ id }: { id: string }) {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div className="flex flex-col gap-2">
-              <span className="inline-block px-3 py-1 bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-xs rounded-full w-fit">
-                MEETUP EVENT
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="inline-block px-3 py-1 bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-xs rounded-full w-fit">
+                  MEETUP EVENT
+                </span>
+                {isPast && (
+                  <span className="inline-block px-3 py-1 bg-gray-500/15 text-gray-500 dark:text-gray-400 font-bold text-xs rounded-full w-fit">
+                    EVENT ENDED
+                  </span>
+                )}
+              </div>
 
               <h1 className="text-2xl md:text-3xl font-extrabold text-[var(--color-text)] leading-tight m-0">{event.title}</h1>
               {event.subtitle && (
@@ -328,38 +351,77 @@ export function EventClientPage({ id }: { id: string }) {
             </p>
           </div>
           
-          {/* RSVP Bar */}
-          <div className="p-4 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col md:flex-row items-center justify-between gap-4">
-            <div>
-              <h4 className="font-bold text-[var(--color-text)] text-base m-0">Are you going?</h4>
-              <p className="text-xs text-[var(--color-text-secondary)] m-0 mt-0.5">Your RSVP will reveal your designation @ company to other attendees.</p>
+          {/* RSVP Bar / Event Ended Banner */}
+          {isPast ? (
+            <div className="p-4 rounded-xl bg-gray-500/10 border border-gray-500/20 text-[var(--color-text-secondary)] font-medium text-sm flex items-center gap-3">
+              <span className="text-xl">⌛</span>
+              <div>
+                <h4 className="font-bold text-[var(--color-text)] text-sm m-0">This meetup has concluded</h4>
+                <p className="text-xs text-[var(--color-text-secondary)] m-0 mt-0.5">Event concluded on {dateStr}. RSVPs are now closed.</p>
+              </div>
             </div>
-            
-            <div className="flex gap-2 w-full md:w-auto">
-              <button 
-                disabled={isSubmitting}
-                onClick={() => handleRsvp("yes")}
-                className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
-                  userRsvp === "yes" 
-                    ? "bg-[var(--color-primary)] text-white shadow-md" 
-                    : "bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]"
-                }`}
-              >
-                ✓ Going
-              </button>
-              <button 
-                disabled={isSubmitting}
-                onClick={() => handleRsvp("maybe")}
-                className={`flex-1 md:flex-none px-5 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
-                  userRsvp === "maybe" 
-                    ? "bg-[var(--color-border)] text-[var(--color-text)] shadow-sm" 
-                    : "bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
-                }`}
-              >
-                ? Maybe
-              </button>
-            </div>
-          </div>
+          ) : (
+            <>
+              {/* Single RSVP Banner if opened via ?rsvp=true */}
+              {rsvpParam && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 animate-fadeIn">
+                  <div>
+                    <h4 className="font-bold text-base m-0">Select your RSVP for this Meetup</h4>
+                    <p className="text-xs text-white/90 m-0 mt-0.5">Please choose your attendance status below. You will be prompted to log in if not already signed in.</p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button disabled={isSubmitting} onClick={() => handleRsvp("yes")} className="px-4 py-2 bg-white text-blue-700 font-bold text-xs rounded-lg shadow hover:bg-white/90 cursor-pointer">✓ Yes</button>
+                    <button disabled={isSubmitting} onClick={() => handleRsvp("maybe")} className="px-3 py-2 bg-white/20 text-white font-bold text-xs rounded-lg hover:bg-white/30 cursor-pointer">? Maybe</button>
+                    <button disabled={isSubmitting} onClick={() => handleRsvp("no")} className="px-3 py-2 bg-white/20 text-white font-bold text-xs rounded-lg hover:bg-white/30 cursor-pointer">✕ No</button>
+                  </div>
+                </div>
+              )}
+
+              {/* RSVP Bar */}
+              <div className="p-4 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                  <h4 className="font-bold text-[var(--color-text)] text-base m-0">Are you going?</h4>
+                  <p className="text-xs text-[var(--color-text-secondary)] m-0 mt-0.5">Your RSVP will reveal your designation @ company to other attendees.</p>
+                </div>
+                
+                <div className="flex gap-2 w-full md:w-auto">
+                  <button 
+                    disabled={isSubmitting}
+                    onClick={() => handleRsvp("yes")}
+                    className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+                      userRsvp === "yes" 
+                        ? "bg-[var(--color-primary)] text-white shadow-md" 
+                        : "bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]"
+                    }`}
+                  >
+                    ✓ Going
+                  </button>
+                  <button 
+                    disabled={isSubmitting}
+                    onClick={() => handleRsvp("maybe")}
+                    className={`flex-1 md:flex-none px-5 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+                      userRsvp === "maybe" 
+                        ? "bg-[var(--color-border)] text-[var(--color-text)] shadow-sm" 
+                        : "bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+                    }`}
+                  >
+                    ? Maybe
+                  </button>
+                  <button 
+                    disabled={isSubmitting}
+                    onClick={() => handleRsvp("no")}
+                    className={`flex-1 md:flex-none px-5 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+                      userRsvp === "no" 
+                        ? "bg-red-600 text-white shadow-sm" 
+                        : "bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+                    }`}
+                  >
+                    ✕ No
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
         </div>
 

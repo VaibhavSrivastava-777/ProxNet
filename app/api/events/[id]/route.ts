@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { cookies } from "next/headers";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -33,20 +32,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Unauthorized. This event is private." }, { status: 401 });
   }
 
-  // Find current user's RSVP status (authenticated or anonymous device)
+  // Find current user's RSVP status
   let userRsvp = null;
-  const cookieStore = await cookies();
-  const anonId = cookieStore.get("proxnet_anon_id")?.value;
-
   if (user) {
     const myRsvp = event.rsvps?.find((r: any) => r.user?.id === user.id);
     userRsvp = myRsvp ? myRsvp.status : null;
-  } else if (anonId) {
-    const { data: anonUser } = await supabase.from("users").select("id").eq("linkedin_sub", anonId).maybeSingle();
-    if (anonUser) {
-      const myRsvp = event.rsvps?.find((r: any) => r.user?.id === anonUser.id);
-      userRsvp = myRsvp ? myRsvp.status : null;
-    }
   }
 
   return NextResponse.json({ 

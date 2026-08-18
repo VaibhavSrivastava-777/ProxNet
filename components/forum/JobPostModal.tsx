@@ -6,12 +6,16 @@ export function JobPostModal({
   isOpen, 
   onClose, 
   onSuccess,
-  initialData
+  initialData,
+  locationMode = "home",
+  profile
 }: { 
   isOpen: boolean; 
   onClose: () => void;
   onSuccess: () => void;
   initialData?: any;
+  locationMode?: "home" | "office" | "current";
+  profile?: any;
 }) {
   const isEditing = !!initialData?.id;
 

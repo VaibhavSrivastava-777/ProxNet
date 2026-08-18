@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { EventReminderModal } from "@/components/forum/EventReminderModal";
+import { parseSafeDate, isPastEvent } from "@/lib/date";
 
 export function EventCard({ 
   event, 
@@ -47,6 +48,10 @@ export function EventCard({
 
   const handleRsvp = async (e: React.MouseEvent, status: string) => {
     e.stopPropagation();
+    if (!currentUserId) {
+      router.push(`/login?callbackUrl=${encodeURIComponent(`/event/${event.id}?auto_rsvp=${status}`)}`);
+      return;
+    }
     setIsSubmitting(true);
     try {
       const res = await fetch(`/api/events/${event.id}/rsvp`, {
@@ -54,6 +59,10 @@ export function EventCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
       });
+      if (res.status === 401) {
+        router.push(`/login?callbackUrl=${encodeURIComponent(`/event/${event.id}?auto_rsvp=${status}`)}`);
+        return;
+      }
       if (res.ok) {
         onRsvpUpdate();
       } else {
@@ -148,8 +157,9 @@ export function EventCard({
     }
   };
 
-  const startObj = new Date(event.starts_at);
-  const endObj = new Date(event.ends_at);
+  const startObj = parseSafeDate(event.starts_at) || new Date();
+  const endObj = parseSafeDate(event.ends_at) || new Date();
+  const isPast = isPastEvent(event);
   const dateStr = startObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }).toUpperCase();
   const timeStr = `${startObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} – ${endObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
 
@@ -161,7 +171,7 @@ export function EventCard({
     const agendaBlock = rawDesc ? `📋 *Agenda:*\n${rawDesc}` : "";
 
     const eventInfo = `📅 ${dateStr} • ${timeStr}\n📍 ${event.venue_name}`;
-    const rsvpBlock = `*RSVP in 1-tap:*\n\n✅ Going:\n${shortUrl}?auto_rsvp=yes\n\n❓ Maybe:\n${shortUrl}?auto_rsvp=maybe`;
+    const rsvpBlock = `👉 RSVP for Meetup:\n${shortUrl}?rsvp=true`;
 
     const text = agendaBlock 
       ? `${agendaBlock}\n\n${eventInfo}\n\n${rsvpBlock}`
@@ -265,8 +275,15 @@ export function EventCard({
           )}
         </div>
 
-        <div className="bg-[var(--color-primary-subtle)] text-[var(--color-primary)] px-3 py-1 rounded-bl-xl text-xs font-bold shadow-sm">
-          MEETUP
+        <div className="flex items-center gap-1.5">
+          {isPast && (
+            <span className="bg-gray-500/15 text-gray-500 dark:text-gray-400 px-2.5 py-1 rounded-bl-xl text-xs font-bold shadow-sm">
+              EVENT ENDED
+            </span>
+          )}
+          <div className="bg-[var(--color-primary-subtle)] text-[var(--color-primary)] px-3 py-1 rounded-bl-xl text-xs font-bold shadow-sm">
+            MEETUP
+          </div>
         </div>
       </div>
 
@@ -296,18 +313,40 @@ export function EventCard({
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-border-light)]">
         <div className="flex gap-2 items-center">
           <button 
-            disabled={isSubmitting}
+            disabled={isSubmitting || isPast}
             onClick={(e) => handleRsvp(e, "yes")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${myRsvp === "yes" ? "bg-[var(--color-primary)] text-white" : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              myRsvp === "yes" 
+                ? "bg-[var(--color-primary)] text-white" 
+                : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+            } ${isPast ? "opacity-40 cursor-not-allowed" : ""}`}
+            title={isPast ? "Event has ended - RSVPs closed" : "RSVP Yes"}
           >
             ✓ Yes
           </button>
           <button 
-            disabled={isSubmitting}
+            disabled={isSubmitting || isPast}
             onClick={(e) => handleRsvp(e, "maybe")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${myRsvp === "maybe" ? "bg-[var(--color-border)] text-[var(--color-text)]" : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              myRsvp === "maybe" 
+                ? "bg-[var(--color-border)] text-[var(--color-text)]" 
+                : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+            } ${isPast ? "opacity-40 cursor-not-allowed" : ""}`}
+            title={isPast ? "Event has ended - RSVPs closed" : "RSVP Maybe"}
           >
             ? Maybe
+          </button>
+          <button 
+            disabled={isSubmitting || isPast}
+            onClick={(e) => handleRsvp(e, "no")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              myRsvp === "no" 
+                ? "bg-red-600 text-white" 
+                : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+            } ${isPast ? "opacity-40 cursor-not-allowed" : ""}`}
+            title={isPast ? "Event has ended - RSVPs closed" : "RSVP No"}
+          >
+            ✕ No
           </button>
 
           {/* Like Button */}

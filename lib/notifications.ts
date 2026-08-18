@@ -133,3 +133,74 @@ export async function sendNotification(
     }
   }
 }
+
+export async function notifyUsersWithin2km({
+  creatorId,
+  centerLat,
+  centerLng,
+  title,
+  body,
+  url,
+  data
+}: {
+  creatorId: string;
+  centerLat: number;
+  centerLng: number;
+  title: string;
+  body: string;
+  url: string;
+  data?: Record<string, any>;
+}) {
+  if (centerLat == null || centerLng == null || isNaN(centerLat) || isNaN(centerLng)) return;
+
+  const supabase = createAdminClient();
+
+  // Query all registered users
+  const { data: users } = await supabase
+    .from("users")
+    .select("id, home_lat, home_lng, office_lat, office_lng");
+
+  if (!users || users.length === 0) return;
+
+  const haversineMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const matchedUserIds = new Set<string>();
+
+  for (const u of users) {
+    let isMatch = false;
+
+    if (u.home_lat != null && u.home_lng != null) {
+      const distHome = haversineMeters(centerLat, centerLng, Number(u.home_lat), Number(u.home_lng));
+      if (distHome <= 2000) isMatch = true;
+    }
+
+    if (!isMatch && u.office_lat != null && u.office_lng != null) {
+      const distOffice = haversineMeters(centerLat, centerLng, Number(u.office_lat), Number(u.office_lng));
+      if (distOffice <= 2000) isMatch = true;
+    }
+
+    // If user has no location configured at all, include them so they receive neighborhood updates
+    if (!isMatch && u.home_lat == null && u.home_lng == null && u.office_lat == null && u.office_lng == null) {
+      isMatch = true;
+    }
+
+    if (isMatch) {
+      matchedUserIds.add(u.id);
+    }
+  }
+
+  console.log(`Notifying ${matchedUserIds.size} users within 2km of (${centerLat}, ${centerLng}) for: ${title}`);
+  for (const targetId of matchedUserIds) {
+    sendNotification(targetId, { title, body, url, data }).catch(err => console.error("Failed to notify user:", targetId, err));
+  }
+}
+

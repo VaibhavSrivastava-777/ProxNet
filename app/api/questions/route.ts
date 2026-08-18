@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
 import { resolveUserLocation, generateAlias } from "@/lib/anonymize";
 import type { User } from "@/lib/types";
-import { sendNotification } from "@/lib/notifications";
+import { sendNotification, notifyUsersWithin2km } from "@/lib/notifications";
 import { awardPoints } from "@/lib/award-points";
 
 export async function GET(request: Request) {
@@ -224,7 +224,7 @@ export async function GET(request: Request) {
   // Fetch forum questions with poster details
   const { data: allForumQuestions } = await supabase
     .from("questions")
-    .select("*, users(anonymous_name, job_title, company), question_comments(id)")
+    .select("*, users(full_name, anonymous_name, job_title, company, profile_photo_url), question_comments(id)")
     .eq("type", "forum")
     .eq("status", "open")
     .order("created_at", { ascending: false })
@@ -246,13 +246,21 @@ export async function GET(request: Request) {
         ? haversineDistanceMeters(Number(qLat), Number(qLng), myLoc.lat, myLoc.lng)
         : null;
 
+      const isAnon = q.is_anonymous !== false; // Default true if null/undefined
+
       return {
         id: q.id,
         body: q.body,
         question_text: q.question_text || q.body,
+        is_anonymous: isAnon,
+        poster_name: isAnon
+          ? (u?.anonymous_name || `Neighbour-${q.asker_id.slice(0, 4)}`)
+          : (u?.full_name || u?.anonymous_name || "Neighbor"),
         anonymous_name: u?.anonymous_name || `Neighbour-${q.asker_id.slice(0, 4)}`,
-        poster_title: u?.job_title || "Professional",
-        poster_company: u?.company || "Nearby",
+        poster_title: isAnon ? null : (u?.job_title || null),
+        poster_company: isAnon ? null : (u?.company || null),
+        poster_photo: isAnon ? null : (u?.profile_photo_url || null),
+        is_edited: q.is_edited ?? false,
         created_at: q.created_at,
         likes_count: q.likes_count || 0,
         comments_count: q.question_comments?.length || 0,
@@ -425,28 +433,44 @@ export async function POST(request: Request) {
   const body = await request.json();
   const {
     questionBody,
+    questionText,
     companyFilter,
     titleFilter,
     targetUserId,
     centerLat,
     centerLng,
     radiusMeters,
+    isAnonymous,
+    locationMode,
   } = body;
+
+  const qText = (questionBody || questionText || "").trim();
+  const supabase = createAdminClient();
+
+  // Fetch author's actual profile from Supabase DB to get accurate location coordinates
+  const { data: creatorProfile } = await supabase
+    .from("users")
+    .select("home_lat, home_lng, office_lat, office_lng")
+    .eq("id", user.id)
+    .maybeSingle();
 
   let lat = centerLat;
   let lng = centerLng;
   if (lat == null || lng == null) {
-    const u = user as any;
-    lat = u.home_lat || u.office_lat || 0.0;
-    lng = u.home_lng || u.office_lng || 0.0;
+    if (locationMode === "office" && creatorProfile?.office_lat != null && creatorProfile?.office_lng != null) {
+      lat = Number(creatorProfile.office_lat);
+      lng = Number(creatorProfile.office_lng);
+    } else {
+      lat = Number(creatorProfile?.home_lat || creatorProfile?.office_lat || 28.6139);
+      lng = Number(creatorProfile?.home_lng || creatorProfile?.office_lng || 77.2090);
+    }
   }
 
-  if (!questionBody?.trim()) {
+  if (!qText) {
     return NextResponse.json({ error: "Question is required" }, { status: 400 });
   }
 
   let sessionId: string | undefined = undefined;
-  const supabase = createAdminClient();
 
   if (targetUserId) {
 
@@ -607,22 +631,55 @@ Never mention that you are an AI assistant or simulated user. Play your characte
 
   const isForum = !companyFilter && !titleFilter && !targetUserId;
 
-  const { data: question, error: qError } = await supabase
+  let { data: question, error: qError } = await supabase
     .from("questions")
     .insert({
       asker_id: user.id,
-      body: questionBody.trim(),
+      body: qText,
       company_filter: companyFilter || null,
       title_filter: titleFilter || null,
       center_lat: lat,
       center_lng: lng,
       radius_meters: radiusMeters ?? 100,
       type: isForum ? "forum" : "direct",
+      is_anonymous: isAnonymous ?? true,
     })
     .select("*")
     .single();
 
+  if (qError && (qError.message.includes("is_anonymous") || qError.code === "PGRST204" || qError.code === "42703")) {
+    const retry = await supabase
+      .from("questions")
+      .insert({
+        asker_id: user.id,
+        body: qText,
+        company_filter: companyFilter || null,
+        title_filter: titleFilter || null,
+        center_lat: lat,
+        center_lng: lng,
+        radius_meters: radiusMeters ?? 100,
+        type: isForum ? "forum" : "direct",
+      })
+      .select("*")
+      .single();
+
+    question = retry.data;
+    qError = retry.error;
+  }
+
   if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
+
+  if (isForum && question) {
+    notifyUsersWithin2km({
+      creatorId: user.id,
+      centerLat: Number(lat),
+      centerLng: Number(lng),
+      title: "New Forum Post nearby",
+      body: qText.length > 80 ? `${qText.slice(0, 80)}...` : qText,
+      url: `/qa/forum/${question.id}`,
+      data: { questionId: question.id }
+    }).catch(err => console.error("2km notification error for forum post:", err));
+  }
 
   // Award points to the inviter if this is the invitee's first question
   if (user.invited_by) {
@@ -679,8 +736,8 @@ Never mention that you are an AI assistant or simulated user. Play your characte
               const companyName = user.company || "Nearby";
               await sendNotification(u.id, {
                 title: isFollower ? `New post from ${posterName} @ ${companyName}` : "New Post in your Neighborhood",
-                body: `"${questionBody.trim().slice(0, 80)}${questionBody.trim().length > 80 ? "..." : ""}"`,
-                url: "/?tab=forum",
+                body: `"${qText.slice(0, 80)}${qText.length > 80 ? "..." : ""}"`,
+                url: `/qa/forum/${question.id}`,
               });
             }
           }

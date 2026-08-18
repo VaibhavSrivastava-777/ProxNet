@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyUsersWithin2km } from "@/lib/notifications";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -116,6 +117,18 @@ export async function POST(request: Request) {
     user_id: user.id,
     status: "interested"
   });
+
+  if (jobPost) {
+    notifyUsersWithin2km({
+      creatorId: user.id,
+      centerLat: Number(finalLat),
+      centerLng: Number(finalLng),
+      title: type === "giver" ? `New Hiring Referral nearby: ${role}` : `Neighbor Looking for Role nearby: ${role}`,
+      body: `${company ? `${company} · ` : ""}${role}`,
+      url: `/job-post/${jobPost.id}`,
+      data: { jobPostId: jobPost.id }
+    }).catch(err => console.error("2km notification error for job post:", err));
+  }
 
   return NextResponse.json({ jobPost });
 }

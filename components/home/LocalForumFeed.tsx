@@ -41,12 +41,21 @@ export function LocalForumFeed({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [postBody, setPostBody] = useState("");
   const [postCategory, setPostCategory] = useState("General");
+  const [isAnonymous, setIsAnonymous] = useState(true);
   const [isPosting, setIsPosting] = useState(false);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<any>(null);
   const [editingJob, setEditingJob] = useState<any>(null);
+
+  // Edit Forum Post states
+  const [editingPost, setEditingPost] = useState<any>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editPostBody, setEditPostBody] = useState("");
+  const [editPostCategory, setEditPostCategory] = useState("General");
+  const [editIsAnonymous, setEditIsAnonymous] = useState(true);
+  const [isUpdatingPost, setIsUpdatingPost] = useState(false);
 
   const activeLat = locationMode === "home" ? profile?.home_lat : profile?.office_lat;
   const activeLng = locationMode === "home" ? profile?.home_lng : profile?.office_lng;
@@ -140,18 +149,24 @@ export function LocalForumFeed({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          questionBody: postBody,
           questionText: postBody,
           category: postCategory,
           targetAudience: "neighborhood",
           locationMode,
+          isAnonymous,
         }),
       });
 
       if (res.ok) {
         setPostBody("");
+        setIsAnonymous(true);
         setIsModalOpen(false);
-        mutate(`/api/questions?locationMode=${locationMode}`);
-        mutate("/api/profile"); // refresh credits
+        await Promise.all([
+          mutate(questionsUrl),
+          mutate((key) => typeof key === "string" && key.startsWith("/api/questions"), undefined, { revalidate: true }),
+          mutate("/api/profile")
+        ]);
       } else {
         const errData = await res.json().catch(() => ({}));
         alert(errData.error || "Failed to create post.");
@@ -161,6 +176,70 @@ export function LocalForumFeed({
       alert("Error creating post.");
     } finally {
       setIsPosting(false);
+    }
+  };
+
+  const handleOpenEditPost = (e: React.MouseEvent, q: any) => {
+    e.stopPropagation();
+    setEditingPost(q);
+    setEditPostBody(q.question_text || q.body || "");
+    setEditPostCategory(q.category || "General");
+    setEditIsAnonymous(q.is_anonymous !== false);
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editPostBody.trim() || !editingPost) return;
+
+    setIsUpdatingPost(true);
+    try {
+      const res = await fetch(`/api/questions/forum/${editingPost.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionBody: editPostBody,
+          questionText: editPostBody,
+          category: editPostCategory,
+          isAnonymous: editIsAnonymous,
+        }),
+      });
+
+      if (res.ok) {
+        setIsEditModalOpen(false);
+        setEditingPost(null);
+        await Promise.all([
+          mutate(questionsUrl),
+          mutate((key) => typeof key === "string" && key.startsWith("/api/questions"), undefined, { revalidate: true })
+        ]);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || "Failed to update post.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error updating post.");
+    } finally {
+      setIsUpdatingPost(false);
+    }
+  };
+
+  const handleDeletePost = async (e: React.MouseEvent, qId: string) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this forum post?")) return;
+
+    try {
+      const res = await fetch(`/api/questions/forum/${qId}`, { method: "DELETE" });
+      if (res.ok) {
+        mutate(questionsUrl);
+        mutate((key) => typeof key === "string" && key.startsWith("/api/questions"), undefined, { revalidate: true });
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || "Failed to delete post.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting post.");
     }
   };
 
@@ -181,27 +260,40 @@ export function LocalForumFeed({
       <div className="card p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-sm flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Location Mode Pills */}
-          <div className="flex items-center gap-1.5 p-1 bg-[var(--color-surface-secondary)] rounded-xl border border-[var(--color-border-light)] text-xs font-bold">
-            <button
-              onClick={() => handleLocationChange("home")}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                locationMode === "home"
-                  ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm font-extrabold"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-              }`}
-            >
-              🏠 Home
-            </button>
-            <button
-              onClick={() => handleLocationChange("office")}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                locationMode === "office"
-                  ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm font-extrabold"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-              }`}
-            >
-              🏢 Office
-            </button>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5 p-1 bg-[var(--color-surface-secondary)] rounded-xl border border-[var(--color-border-light)] text-xs font-bold">
+              <button
+                onClick={() => handleLocationChange("home")}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  locationMode === "home"
+                    ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm font-extrabold"
+                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                }`}
+              >
+                🏠 Home
+              </button>
+              <button
+                onClick={() => handleLocationChange("office")}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                  locationMode === "office"
+                    ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm font-extrabold"
+                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                } ${profile && (!profile.office_lat || !profile.office_lng) ? "opacity-80" : ""}`}
+              >
+                🏢 Office
+                {profile && (!profile.office_lat || !profile.office_lng) && (
+                  <span className="text-[9px] bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1 py-0.2 rounded font-bold uppercase">Setup</span>
+                )}
+              </button>
+            </div>
+            {profile && (!profile.office_lat || !profile.office_lng) && (
+              <span 
+                onClick={() => router.push("/profile?missingOffice=true")}
+                className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline cursor-pointer flex items-center gap-1 font-medium"
+              >
+                <span>ℹ️</span> Provide your office location (just once) to circulate this post in that area.
+              </span>
+            )}
           </div>
 
           {/* Quick Action Buttons */}
@@ -246,6 +338,21 @@ export function LocalForumFeed({
           </span>
         </div>
       </div>
+
+      {/* ProxNet Broadcast Loading Message Banner between Post Submit and Forum List */}
+      {(isPosting || isUpdatingPost) && (
+        <div className="card p-5 rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-primary-subtle)] text-[var(--color-primary)] shadow-md flex items-center gap-4 animate-pulse my-3">
+          <div className="w-8 h-8 rounded-full border-3 border-[var(--color-primary)] border-t-transparent animate-spin shrink-0" />
+          <div className="flex flex-col">
+            <span className="text-xs font-extrabold uppercase tracking-wider">ProxNet Broadcast Engine</span>
+            <span className="text-xs font-semibold mt-0.5 text-[var(--color-text)]">
+              {isPosting
+                ? "Broadcasting your post to all members within 2km... Updating Forum Feed..."
+                : "Broadcasting updated post to nearby members... Updating Forum Feed..."}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Main Feed Content */}
       {isLoading ? (
@@ -313,27 +420,54 @@ export function LocalForumFeed({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-[var(--color-primary-subtle)] text-[var(--color-primary)] flex items-center justify-center font-bold text-xs border border-[var(--color-primary)]/20 shadow-sm shrink-0 overflow-hidden">
-                          {q.asker?.profile_photo_url ? (
-                            <img src={q.asker.profile_photo_url} alt={q.asker.full_name} className="w-full h-full object-cover" />
+                          {!q.is_anonymous && q.poster_photo ? (
+                            <img src={q.poster_photo} alt={q.poster_name || "Author"} className="w-full h-full object-cover" />
                           ) : (
-                            q.asker?.full_name?.substring(0, 2).toUpperCase() || "U"
+                            (q.poster_name || q.anonymous_name || "U").substring(0, 2).toUpperCase()
                           )}
                         </div>
                         <div className="flex flex-col">
                           <span className="text-xs font-bold text-[var(--color-text)]">
-                            {q.asker?.full_name || "Neighbor"}
+                            {q.poster_name || q.anonymous_name || "Neighbor"}
                           </span>
-                          <span className="text-[10px] text-[var(--color-text-tertiary)]">
-                            {formattedDate}
+                          {!q.is_anonymous && q.poster_title && (
+                            <span className="text-[11px] font-medium text-[var(--color-primary)]">
+                              {q.poster_title} {q.poster_company ? `@ ${q.poster_company}` : ""}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-[var(--color-text-tertiary)] flex items-center gap-1">
+                            <span>{formattedDate}</span>
+                            {q.is_edited && <span className="italic">• Edited</span>}
                           </span>
                         </div>
                       </div>
 
-                      {q.category && (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border border-[var(--color-border-light)]">
-                          {q.category}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {q.category && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border border-[var(--color-border-light)]">
+                            {q.category}
+                          </span>
+                        )}
+
+                        {(profile?.id === q.asker_id || profile?.source === "admin") && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => handleOpenEditPost(e, q)}
+                              className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors rounded-lg hover:bg-[var(--color-surface-hover)] cursor-pointer border-0 bg-transparent"
+                              title="Edit Post"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            </button>
+                            <button
+                              onClick={(e) => handleDeletePost(e, q.id)}
+                              className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-error)] transition-colors rounded-lg hover:bg-[var(--color-surface-hover)] cursor-pointer border-0 bg-transparent"
+                              title="Delete Post"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Question Content */}
@@ -442,6 +576,50 @@ export function LocalForumFeed({
             <div className="p-4 sm:p-5 overflow-y-auto flex-1 overscroll-contain">
               <form id="general-post-form" onSubmit={handleCreatePost} className="flex flex-col gap-4">
                 <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Circulate Post In</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleLocationChange("home")}
+                      className={`p-3 rounded-xl border flex flex-col items-start transition-all cursor-pointer ${
+                        locationMode === "home"
+                          ? "border-[var(--color-primary)] bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold shadow-sm"
+                          : "border-[var(--color-border-light)] bg-[var(--color-surface)] text-[var(--color-text-secondary)]"
+                      }`}
+                    >
+                      <span className="text-xs font-bold">🏠 Home Location</span>
+                      <span className="text-[10px] opacity-80 mt-0.5">Notify members within 2km</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleLocationChange("office")}
+                      className={`p-3 rounded-xl border flex flex-col items-start transition-all cursor-pointer relative ${
+                        locationMode === "office"
+                          ? "border-[var(--color-primary)] bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold shadow-sm"
+                          : "border-[var(--color-border-light)] bg-[var(--color-surface)] text-[var(--color-text-secondary)]"
+                      } ${profile && (!profile.office_lat || !profile.office_lng) ? "opacity-75" : ""}`}
+                    >
+                      <span className="text-xs font-bold flex items-center justify-between w-full">
+                        <span>🏢 Office Location</span>
+                        {profile && (!profile.office_lat || !profile.office_lng) && (
+                          <span className="text-[9px] bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded uppercase">Setup</span>
+                        )}
+                      </span>
+                      <span className="text-[10px] opacity-80 mt-0.5">Notify members within 2km</span>
+                    </button>
+                  </div>
+                  {profile && (!profile.office_lat || !profile.office_lng) && (
+                    <p 
+                      onClick={() => router.push("/profile?missingOffice=true")}
+                      className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline cursor-pointer mt-1.5 flex items-center gap-1 font-medium"
+                    >
+                      <span>ℹ️</span> Provide your office location (just once) to circulate this post in that area.
+                    </p>
+                  )}
+                </div>
+
+                <div>
                   <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Category</label>
                   <select
                     value={postCategory}
@@ -452,6 +630,31 @@ export function LocalForumFeed({
                     <option value="Advice">Advice</option>
                     <option value="Recommendation">Recommendation</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Post Anonymously</label>
+                  <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)]">
+                    <div className="flex flex-col pr-2">
+                      <span className="text-xs font-bold text-[var(--color-text)]">
+                        {isAnonymous ? "Anonymous Mode" : "Public Mode (Show Profile)"}
+                      </span>
+                      <span className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+                        {isAnonymous 
+                          ? "Your identity is hidden (posted with alias)." 
+                          : `Posting as: ${profile?.full_name || profile?.job_title || "You"}${profile?.job_title ? ` (${profile.job_title}${profile.company ? ` @ ${profile.company}` : ""})` : ""}`}
+                      </span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={isAnonymous}
+                        onChange={(e) => setIsAnonymous(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-300 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-primary)]"></div>
+                    </label>
+                  </div>
                 </div>
 
                 <div>
@@ -480,43 +683,137 @@ export function LocalForumFeed({
                 type="submit"
                 form="general-post-form"
                 disabled={isPosting || !postBody.trim()}
-                className="px-6 py-2 rounded-xl bg-[var(--color-primary)] text-white font-bold disabled:opacity-50 hover:bg-[var(--color-primary-hover)] transition-colors cursor-pointer border-none"
+                className="px-6 py-2 rounded-xl bg-[var(--color-primary)] text-white font-bold disabled:opacity-50 hover:bg-[var(--color-primary-hover)] transition-colors cursor-pointer border-none flex items-center gap-2"
               >
-                {isPosting ? "Posting..." : "Post Message"}
+                {isPosting ? (
+                  <>
+                    <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    <span>Broadcasting to ProxNet...</span>
+                  </>
+                ) : (
+                  "Post Message"
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <EventFormModal 
-        isOpen={isEventModalOpen} 
+      {/* Edit Forum Post Modal */}
+      {isEditModalOpen && (
+        <div 
+          onClick={() => setIsEditModalOpen(false)}
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fadeIn"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[var(--color-surface)] rounded-2xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[75vh] max-h-[75dvh] shrink-0 border border-[var(--color-border)] relative"
+          >
+            <div className="p-4 border-b border-[var(--color-border-light)] flex justify-between items-center shrink-0 bg-[var(--color-surface)]">
+              <h3 className="text-h3 font-bold text-[var(--color-text)]">Edit Forum Post</h3>
+              <button onClick={() => setIsEditModalOpen(false)} className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] rounded-full hover:bg-[var(--color-surface-hover)] cursor-pointer bg-transparent border-0">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 overscroll-contain">
+              <form id="edit-post-form" onSubmit={handleUpdatePost} className="flex flex-col gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Category</label>
+                  <select
+                    value={editPostCategory}
+                    onChange={(e) => setEditPostCategory(e.target.value)}
+                    className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none bg-[var(--color-surface)]"
+                  >
+                    <option value="General">General</option>
+                    <option value="Advice">Advice</option>
+                    <option value="Recommendation">Recommendation</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Post Anonymously</label>
+                  <div className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)]">
+                    <div className="flex flex-col pr-2">
+                      <span className="text-xs font-bold text-[var(--color-text)]">
+                        {editIsAnonymous ? "Anonymous Mode" : "Public Mode (Show Profile)"}
+                      </span>
+                      <span className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+                        {editIsAnonymous 
+                          ? "Your identity is hidden (posted with alias)." 
+                          : `Posting as: ${profile?.full_name || profile?.job_title || "You"}${profile?.job_title ? ` (${profile.job_title}${profile.company ? ` @ ${profile.company}` : ""})` : ""}`}
+                      </span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={editIsAnonymous}
+                        onChange={(e) => setEditIsAnonymous(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-300 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-primary)]"></div>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Post Content *</label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={editPostBody}
+                    onChange={(e) => setEditPostBody(e.target.value)}
+                    placeholder="Share an update, ask for recommendations, or start a discussion with your neighbors..."
+                    className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none resize-none bg-[var(--color-surface)]"
+                  />
+                </div>
+              </form>
+            </div>
+
+            <div className="p-4 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors bg-transparent border-0 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="edit-post-form"
+                disabled={isUpdatingPost || !editPostBody.trim()}
+                className="px-6 py-2 rounded-xl bg-[var(--color-primary)] text-white font-bold disabled:opacity-50 hover:bg-[var(--color-primary-hover)] transition-colors cursor-pointer border-none flex items-center gap-2"
+              >
+                {isUpdatingPost ? (
+                  <>
+                    <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    <span>Broadcasting Update...</span>
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <EventFormModal
+        isOpen={isEventModalOpen}
+        onClose={() => { setIsEventModalOpen(false); setEditingEvent(null); }}
+        onSuccess={() => mutate(eventsUrl)}
         initialData={editingEvent}
-        onClose={() => {
-          setIsEventModalOpen(false);
-          setEditingEvent(null);
-        }} 
-        onSuccess={() => {
-          setIsEventModalOpen(false);
-          setEditingEvent(null);
-          mutate(eventsUrl);
-          mutate("/api/profile");
-        }} 
+        locationMode={locationMode}
+        profile={profile}
       />
 
       <JobPostModal
         isOpen={isJobModalOpen}
+        onClose={() => { setIsJobModalOpen(false); setEditingJob(null); }}
+        onSuccess={() => mutate(jobPostsUrl)}
         initialData={editingJob}
-        onClose={() => {
-          setIsJobModalOpen(false);
-          setEditingJob(null);
-        }}
-        onSuccess={() => {
-          setIsJobModalOpen(false);
-          setEditingJob(null);
-          mutate(jobPostsUrl);
-          mutate("/api/profile");
-        }}
+        locationMode={locationMode}
+        profile={profile}
       />
     </div>
   );
