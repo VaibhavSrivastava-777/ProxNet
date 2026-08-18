@@ -278,12 +278,6 @@ Return ONLY a JSON object with:
     const finalCompanies = Object.values(companyGroups)
       .filter(g => isTargetUser || g.referralContacts.length > 0)
       .map(g => {
-        if (g.referralContacts.length === 0) {
-          g.referralContacts.push({
-            id: "00000000-0000-0000-0000-000000000000",
-            alias: `Target Company Insider @ ${g.company}`
-          });
-        }
         g.contactsCount = g.referralContacts.length;
         // Sort jobs by highest match rate
         g.jobs.sort((a, b) => b.matchRate - a.matchRate);

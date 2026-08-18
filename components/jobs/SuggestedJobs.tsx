@@ -317,15 +317,24 @@ export function SuggestedJobs() {
               </div>
 
               <div className="shrink-0">
-                <button
-                  onClick={() => {
-                    router.push(`/qa?tab=network&company=${encodeURIComponent(group.company)}`);
-                    window.dispatchEvent(new CustomEvent("tabchange", { detail: "/network" }));
-                  }}
-                  className="btn btn-sm btn-primary text-xs cursor-pointer font-bold px-3 py-1.5 rounded-lg"
-                >
-                  {group.contactsCount} Referrars available
-                </button>
+                {group.contactsCount > 0 ? (
+                  <button
+                    onClick={() => {
+                      router.push(`/qa?tab=network&company=${encodeURIComponent(group.company)}`);
+                      window.dispatchEvent(new CustomEvent("tabchange", { detail: "/network" }));
+                    }}
+                    className="btn btn-sm btn-primary text-xs cursor-pointer font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                  >
+                    <span>🤝</span> {group.contactsCount} Referrar{group.contactsCount > 1 ? "s" : ""} Available
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setActiveCompanyModal(group)}
+                    className="btn btn-sm bg-[var(--color-surface-secondary)] hover:bg-[var(--color-border-light)] text-[var(--color-text)] text-xs cursor-pointer font-bold px-3 py-1.5 rounded-lg border border-[var(--color-border-light)] flex items-center gap-1.5"
+                  >
+                    <span>📂</span> View {group.jobs.length} Opening{group.jobs.length > 1 ? "s" : ""}
+                  </button>
+                )}
               </div>
             </div>
           ))}

@@ -22,6 +22,7 @@ export function TargetCompanyManager({ onCompaniesChanged }: TargetCompanyManage
   const [newCompany, setNewCompany] = useState("");
   const [careerUrl, setCareerUrl] = useState("");
   const [adding, setAdding] = useState(false);
+  const [scrapingAll, setScrapingAll] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
@@ -43,6 +44,34 @@ export function TargetCompanyManager({ onCompaniesChanged }: TargetCompanyManage
   useEffect(() => {
     fetchTargets();
   }, []);
+
+  const handleRunFullScrape = async () => {
+    setScrapingAll(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/user-target-companies/scrape", { method: "POST" });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setMessage({
+          text: `⚡ Full scrape & match complete! Scraped ${data.totalScraped} active jobs across ${data.totalCompanies} target companies (${data.totalSaved} saved).`,
+          type: "success",
+        });
+        await fetchTargets();
+        if (onCompaniesChanged) onCompaniesChanged();
+      } else {
+        throw new Error(data.error || "Scrape failed");
+      }
+    } catch (err: any) {
+      setMessage({
+        text: err.message || "Failed to execute scrape.",
+        type: "error",
+      });
+    } finally {
+      setScrapingAll(false);
+    }
+  };
 
   const handleAddCompany = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,19 +175,48 @@ export function TargetCompanyManager({ onCompaniesChanged }: TargetCompanyManage
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsExpanded(!isExpanded);
-          }}
-          className="text-xs font-semibold text-[var(--color-primary)] hover:underline flex items-center gap-1 bg-transparent border-none cursor-pointer"
-        >
-          {isExpanded ? "Collapse" : "Manage & Add"}
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform ${isExpanded ? "rotate-180" : ""}`}>
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={scrapingAll}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleRunFullScrape();
+            }}
+            className="px-2.5 py-1 bg-[var(--color-primary)] text-white text-xs font-bold rounded-lg hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1 cursor-pointer border-none shadow-xs"
+            title="Scrape all target companies right now"
+          >
+            {scrapingAll ? (
+              <>
+                <svg className="animate-spin h-3 w-3 text-white" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span>Scraping...</span>
+              </>
+            ) : (
+              <>
+                <span>⚡</span>
+                <span className="hidden sm:inline">Run Scrape & Match</span>
+                <span className="sm:hidden">Scrape</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(!isExpanded);
+            }}
+            className="text-xs font-semibold text-[var(--color-primary)] hover:underline flex items-center gap-1 bg-transparent border-none cursor-pointer"
+          >
+            {isExpanded ? "Collapse" : "Manage & Add"}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform ${isExpanded ? "rotate-180" : ""}`}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Target Company Chips Preview (Collapsed or Expanded) */}
