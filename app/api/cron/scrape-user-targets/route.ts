@@ -43,8 +43,12 @@ function isJuniorJob(title: string, description: string): boolean {
 }
 
 function isIndianOrRemote(location: string): boolean {
-  if (!location) return false;
+  if (!location) return true; // Accept omitted location fields from India-scoped pages
   const loc = location.toLowerCase().trim();
+
+  if (loc.includes("remote") || loc.includes("anywhere") || loc.includes("multiple locations") || loc.includes("various")) {
+    return true;
+  }
 
   const indianKeywords = [
     "india", "bangalore", "bengaluru", "mumbai", "pune", "delhi",

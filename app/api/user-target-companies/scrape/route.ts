@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { STRATEGIES } from "@/lib/scrape-strategies";
+import { discoverAts } from "@/lib/ats-discovery";
 
 function isJuniorJob(title: string, description: string): boolean {
   const t = title.toLowerCase();
@@ -40,8 +41,12 @@ function isJuniorJob(title: string, description: string): boolean {
 }
 
 function isIndianOrRemote(location: string): boolean {
-  if (!location) return false;
+  if (!location) return true; // Accept omitted location fields from India-scoped pages
   const loc = location.toLowerCase().trim();
+
+  if (loc.includes("remote") || loc.includes("anywhere") || loc.includes("multiple locations") || loc.includes("various")) {
+    return true;
+  }
 
   const indianKeywords = [
     "india", "bangalore", "bengaluru", "mumbai", "pune", "delhi",
@@ -53,7 +58,7 @@ function isIndianOrRemote(location: string): boolean {
     "gujarat", "haryana", "uttar pradesh", "west bengal", "kerala",
   ];
 
-  return indianKeywords.some(k => loc.includes(k)) || loc === "in" || loc === "ind" || loc.includes("pan india") || loc.includes("remote");
+  return indianKeywords.some(k => loc.includes(k)) || loc === "in" || loc === "ind" || loc.includes("pan india");
 }
 
 export async function POST() {
@@ -85,15 +90,19 @@ export async function POST() {
 
   const targetsMap = new Map(configs?.map(c => [c.company_name.toLowerCase().trim(), c]) || []);
 
-  const targets = targetCompanyNames.map(name => {
+  const targets = (await Promise.all(targetCompanyNames.map(async (name) => {
+    const discovered = await discoverAts(name);
     const config = targetsMap.get(name.toLowerCase().trim());
+    const provider = discovered?.provider || config?.provider || "none";
+    const token = discovered?.board || config?.board_token_or_url || "";
+
     return {
       company_name: name,
-      ats_provider: config?.provider || "none",
-      ats_board_token: config?.board_token_or_url || "",
-      careers_url: config?.board_token_or_url || "",
+      ats_provider: provider,
+      ats_board_token: token,
+      careers_url: token,
     };
-  }).filter(t => t.ats_provider !== "none");
+  }))).filter(t => t.ats_provider !== "none");
 
   const twoWeeksAgo = new Date();
   twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);

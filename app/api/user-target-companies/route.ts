@@ -239,34 +239,33 @@ export async function POST(request: Request) {
   let provider = "none";
   let boardTokenOrUrl = careers_url || "";
 
-  const { data: existingConfig } = await supabase
-    .from("company_ats_config")
-    .select("*")
-    .ilike("company_name", cleanName)
-    .single();
-
-  if (existingConfig) {
-    provider = existingConfig.provider;
-    boardTokenOrUrl = existingConfig.board_token_or_url || boardTokenOrUrl;
+  const discovered = await discoverAts(cleanName);
+  if (discovered) {
+    provider = discovered.provider;
+    boardTokenOrUrl = discovered.board;
   } else {
-    // Proactively discover ATS
-    const discovered = await discoverAts(cleanName);
-    if (discovered) {
-      provider = discovered.provider;
-      boardTokenOrUrl = discovered.board;
+    const { data: existingConfig } = await supabase
+      .from("company_ats_config")
+      .select("*")
+      .ilike("company_name", cleanName)
+      .single();
+
+    if (existingConfig) {
+      provider = existingConfig.provider;
+      boardTokenOrUrl = existingConfig.board_token_or_url || boardTokenOrUrl;
     } else if (careers_url) {
       provider = "custom";
       boardTokenOrUrl = careers_url;
     }
-
-    // Save newly discovered config
-    await supabase.from("company_ats_config").upsert({
-      company_name: cleanName,
-      provider,
-      board_token_or_url: boardTokenOrUrl,
-      last_scraped_at: new Date().toISOString(),
-    }, { onConflict: "company_name" });
   }
+
+  // Save newly discovered config
+  await supabase.from("company_ats_config").upsert({
+    company_name: cleanName,
+    provider,
+    board_token_or_url: boardTokenOrUrl,
+    last_scraped_at: new Date().toISOString(),
+  }, { onConflict: "company_name" });
 
   // 3. Trigger immediate scrape & match for this target company
   let jobsScraped = 0;

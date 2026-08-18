@@ -449,6 +449,30 @@ export const noneStrategy: ScrapeStrategy = async () => {
   return [];
 };
 
+export const amazonStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
+  const apiUrl = "https://www.amazon.jobs/en/search.json?loc_query=India&result_limit=100";
+  try {
+    const res = await fetchWithHeaders(apiUrl, { signal: AbortSignal.timeout(30000) });
+    if (res.ok) {
+      const data = await res.json();
+      const jobs = data.jobs || [];
+      if (jobs.length > 0) {
+        return jobs.map((j: any) => ({
+          title: j.title || "Job Opportunity",
+          location: j.location_name || j.city || "India",
+          url: j.job_path ? `https://www.amazon.jobs${j.job_path}` : (j.url || boardUrl),
+          posted_at: j.posted_date ? new Date(j.posted_date).toISOString() : new Date().toISOString(),
+          description: stripHtml(j.description || j.basic_qualifications || j.title),
+          source: "amazon_api",
+        }));
+      }
+    }
+  } catch (e: any) {
+    console.log(`  [AMAZON] REST API error (${e.message}). Falling back to customStrategy...`);
+  }
+  return customStrategy(boardUrl || "https://www.amazon.jobs/en/search?loc_query=India", companyName);
+};
+
 export const STRATEGIES: Record<string, ScrapeStrategy> = {
   greenhouse: greenhouseStrategy,
   lever: leverStrategy,
@@ -463,7 +487,8 @@ export const STRATEGIES: Record<string, ScrapeStrategy> = {
   none: noneStrategy,
   oracle: oracleStrategy,
   phenom: phenomStrategy,
-  ibm: ibmStrategy
+  ibm: ibmStrategy,
+  amazon: amazonStrategy
 }
 
 export const eightfoldStrategy: ScrapeStrategy = customStrategy;

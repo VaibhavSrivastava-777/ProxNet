@@ -50,9 +50,9 @@ const KNOWN_BOARDS: Record<string, { provider: string; board: string }> = {
   "clevertap": { provider: "lever", board: "clevertap" },
 
   // Major Global Tech
-  "google": { provider: "custom", board: "https://careers.google.com/jobs/results/" },
-  "microsoft": { provider: "custom", board: "https://careers.microsoft.com/us/en/search-results" },
-  "amazon": { provider: "custom", board: "https://www.amazon.jobs/en/search" },
+  "google": { provider: "custom", board: "https://careers.google.com/jobs/results/?location=India" },
+  "microsoft": { provider: "custom", board: "https://jobs.careers.microsoft.com/global/en/search?lc=India" },
+  "amazon": { provider: "amazon", board: "https://www.amazon.jobs/en/search?loc_query=India" },
   "meta": { provider: "greenhouse", board: "meta" },
   "apple": { provider: "custom", board: "https://jobs.apple.com/en-in/search" },
   "netflix": { provider: "greenhouse", board: "netflix" },

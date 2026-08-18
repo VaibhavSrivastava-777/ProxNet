@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 import { STRATEGIES, stripHtml } from "../lib/scrape-strategies";
+import { discoverAts } from "../lib/ats-discovery";
 
 dotenv.config({ path: ".env.local" });
 
@@ -43,8 +44,12 @@ function isJuniorJob(title: string, description: string): boolean {
 }
 
 function isIndianOrRemote(location: string): boolean {
-  if (!location) return false;
+  if (!location) return true; // Accept omitted locations from India-scoped boards
   const loc = location.toLowerCase().trim();
+
+  if (loc.includes("remote") || loc.includes("anywhere") || loc.includes("multiple locations") || loc.includes("various")) {
+    return true;
+  }
 
   const indianKeywords = [
     "india", "bangalore", "bengaluru", "mumbai", "pune", "delhi",
@@ -116,15 +121,18 @@ async function main() {
 
   const targetsMap = new Map(configs.map(c => [c.company_name.toLowerCase().trim(), c]));
 
-  const targets = targetCompanyNames.map(name => {
+  const targets = (await Promise.all(targetCompanyNames.map(async (name) => {
+    const discovered = await discoverAts(name);
     const config = targetsMap.get(name.toLowerCase().trim());
+    const provider = discovered?.provider || config?.provider || "none";
+    const token = discovered?.board || config?.board_token_or_url || "";
     return {
       company_name: name,
-      ats_provider: config?.provider || "none",
-      ats_board_token: config?.board_token_or_url || "",
-      careers_url: config?.board_token_or_url || "",
+      ats_provider: provider,
+      ats_board_token: token,
+      careers_url: token,
     };
-  }).filter(t => t.ats_provider !== "none");
+  }))).filter(t => t.ats_provider !== "none");
 
   console.log(`  Scrapeable targets with ATS configs: ${targets.length}`);
 
