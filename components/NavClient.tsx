@@ -208,14 +208,15 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     }
   };
 
-  const triggerToast = (toast: { title: string; body: string; url: string }) => {
+  const triggerToast = (toast: { title: string; body: string; url: string; soundType?: "chime" | "job_match" | "message" }) => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, ...toast }]);
 
     fetchInAppNotifications();
 
     try {
-      playNotificationSound("chime");
+      const type = toast.soundType || (toast.title.includes("Match") ? "job_match" : toast.title.includes("Message") || toast.title.includes("Referral") ? "message" : "chime");
+      playNotificationSound(type);
     } catch (e) {}
 
     // Auto-remove toast after 5 seconds
