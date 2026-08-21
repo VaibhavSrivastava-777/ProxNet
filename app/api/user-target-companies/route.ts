@@ -236,8 +236,8 @@ export async function POST(request: Request) {
   }
 
   // 2. Resolve ATS config for this company
-  let provider = "none";
-  let boardTokenOrUrl = careers_url || "";
+  let provider = "custom";
+  let boardTokenOrUrl = careers_url || `https://careers.google.com/jobs/results/?q=${encodeURIComponent(cleanName)}`;
 
   const discovered = await discoverAts(cleanName);
   if (discovered) {
@@ -267,26 +267,27 @@ export async function POST(request: Request) {
     last_scraped_at: new Date().toISOString(),
   }, { onConflict: "company_name" });
 
-  // 3. Trigger immediate scrape & match for this target company
+  // 3. Trigger immediate test scrape for this target company (unfiltered)
   let jobsScraped = 0;
   let savedCount = 0;
+  let sampleListings: any[] = [];
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
   const strategy = STRATEGIES[provider] || STRATEGIES["custom"];
   if (strategy && boardTokenOrUrl) {
     try {
-      console.log(`[USER ADDED COMPANY] Scraping ${cleanName} (${provider})...`);
+      console.log(`[TARGET COMPANY ADDED] Scraping sample listings for ${cleanName} (${provider}) without filters...`);
       const scrapedJobs = await strategy(boardTokenOrUrl, cleanName);
       jobsScraped = scrapedJobs.length;
+      sampleListings = scrapedJobs.slice(0, 3).map(j => ({
+        title: j.title,
+        location: j.location || "Remote",
+        url: j.url || boardTokenOrUrl
+      }));
 
+      // Store listings without location/experience filters
       for (const j of scrapedJobs) {
         if (!j.title || j.title.length < 3) continue;
-
-        // Skip non-India location if location provided
-        const loc = (j.location || "").toLowerCase();
-        if (loc && !loc.includes("india") && !loc.includes("remote") && !loc.includes("bengaluru") && !loc.includes("bangalore") && !loc.includes("noida") && !loc.includes("hyderabad") && !loc.includes("mumbai") && !loc.includes("gurgaon") && !loc.includes("delhi") && !loc.includes("pune") && !loc.includes("chennai")) {
-          continue;
-        }
 
         // Generate embedding if key available
         let embedding = null;
@@ -316,7 +317,7 @@ export async function POST(request: Request) {
         const { error: insertErr } = await supabase.from("scraped_jobs").upsert({
           company: cleanName,
           title: j.title,
-          location: j.location || "India",
+          location: j.location || "Remote",
           url: j.url || boardTokenOrUrl,
           posted_at: j.posted_at || new Date().toISOString(),
           description: j.description || j.title,
@@ -330,12 +331,12 @@ export async function POST(request: Request) {
         if (!insertErr) savedCount++;
       }
 
-      // Update config stats
+      // Update config stats with total raw jobs found
       await supabase.from("company_ats_config").upsert({
         company_name: cleanName,
         provider,
         board_token_or_url: boardTokenOrUrl,
-        total_jobs_found: savedCount,
+        total_jobs_found: jobsScraped,
         last_scraped_at: new Date().toISOString(),
       }, { onConflict: "company_name" });
 
@@ -348,8 +349,11 @@ export async function POST(request: Request) {
     success: true,
     company_name: cleanName,
     ats_provider: provider,
+    board_url: boardTokenOrUrl,
+    raw_listings_found: jobsScraped,
     jobsScraped,
     jobsSaved: savedCount,
+    sample_listings: sampleListings,
     targetCompanies: profileDigest.target_companies,
   });
 }
