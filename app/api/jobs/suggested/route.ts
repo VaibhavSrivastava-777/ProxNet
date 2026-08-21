@@ -273,10 +273,8 @@ Return ONLY a JSON object with:
       }
     }
 
-    // For user 50ecc4a2-c514-4922-8eb7-7e74961c7c4f, include target company groups even if referralContacts is empty
-    const isTargetUser = user.id === "50ecc4a2-c514-4922-8eb7-7e74961c7c4f";
+    // Include matched job groups with match rates for all members (including target companies without referrers)
     const finalCompanies = Object.values(companyGroups)
-      .filter(g => isTargetUser || g.referralContacts.length > 0)
       .map(g => {
         g.contactsCount = g.referralContacts.length;
         // Sort jobs by highest match rate

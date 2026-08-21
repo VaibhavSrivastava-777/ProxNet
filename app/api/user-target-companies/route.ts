@@ -259,103 +259,121 @@ export async function POST(request: Request) {
     }
   }
 
-  // Save newly discovered config
+  // Save newly discovered config as pending
   await supabase.from("company_ats_config").upsert({
     company_name: cleanName,
     provider,
     board_token_or_url: boardTokenOrUrl,
+    scrape_status: "pending",
     last_scraped_at: new Date().toISOString(),
   }, { onConflict: "company_name" });
 
-  // 3. Trigger immediate test scrape for this target company (unfiltered)
-  let jobsScraped = 0;
-  let savedCount = 0;
-  let sampleListings: any[] = [];
-  const OPENAI_KEY = process.env.OPENAI_API_KEY;
-
-  const strategy = STRATEGIES[provider] || STRATEGIES["custom"];
-  if (strategy && boardTokenOrUrl) {
-    try {
-      console.log(`[TARGET COMPANY ADDED] Scraping sample listings for ${cleanName} (${provider}) without filters...`);
-      const scrapedJobs = await strategy(boardTokenOrUrl, cleanName);
-      jobsScraped = scrapedJobs.length;
-      sampleListings = scrapedJobs.slice(0, 3).map(j => ({
-        title: j.title,
-        location: j.location || "Remote",
-        url: j.url || boardTokenOrUrl
-      }));
-
-      // Store listings without location/experience filters
-      for (const j of scrapedJobs) {
-        if (!j.title || j.title.length < 3) continue;
-
-        // Generate embedding if key available
-        let embedding = null;
-        if (OPENAI_KEY) {
-          const textToEmbed = `Company: ${cleanName}\nTitle: ${j.title}\nLocation: ${j.location}\nDescription: ${(j.description || j.title).slice(0, 1000)}`;
-          try {
-            const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${OPENAI_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                input: textToEmbed,
-                model: "text-embedding-3-small",
-              }),
-            });
-            if (oaiRes.ok) {
-              const oaiData = await oaiRes.json();
-              embedding = oaiData.data[0].embedding;
-            }
-          } catch (e) {
-            console.error("Embedding generation error:", e);
-          }
-        }
-
-        const { error: insertErr } = await supabase.from("scraped_jobs").upsert({
-          company: cleanName,
-          title: j.title,
-          location: j.location || "Remote",
-          url: j.url || boardTokenOrUrl,
-          posted_at: j.posted_at || new Date().toISOString(),
-          description: j.description || j.title,
-          source: j.source || provider,
-          contact_id: user.id,
-          contact_alias: user.job_title ? `${user.job_title} @ ${user.company || cleanName}` : "ProxNet Professional",
-          embedding,
-          created_at: new Date().toISOString(),
-        }, { onConflict: "url" });
-
-        if (!insertErr) savedCount++;
-      }
-
-      // Update config stats with total raw jobs found
-      await supabase.from("company_ats_config").upsert({
-        company_name: cleanName,
-        provider,
-        board_token_or_url: boardTokenOrUrl,
-        total_jobs_found: jobsScraped,
-        last_scraped_at: new Date().toISOString(),
-      }, { onConflict: "company_name" });
-
-    } catch (scrapeErr: any) {
-      console.error(`Error scraping added company ${cleanName}:`, scrapeErr.message);
-    }
-  }
+  // 3. Submit background scraping job (non-blocking)
+  backgroundScrapeTargetCompany(
+    cleanName,
+    provider,
+    boardTokenOrUrl,
+    user.id,
+    userProfile.job_title,
+    userProfile.company
+  ).catch(err => console.error("Background task error:", err));
 
   return NextResponse.json({
     success: true,
     company_name: cleanName,
     ats_provider: provider,
     board_url: boardTokenOrUrl,
-    raw_listings_found: jobsScraped,
-    jobsScraped,
-    jobsSaved: savedCount,
-    sample_listings: sampleListings,
+    scrape_status: "pending",
+    message: `Scraping job submitted for ${cleanName} in background. Listings will subsequently appear on your Jobs tab.`,
     targetCompanies: profileDigest.target_companies,
   });
+}
+
+async function backgroundScrapeTargetCompany(
+  cleanName: string,
+  provider: string,
+  boardTokenOrUrl: string,
+  userId: string,
+  userJobTitle?: string,
+  userCompany?: string
+) {
+  const supabase = createAdminClient();
+  const OPENAI_KEY = process.env.OPENAI_API_KEY;
+
+  const strategy = STRATEGIES[provider] || STRATEGIES["custom"];
+  if (!strategy || !boardTokenOrUrl) return;
+
+  try {
+    console.log(`[BACKGROUND SCRAPE SUBMITTED] Starting scrape for ${cleanName} (${provider})...`);
+
+    const scrapedJobs = await strategy(boardTokenOrUrl, cleanName);
+    let savedCount = 0;
+
+    for (const j of scrapedJobs) {
+      if (!j.title || j.title.length < 3) continue;
+
+      let embedding = null;
+      if (OPENAI_KEY) {
+        const textToEmbed = `Company: ${cleanName}\nTitle: ${j.title}\nLocation: ${j.location || "Remote"}\nDescription: ${(j.description || j.title).slice(0, 1000)}`;
+        try {
+          const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${OPENAI_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              input: textToEmbed,
+              model: "text-embedding-3-small",
+            }),
+          });
+          if (oaiRes.ok) {
+            const oaiData = await oaiRes.json();
+            embedding = oaiData.data[0]?.embedding || null;
+          }
+        } catch (e) {
+          console.error("Embedding generation error:", e);
+        }
+      }
+
+      const { error: insertErr } = await supabase.from("scraped_jobs").upsert({
+        company: cleanName,
+        title: j.title,
+        location: j.location || "Remote",
+        url: j.url || boardTokenOrUrl,
+        posted_at: j.posted_at || new Date().toISOString(),
+        description: j.description || j.title,
+        source: j.source || provider,
+        contact_id: userId,
+        contact_alias: userJobTitle ? `${userJobTitle} @ ${userCompany || cleanName}` : "ProxNet Professional",
+        embedding,
+        created_at: new Date().toISOString(),
+      }, { onConflict: "url" });
+
+      if (!insertErr) savedCount++;
+    }
+
+    await supabase.from("company_ats_config").upsert({
+      company_name: cleanName,
+      provider,
+      board_token_or_url: boardTokenOrUrl,
+      total_jobs_found: scrapedJobs.length,
+      scrape_status: "success",
+      last_scraped_at: new Date().toISOString(),
+    }, { onConflict: "company_name" });
+
+    console.log(`[BACKGROUND SCRAPE FINISHED] ${cleanName}: ${scrapedJobs.length} pulled, ${savedCount} saved.`);
+  } catch (scrapeErr: any) {
+    console.error(`[BACKGROUND SCRAPE ERROR] ${cleanName}:`, scrapeErr.message);
+    await supabase.from("company_ats_config").upsert({
+      company_name: cleanName,
+      provider,
+      board_token_or_url: boardTokenOrUrl,
+      scrape_status: "failed",
+      scrape_notes: scrapeErr.message,
+      last_scraped_at: new Date().toISOString(),
+    }, { onConflict: "company_name" });
+  }
 }
 
 export async function DELETE(request: Request) {

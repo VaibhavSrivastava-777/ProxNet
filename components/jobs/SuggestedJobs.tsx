@@ -230,16 +230,21 @@ export function SuggestedJobs() {
         </div>
       )}
 
-      {/* Target Company Management (Add & Remove Target Companies) */}
       <TargetCompanyManager
         onCompaniesChanged={async () => {
-          try {
-            const res = await fetch("/api/jobs/suggested");
-            if (res.ok) {
-              const data = await res.json();
-              setCompanies(data.companies || []);
-            }
-          } catch (e) {}
+          const fetchLatest = async () => {
+            try {
+              const res = await fetch("/api/jobs/suggested");
+              if (res.ok) {
+                const data = await res.json();
+                setCompanies(data.companies || []);
+              }
+            } catch (e) {}
+          };
+          await fetchLatest();
+          // Schedule follow-up fetches to pick up completed background scrape jobs
+          setTimeout(fetchLatest, 4000);
+          setTimeout(fetchLatest, 10000);
         }}
       />
 

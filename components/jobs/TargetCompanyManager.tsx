@@ -97,7 +97,7 @@ export function TargetCompanyManager({ onCompaniesChanged }: TargetCompanyManage
         setNewCompany("");
         setCareerUrl("");
         setMessage({
-          text: `Added ${companyToAdd} (${data.ats_provider}) — ${data.jobsSaved || 0} jobs scraped & matched!`,
+          text: `⚡ Scraping job submitted in background for ${companyToAdd} (${data.ats_provider})! Matched job listings will appear on your Jobs tab shortly.`,
           type: "success",
         });
         await fetchTargets();
