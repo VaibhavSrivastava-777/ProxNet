@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       body,
       url: `/carpool/chat/${threadId}`,
       data: {
-        sound: "/car-honk.mp3"
+        sound: "default"
       }
     });
   }

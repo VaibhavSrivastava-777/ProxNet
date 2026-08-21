@@ -49,7 +49,7 @@ export async function POST(request: Request) {
         title: `New Message from ${participant.alias}`,
         body: body.length > 60 ? body.substring(0, 60) + "..." : body,
         url: `/jobs/chat/${threadId}`,
-        data: { sound: "/car-honk.mp3" } // We can use the same sound or a new one
+        data: { sound: "default" }
       });
     } catch (e) {
       console.error("Failed to send notification", e);

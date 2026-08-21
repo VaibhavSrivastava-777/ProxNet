@@ -10,6 +10,7 @@ import { createBrowserClient } from "@/lib/supabase/client";
 import { isProfileIncomplete } from "@/lib/profile-validation";
 import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
 import { RechargeModal } from "@/components/RechargeModal";
+import { playNotificationSound, unlockAudioContext } from "@/lib/sound";
 
 interface NavClientProps {
   session: boolean;
@@ -214,11 +215,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     fetchInAppNotifications();
 
     try {
-      const audio = document.getElementById('honk-audio') as HTMLAudioElement;
-      if (audio) {
-        audio.currentTime = 0;
-        audio.play().catch((e) => console.log('Audio play failed:', e));
-      }
+      playNotificationSound("chime");
     } catch (e) {}
 
     // Auto-remove toast after 5 seconds
@@ -635,34 +632,13 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     };
   }, [session, userId]);
 
-  // Unlock audio on first interaction for Android/iOS
+  // Unlock Web Audio API context on first interaction for Android/iOS
   useEffect(() => {
-    const unlockAudio = () => {
-      const audio = document.getElementById('honk-audio') as HTMLAudioElement;
-      if (audio) {
-        // Silently play and immediately pause to unlock the audio context
-        audio.volume = 0;
-        audio.play().then(() => {
-          audio.pause();
-          audio.currentTime = 0;
-          audio.volume = 1; // Restore volume for actual plays
-        }).catch(() => {});
-      }
-      document.removeEventListener('click', unlockAudio);
-      document.removeEventListener('touchstart', unlockAudio);
-    };
-
-    document.addEventListener('click', unlockAudio);
-    document.addEventListener('touchstart', unlockAudio);
-
-    return () => {
-      document.removeEventListener('click', unlockAudio);
-      document.removeEventListener('touchstart', unlockAudio);
-    };
+    unlockAudioContext();
   }, []);
+
   return (
     <>
-      <audio id="honk-audio" src="/car-honk.mp3" preload="auto" />
 
       {/* PWA Installation Promo Banner for Mobile Browsers removed */}
       {/* Desktop Top Nav */}
