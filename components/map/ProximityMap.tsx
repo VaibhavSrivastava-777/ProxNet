@@ -156,12 +156,24 @@ export function ProximityMap() {
   ];
   const animatedPlaceholder = useAnimatedPlaceholder(placeholderPhrases, "Ask ProxNet for ");
 
-  // Fetch logged-in user profile
+  // Fetch logged-in user profile with instant cache
   useEffect(() => {
+    try {
+      const cached = sessionStorage.getItem("proxnet_profile_cache");
+      if (cached) {
+        const data = JSON.parse(cached);
+        setProfile(data);
+        if (locationMode === "home" && data.home_lat && data.home_lng) {
+          setCenter({ lat: Number(data.home_lat), lng: Number(data.home_lng) });
+        }
+      }
+    } catch (e) {}
+
     fetch("/api/profile")
       .then((r) => r.json())
       .then((data) => {
         setProfile(data);
+        try { sessionStorage.setItem("proxnet_profile_cache", JSON.stringify(data)); } catch (e) {}
         if (locationMode === "home") {
           if (data.home_lat && data.home_lng) {
             setCenter({ lat: Number(data.home_lat), lng: Number(data.home_lng) });

@@ -34,6 +34,8 @@ interface ProfileDigest {
 
 export function SuggestedJobs() {
   const [companies, setCompanies] = useState<CompanyGroup[]>([]);
+  const [allCompanies, setAllCompanies] = useState<CompanyGroup[]>([]);
+  const [jobsViewMode, setJobsViewMode] = useState<"matched" | "all">("matched");
   const [profileDigest, setProfileDigest] = useState<ProfileDigest | null>(null);
   const [hasResume, setHasResume] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -76,14 +78,25 @@ export function SuggestedJobs() {
           setLoading(false);
         }
       }
+      const cachedAll = sessionStorage.getItem("proxnet_all_jobs_cache");
+      if (cachedAll) {
+        const parsedAll = JSON.parse(cachedAll);
+        if (parsedAll.companies && parsedAll.companies.length > 0) {
+          setAllCompanies(parsedAll.companies);
+        }
+      }
     } catch (e) {}
 
     // 2. Fetch fresh data in the background and update cache
-    async function fetchSuggested() {
+    async function loadData() {
       try {
-        const res = await fetch("/api/jobs/suggested");
-        if (res.ok) {
-          const data = await res.json();
+        const [suggestedRes, allRes] = await Promise.allSettled([
+          fetch("/api/jobs/suggested").then(r => r.ok ? r.json() : null),
+          fetch("/api/jobs/all").then(r => r.ok ? r.json() : null),
+        ]);
+
+        if (suggestedRes.status === "fulfilled" && suggestedRes.value) {
+          const data = suggestedRes.value;
           setCompanies(data.companies || []);
           setIsMatchingCompleted(data.isMatchingCompleted ?? true);
           if (data.hasResume !== undefined) {
@@ -99,17 +112,25 @@ export function SuggestedJobs() {
               hasResume: data.hasResume ?? true,
             }));
           } catch (e) {}
-        } else {
-          console.warn("Failed to load suggested jobs feed");
+        }
+
+        if (allRes.status === "fulfilled" && allRes.value) {
+          const allData = allRes.value;
+          setAllCompanies(allData.companies || []);
+          try {
+            sessionStorage.setItem("proxnet_all_jobs_cache", JSON.stringify({
+              companies: allData.companies || [],
+            }));
+          } catch (e) {}
         }
       } catch (e) {
-        console.error("Failed to fetch suggested jobs", e);
+        console.error("Failed to load jobs feed", e);
         setErrorMsg("An error occurred while fetching jobs.");
       } finally {
         setLoading(false);
       }
     }
-    fetchSuggested();
+    loadData();
   }, []);
 
   useEffect(() => {
@@ -239,13 +260,25 @@ export function SuggestedJobs() {
 
   // Filter companies/jobs by search query
   const q = searchQuery.toLowerCase().trim();
-  const filteredCompanies = companies.filter(c => {
+  const filteredMatchedCompanies = companies.filter(c => {
     if (!q) return true;
     return (
       c.company.toLowerCase().includes(q) ||
-      c.jobs.some(j => j.title.toLowerCase().includes(q))
+      c.jobs.some(j => j.title.toLowerCase().includes(q) || (j.keywords && j.keywords.some(k => k.toLowerCase().includes(q))))
     );
   });
+
+  const filteredAllCompanies = allCompanies.filter(c => {
+    if (!q) return true;
+    return (
+      c.company.toLowerCase().includes(q) ||
+      c.jobs.some(j => j.title.toLowerCase().includes(q) || (j.keywords && j.keywords.some(k => k.toLowerCase().includes(q))))
+    );
+  });
+
+  const displayedCompanies = jobsViewMode === "matched" ? filteredMatchedCompanies : filteredAllCompanies;
+  const totalAllJobs = allCompanies.reduce((acc, c) => acc + c.jobs.length, 0);
+  const totalMatchedJobs = companies.reduce((acc, c) => acc + c.jobs.length, 0);
 
   return (
     <div className="space-y-4 stagger-children max-w-3xl mx-auto pb-8">
@@ -290,15 +323,19 @@ export function SuggestedJobs() {
         onCompaniesChanged={async () => {
           const fetchLatest = async () => {
             try {
-              const res = await fetch("/api/jobs/suggested");
-              if (res.ok) {
-                const data = await res.json();
-                setCompanies(data.companies || []);
+              const [sRes, aRes] = await Promise.allSettled([
+                fetch("/api/jobs/suggested").then(r => r.ok ? r.json() : null),
+                fetch("/api/jobs/all").then(r => r.ok ? r.json() : null),
+              ]);
+              if (sRes.status === "fulfilled" && sRes.value) {
+                setCompanies(sRes.value.companies || []);
+              }
+              if (aRes.status === "fulfilled" && aRes.value) {
+                setAllCompanies(aRes.value.companies || []);
               }
             } catch (e) {}
           };
           await fetchLatest();
-          // Schedule follow-up fetches to pick up completed background scrape jobs
           setTimeout(fetchLatest, 4000);
           setTimeout(fetchLatest, 10000);
         }}
@@ -335,6 +372,49 @@ export function SuggestedJobs() {
         )}
       </div>
 
+      {/* Segmented View Switcher: Matched vs All Jobs by Company */}
+      <div className="flex items-center p-1 bg-[var(--color-surface-secondary)] rounded-xl border border-[var(--color-border-light)] gap-1 shadow-xs">
+        <button
+          type="button"
+          onClick={() => setJobsViewMode("matched")}
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border-0 cursor-pointer ${
+            jobsViewMode === "matched"
+              ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm"
+              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
+          }`}
+        >
+          <span>🎯</span>
+          <span>Matched For You</span>
+          {companies.length > 0 && (
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              jobsViewMode === "matched" ? "bg-primary/15 text-primary" : "bg-[var(--color-border-light)] text-[var(--color-text-secondary)]"
+            }`}>
+              {companies.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setJobsViewMode("all")}
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border-0 cursor-pointer ${
+            jobsViewMode === "all"
+              ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm"
+              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
+          }`}
+        >
+          <span>🏢</span>
+          <span>All Scraped Jobs by Company</span>
+          {allCompanies.length > 0 && (
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              jobsViewMode === "all" ? "bg-primary/15 text-primary" : "bg-[var(--color-border-light)] text-[var(--color-text-secondary)]"
+            }`}>
+              {allCompanies.length} ({totalAllJobs})
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Search Bar */}
       <div className="relative">
         <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-text-tertiary">
@@ -342,22 +422,26 @@ export function SuggestedJobs() {
         </span>
         <input
           type="text"
-          placeholder="Search by company, job title, location, or keywords..."
+          placeholder={jobsViewMode === "matched" ? "Search matched roles or companies..." : "Search all scraped companies and openings..."}
           className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-surface hover:border-primary/50 focus:border-primary focus:outline-none transition-colors text-sm"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
       </div>
 
-      {filteredCompanies.length === 0 ? (
+      {displayedCompanies.length === 0 ? (
         <div className="card p-12 text-center border border-dashed border-border flex flex-col items-center animate-fadeIn min-h-[250px] justify-center bg-surface">
           <svg className="text-text-tertiary mb-3" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>
-          <p className="text-body text-text-secondary font-medium">No company matches found.</p>
-          <p className="text-caption mt-1">Try updating your Bio on your profile, or adjust your search keywords.</p>
+          <p className="text-body text-text-secondary font-medium">
+            {jobsViewMode === "matched" ? "No matched companies found." : "No scraped companies found."}
+          </p>
+          <p className="text-caption mt-1">
+            {jobsViewMode === "matched" ? "Try updating your profile details, or switch to 'All Scraped Jobs by Company' above." : "Try adjusting your search query."}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredCompanies.map((group) => (
+          {displayedCompanies.map((group) => (
             <div
               key={group.company}
               className="card p-3 sm:p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)] transition-all flex items-center justify-between gap-4"
@@ -434,9 +518,13 @@ export function SuggestedJobs() {
                       <span className="badge bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
                         ✨ Good Match • {job.score || job.matchRate}%
                       </span>
-                    ) : (
+                    ) : job.label === "Moderate Match" ? (
                       <span className="badge bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
                         💡 {job.label || "Moderate Match"} • {job.score || job.matchRate}%
+                      </span>
+                    ) : (
+                      <span className="badge bg-primary/10 text-primary border border-primary/20 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
+                        🏢 Active Role
                       </span>
                     )}
                   </div>
