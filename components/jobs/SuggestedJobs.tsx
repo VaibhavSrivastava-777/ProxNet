@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CompanyLogo } from "@/components/qa/QuestionList";
-import { TargetCompanyManager } from "./TargetCompanyManager";
 
 interface SuggestedJob {
   id: string;
@@ -322,28 +321,6 @@ export function SuggestedJobs() {
           </button>
         </div>
       )}
-
-      <TargetCompanyManager
-        onCompaniesChanged={async () => {
-          const fetchLatest = async () => {
-            try {
-              const [sRes, aRes] = await Promise.allSettled([
-                fetch("/api/jobs/suggested").then(r => r.ok ? r.json() : null),
-                fetch("/api/jobs/all").then(r => r.ok ? r.json() : null),
-              ]);
-              if (sRes.status === "fulfilled" && sRes.value) {
-                setCompanies(sRes.value.companies || []);
-              }
-              if (aRes.status === "fulfilled" && aRes.value) {
-                setAllCompanies(aRes.value.companies || []);
-              }
-            } catch (e) {}
-          };
-          await fetchLatest();
-          setTimeout(fetchLatest, 4000);
-          setTimeout(fetchLatest, 10000);
-        }}
-      />
 
       {/* Bio Digest (Minimal Header) */}
       <div className="flex flex-col gap-4">
