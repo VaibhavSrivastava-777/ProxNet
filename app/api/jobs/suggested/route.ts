@@ -307,7 +307,14 @@ Return ONLY a JSON object with:
     const finalCompanies = Object.values(companyGroups)
       .map(g => {
         g.contactsCount = g.referralContacts.length;
-        g.jobs.sort((a, b) => b.score - a.score);
+        g.jobs.sort((a, b) => {
+          const scoreA = a.score ?? a.matchRate ?? 0;
+          const scoreB = b.score ?? b.matchRate ?? 0;
+          if (scoreB !== scoreA) return scoreB - scoreA;
+          const dateA = a.posted_at ? new Date(a.posted_at).getTime() : 0;
+          const dateB = b.posted_at ? new Date(b.posted_at).getTime() : 0;
+          return dateB - dateA;
+        });
         return g;
       });
 

@@ -506,10 +506,12 @@ export function SuggestedJobs() {
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               {[...activeCompanyModal.jobs]
                 .sort((a, b) => {
+                  const scoreA = a.score ?? a.matchRate ?? 0;
+                  const scoreB = b.score ?? b.matchRate ?? 0;
+                  if (scoreB !== scoreA) return scoreB - scoreA;
                   const dateA = a.posted_at ? new Date(a.posted_at).getTime() : 0;
                   const dateB = b.posted_at ? new Date(b.posted_at).getTime() : 0;
-                  if (dateB !== dateA) return dateB - dateA;
-                  return (b.score || 0) - (a.score || 0);
+                  return dateB - dateA;
                 })
                 .map((job) => {
                   const cleanDirectUrl = (job.url || "").replace(/&amp;/g, "&").trim();
