@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   // 1. Fetch whitelisted users ONLY
   const { data: users, error: userError } = await supabase
     .from("users")
-    .select("id, full_name, email, profile_digest, company, embedding")
+    .select("id, full_name, email, job_title, company, about, professional_bio, resume_text, profile_digest, embedding, tags")
     .eq("is_blocked", false);
 
   if (userError || !users) {
@@ -32,34 +32,76 @@ export async function POST(request: Request) {
     });
   }
 
+  const { rerankJobsForCandidate } = await import("@/lib/jobs/reranker");
   let totalNudgesSent = 0;
+  const twoWeeksAgo = new Date();
+  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
   for (const testUser of testUsers) {
     if (!testUser.embedding) continue;
 
-    // Vector match against scraped jobs with > 60% match threshold
+    // Stage 1: Vector match with broad threshold (0.25)
     const { data: matchedJobs, error: matchError } = await supabase.rpc("match_scraped_jobs", {
       query_embedding: testUser.embedding,
-      match_threshold: 0.6, // strict > 60%
-      match_count: 20
+      match_threshold: 0.25,
+      match_count: 40
     });
 
     if (matchError || !matchedJobs || matchedJobs.length === 0) {
-      // If there is no matching job (> 60%), do NOT send notification
       continue;
     }
 
+    const candidateJobs: any[] = [];
     for (const job of matchedJobs) {
-      const matchRate = Math.round((job.similarity || 0) * 100);
-      if (matchRate <= 60) continue;
+      if (job.posted_at) {
+        const jobDate = new Date(job.posted_at);
+        if (!isNaN(jobDate.getTime()) && jobDate < twoWeeksAgo) continue;
+      }
+      candidateJobs.push(job);
+    }
 
-      const companyName = (job.company || job.company_name || "").trim();
-      const jobTitle = (job.title || job.role || "").trim();
+    if (candidateJobs.length === 0) continue;
+
+    // Stage 2: LLM Reranking
+    const candidateProfile = {
+      id: testUser.id,
+      job_title: testUser.job_title,
+      company: testUser.company,
+      about: testUser.about || testUser.professional_bio,
+      resume_text: testUser.resume_text,
+      profile_digest: testUser.profile_digest,
+      tags: testUser.tags,
+    };
+
+    const jobsToRerank = candidateJobs.slice(0, 25).map((j: any) => ({
+      id: j.id,
+      title: j.title || j.role || "",
+      company: (j.company || j.company_name || "").trim(),
+      location: j.location,
+      description: j.description,
+      keywords: j.keywords || [],
+      posted_at: j.posted_at,
+      url: j.url,
+      rawSimilarity: j.similarity,
+    }));
+
+    const rerankedMap = await rerankJobsForCandidate(candidateProfile, jobsToRerank);
+
+    // Filter for Strong Matches (score >= 75)
+    for (const job of jobsToRerank) {
+      const reranked = rerankedMap.get(job.id);
+      if (!reranked || reranked.score < 75) continue;
+
+      const score = reranked.score;
+      const label = reranked.label;
+      const reason = reranked.reason;
+      const companyName = job.company;
+      const jobTitle = job.title;
       const jobId = job.id;
 
       if (!companyName || !jobTitle) continue;
 
-      // Check if user was already notified for THIS PARTICULAR JOB POSTING
+      // Deduplication check
       const { data: existing } = await supabase
         .from("in_app_notifications")
         .select("id")
@@ -68,16 +110,16 @@ export async function POST(request: Request) {
 
       if (existing && existing.length > 0) continue;
 
-      // Send mobile notification ONLY FOR THIS PARTICULAR JOB POSTING
+      // Dispatch notification
       await sendNotification(testUser.id, {
-        title: `🔥 ${matchRate}% Job Match: ${jobTitle} at ${companyName}`,
-        body: `Matching Job: "${jobTitle}" at ${companyName} has a ${matchRate}% match with your profile. Tap to apply!`,
-        url: `/jobs?jobId=${encodeURIComponent(jobId)}&match=${matchRate}`,
-        data: { jobId, matchRate, type: "job_match_60" }
+        title: `🔥 Strong Job Match (${score}%): ${jobTitle} at ${companyName}`,
+        body: `${reason} Tap to view details and apply!`,
+        url: `/jobs?jobId=${encodeURIComponent(jobId)}&match=${score}`,
+        data: { jobId, matchRate: score, label, reason, type: "job_match_75" }
       });
 
       totalNudgesSent++;
-      console.log(`[Whitelisted Nudge] Sent ${matchRate}% match notification to ${testUser.email} for ${jobTitle} @ ${companyName}`);
+      console.log(`[Whitelisted Nudge] Sent ${score}% (${label}) notification to ${testUser.email} for ${jobTitle} @ ${companyName}`);
     }
   }
 

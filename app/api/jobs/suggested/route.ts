@@ -154,11 +154,11 @@ Return ONLY a JSON object with:
       });
     }
 
-    // 3. Match against jobs using the Supabase RPC function (threshold 0.3 for normalized scoring)
+    // 3. Stage 1: Fast vector retrieval using Supabase RPC function (threshold 0.25 to catch all possible candidates)
     const { data: matchedJobs, error: matchError } = await supabase.rpc("match_scraped_jobs", {
       query_embedding: userEmbedding,
-      match_threshold: 0.3,
-      match_count: 200
+      match_threshold: 0.25,
+      match_count: 100
     });
 
     if (matchError) {
@@ -166,7 +166,46 @@ Return ONLY a JSON object with:
       return NextResponse.json({ error: "Failed to match jobs" }, { status: 500 });
     }
 
-    // Group jobs by company, filter out junior roles & <60% match rate, and verify referral contacts presence.
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+    // Pre-filter candidate jobs by freshness and seniority before reranking
+    const candidateJobs: any[] = [];
+    for (const row of matchedJobs || []) {
+      if (row.posted_at) {
+        const jobDate = new Date(row.posted_at);
+        if (!isNaN(jobDate.getTime()) && jobDate < twoWeeksAgo) continue;
+      }
+      if (isJuniorJob(row.title, row.description || "")) continue;
+      candidateJobs.push(row);
+    }
+
+    // 4. Stage 2: Intelligent LLM Reranking
+    const candidateProfile = {
+      id: user.id,
+      job_title: userProfile.job_title,
+      company: userProfile.company,
+      about: userProfile.about,
+      resume_text: userProfile.resume_text,
+      profile_digest: profileDigest,
+    };
+
+    const jobsToRerank = candidateJobs.slice(0, 40).map(j => ({
+      id: j.id,
+      title: j.title,
+      company: j.company,
+      location: j.location,
+      description: j.description,
+      keywords: j.keywords || [],
+      posted_at: j.posted_at,
+      url: j.url,
+      rawSimilarity: j.similarity,
+    }));
+
+    const { rerankJobsForCandidate } = await import("@/lib/jobs/reranker");
+    const rerankedMap = await rerankJobsForCandidate(candidateProfile, jobsToRerank);
+
+    // Group jobs by company and filter out Low Match (< 50%)
     const companyGroups: Record<string, {
       company: string;
       contactsCount: number;
@@ -180,33 +219,21 @@ Return ONLY a JSON object with:
         posted_at: string;
         keywords: string[];
         matchRate: number;
+        score: number;
+        label: string;
+        reason: string;
       }>;
     }> = {};
 
-    const twoWeeksAgo = new Date();
-    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    for (const row of candidateJobs) {
+      const reranked = rerankedMap.get(row.id);
+      const score = reranked ? reranked.score : Math.min(45, Math.round((row.similarity || 0.35) * 100));
+      const label = reranked ? reranked.label : "Low Match";
+      const reason = reranked ? reranked.reason : "Profile evaluation completed.";
 
-    for (const row of matchedJobs || []) {
-      // Normalized match rate calculation
-      const matchRate = Math.min(99, Math.max(0, Math.round(((row.similarity - 0.25) / 0.35) * 100)));
+      // Only display jobs with at least Moderate Match (>= 50%) to eliminate cross-functional noise
+      if (score < 50) continue;
 
-      // Hide jobs with less than 60% match rate
-      if (matchRate < 60) continue;
-
-      // Filter out jobs older than 2 weeks
-      if (row.posted_at) {
-        const jobDate = new Date(row.posted_at);
-        if (!isNaN(jobDate.getTime()) && jobDate < twoWeeksAgo) {
-          continue;
-        }
-      }
-
-      // Filter out junior jobs (< 3 years experience requirements)
-      if (isJuniorJob(row.title, row.description || "")) {
-        continue;
-      }
-
-      // Group jobs under company
       const companyKey = row.company.trim();
       if (!companyGroups[companyKey]) {
         companyGroups[companyKey] = {
@@ -239,7 +266,10 @@ Return ONLY a JSON object with:
           description: row.description,
           posted_at: row.posted_at,
           keywords: row.keywords || [],
-          matchRate
+          matchRate: score,
+          score,
+          label,
+          reason,
         });
       }
     }
@@ -273,25 +303,25 @@ Return ONLY a JSON object with:
       }
     }
 
-    // Include matched job groups with match rates for all members (including target companies without referrers)
+    // Include matched job groups sorted by highest reranked score
     const finalCompanies = Object.values(companyGroups)
       .map(g => {
         g.contactsCount = g.referralContacts.length;
-        // Sort jobs by highest match rate
-        g.jobs.sort((a, b) => b.matchRate - a.matchRate);
+        g.jobs.sort((a, b) => b.score - a.score);
         return g;
       });
 
-    // Sort companies by the highest job match rate overall in their list
+    // Sort companies by the highest job match score overall in their list
     finalCompanies.sort((a, b) => {
-      const maxA = a.jobs.length > 0 ? a.jobs[0].matchRate : 0;
-      const maxB = b.jobs.length > 0 ? b.jobs[0].matchRate : 0;
+      const maxA = a.jobs.length > 0 ? a.jobs[0].score : 0;
+      const maxB = b.jobs.length > 0 ? b.jobs[0].score : 0;
       return maxB - maxA;
     });
 
     return NextResponse.json({
       success: true,
       isMatchingCompleted: true,
+      hasResume: Boolean(userProfile?.resume_text && userProfile.resume_text.trim().length > 50),
       profileDigest,
       companies: finalCompanies
     });

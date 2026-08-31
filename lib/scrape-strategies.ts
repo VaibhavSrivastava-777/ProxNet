@@ -431,7 +431,41 @@ export const workdayStrategy: ScrapeStrategy = async (boardUrl, companyName) => 
 };
 
 export const oracleStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
-  console.log(`  [ORACLE] Fetch natively blocked by Akamai. Falling back to customStrategy for ${companyName}...`);
+  console.log(`  [ORACLE CX API] Scraping job requisitions for ${companyName} from ${boardUrl}...`);
+  try {
+    const urlObj = new URL(boardUrl);
+    const host = urlObj.origin;
+    
+    // Extract siteNumber from URL path if present (e.g. /sites/CX_1/requisitions or /sites/careers/job/...)
+    const siteMatch = boardUrl.match(/\/sites\/([^/]+)/);
+    const siteNumber = siteMatch ? siteMatch[1] : "careers";
+
+    const apiUrl = `${host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions?finder=findReqs;siteNumber=${siteNumber}&expand=all&limit=100`;
+
+    const res = await fetchWithHeaders(apiUrl, { signal: AbortSignal.timeout(30000) });
+    if (res.ok) {
+      const data = await res.json();
+      const items = data.items || [];
+      if (items.length > 0 && items[0].requisitionList && items[0].requisitionList.length > 0) {
+        const reqs = items[0].requisitionList;
+        console.log(`  [ORACLE CX API] Found ${reqs.length} direct job requisitions!`);
+        return reqs.map((j: any) => {
+          const jobId = j.Id || j.RequisitionId;
+          const directUrl = `${host}/hcmUI/CandidateExperience/en/sites/${siteNumber}/job/${jobId}`;
+          return {
+            title: j.Title || "Job Opportunity",
+            location: j.PrimaryLocation || j.PrimaryLocationCountry || "Remote",
+            url: directUrl,
+            posted_at: j.PostedDate ? new Date(j.PostedDate).toISOString() : new Date().toISOString(),
+            description: j.Title || "",
+            source: "oracle_cx_api"
+          };
+        });
+      }
+    }
+  } catch (e: any) {
+    console.error(`  [ORACLE CX API ERROR] ${e.message}`);
+  }
   return customStrategy(boardUrl, companyName);
 };
 

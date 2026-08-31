@@ -14,6 +14,9 @@ interface SuggestedJob {
   posted_at: string;
   keywords: string[];
   matchRate: number;
+  score?: number;
+  label?: string;
+  reason?: string;
 }
 
 interface CompanyGroup {
@@ -32,6 +35,7 @@ interface ProfileDigest {
 export function SuggestedJobs() {
   const [companies, setCompanies] = useState<CompanyGroup[]>([]);
   const [profileDigest, setProfileDigest] = useState<ProfileDigest | null>(null);
+  const [hasResume, setHasResume] = useState(true);
   const [loading, setLoading] = useState(true);
   const [startingChat, setStartingChat] = useState<string | null>(null);
   const [activeCompanyModal, setActiveCompanyModal] = useState<CompanyGroup | null>(null);
@@ -60,6 +64,21 @@ export function SuggestedJobs() {
   };
 
   useEffect(() => {
+    // 1. Immediately hydrate from cache if available (instant 0ms render)
+    try {
+      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.companies && parsed.companies.length > 0) {
+          setCompanies(parsed.companies);
+          if (parsed.profileDigest) setProfileDigest(parsed.profileDigest);
+          if (parsed.hasResume !== undefined) setHasResume(parsed.hasResume);
+          setLoading(false);
+        }
+      }
+    } catch (e) {}
+
+    // 2. Fetch fresh data in the background and update cache
     async function fetchSuggested() {
       try {
         const res = await fetch("/api/jobs/suggested");
@@ -67,9 +86,19 @@ export function SuggestedJobs() {
           const data = await res.json();
           setCompanies(data.companies || []);
           setIsMatchingCompleted(data.isMatchingCompleted ?? true);
+          if (data.hasResume !== undefined) {
+            setHasResume(data.hasResume);
+          }
           if (data.profileDigest) {
             setProfileDigest(data.profileDigest);
           }
+          try {
+            sessionStorage.setItem("proxnet_suggested_jobs_cache", JSON.stringify({
+              companies: data.companies || [],
+              profileDigest: data.profileDigest || null,
+              hasResume: data.hasResume ?? true,
+            }));
+          } catch (e) {}
         } else {
           console.warn("Failed to load suggested jobs feed");
         }
@@ -93,6 +122,9 @@ export function SuggestedJobs() {
           setCompanies(data.companies || []);
           const completed = data.isMatchingCompleted ?? true;
           setIsMatchingCompleted(completed);
+          if (data.hasResume !== undefined) {
+            setHasResume(data.hasResume);
+          }
           if (data.profileDigest) {
             setProfileDigest(data.profileDigest);
           }
@@ -227,6 +259,30 @@ export function SuggestedJobs() {
       {!isMatchingCompleted && (
         <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-bold text-center animate-pulse">
           ℹ️ GENERATING THE LATEST MATCH LIST IN THE BACKGROUD
+        </div>
+      )}
+
+      {/* Resume Upload Incentive Banner */}
+      {!hasResume && (
+        <div className="bg-gradient-to-r from-primary/15 via-primary/5 to-transparent border border-primary/30 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-fadeInUp">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl sm:text-3xl shrink-0">📄</span>
+            <div>
+              <h4 className="font-bold text-sm sm:text-base text-[var(--color-text)] m-0 flex items-center gap-2 flex-wrap">
+                Unlock Accurate 90%+ Strong Matches & Referral Intros
+                <span className="badge bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] px-2 py-0.5 font-bold">Resume Needed</span>
+              </h4>
+              <p className="text-xs text-[var(--color-text-secondary)] mt-1 m-0 leading-relaxed">
+                ProxNet is constantly scraping new job openings daily. Upload your resume so our AI can accurately match your specific skills, generate tailored fit reasons, and connect you with internal referrers.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => router.push("/profile?prompt=resume")}
+            className="btn btn-primary btn-sm shrink-0 whitespace-nowrap shadow-sm font-semibold flex items-center gap-1.5 self-stretch sm:self-auto justify-center"
+          >
+            <span>🚀</span> Upload Resume
+          </button>
         </div>
       )}
 
@@ -367,13 +423,31 @@ export function SuggestedJobs() {
             </div>
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               {activeCompanyModal.jobs.map((job) => (
-                <div key={job.id} className="p-4 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col gap-2">
+                <div key={job.id} className="p-4 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col gap-2.5">
                   <div className="flex justify-between items-start gap-2">
-                    <h4 className="font-semibold text-sm text-[var(--color-text)] m-0">{job.title}</h4>
-                    <span className="badge bg-primary/10 text-primary border border-primary/20 text-[10px] px-1.5 font-bold shrink-0">
-                      {job.matchRate}% Match
-                    </span>
+                    <h4 className="font-semibold text-sm text-[var(--color-text)] m-0 leading-snug">{job.title}</h4>
+                    {job.label === "Strong Match" ? (
+                      <span className="badge bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
+                        🔥 Strong Match • {job.score || job.matchRate}%
+                      </span>
+                    ) : job.label === "Good Match" ? (
+                      <span className="badge bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
+                        ✨ Good Match • {job.score || job.matchRate}%
+                      </span>
+                    ) : (
+                      <span className="badge bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
+                        💡 {job.label || "Moderate Match"} • {job.score || job.matchRate}%
+                      </span>
+                    )}
                   </div>
+
+                  {job.reason && (
+                    <div className="text-xs text-text-secondary bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-md p-2.5 flex items-start gap-2">
+                      <span className="text-primary text-xs shrink-0 mt-0.5">💡</span>
+                      <span className="leading-relaxed font-normal">{job.reason}</span>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-4 text-xs text-[var(--color-text-secondary)]">
                     <span>📍 {job.location || "Remote"}</span>
                     {job.posted_at && (
@@ -385,7 +459,7 @@ export function SuggestedJobs() {
                       href={job.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="btn btn-sm btn-primary mt-2 text-center text-xs block py-1.5 no-underline"
+                      className="btn btn-sm btn-primary mt-1 text-center text-xs block py-1.5 no-underline font-semibold"
                     >
                       Apply on Career Website
                     </a>

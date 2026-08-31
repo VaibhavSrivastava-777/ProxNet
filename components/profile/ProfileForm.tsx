@@ -275,6 +275,21 @@ export function ProfileForm({ initialUser }: Props) {
     }
   }, [showModal]);
 
+  useEffect(() => {
+    if (searchParams && searchParams.get("prompt") === "resume") {
+      setTimeout(() => {
+        const el = document.getElementById("resume-section");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("ring-2", "ring-[var(--color-primary)]", "animate-pulse");
+          setTimeout(() => {
+            el.classList.remove("animate-pulse");
+          }, 3000);
+        }
+      }, 400);
+    }
+  }, [searchParams]);
+
   const handleLinkedInBlur = async (url: string) => {
     if (!url || url === "https://www.linkedin.com/in/" || !url.includes("linkedin.com")) return;
     setFetchingLinkedInDetails(true);
@@ -1012,7 +1027,7 @@ export function ProfileForm({ initialUser }: Props) {
             />
           </div>
 
-          <div style={{ gridColumn: "1 / -1" }} className="bg-[var(--color-surface-hover)] p-4 rounded-lg border border-[var(--color-primary-subtle)]">
+          <div id="resume-section" style={{ gridColumn: "1 / -1" }} className="bg-[var(--color-surface-hover)] p-4 rounded-lg border border-[var(--color-primary-subtle)] transition-all duration-300">
             <label htmlFor="resume-upload" className="label font-bold text-[var(--color-primary)]">Upload Resume (PDF) for AI Matching (Optional)</label>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-2">
               <input
