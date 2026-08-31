@@ -372,7 +372,7 @@ export function SuggestedJobs() {
         )}
       </div>
 
-      {/* Segmented View Switcher: Matched vs All Jobs by Company */}
+      {/* Segmented View Switcher: Matched vs All Jobs */}
       <div className="flex items-center p-1 bg-[var(--color-surface-secondary)] rounded-xl border border-[var(--color-border-light)] gap-1 shadow-xs">
         <button
           type="button"
@@ -383,8 +383,7 @@ export function SuggestedJobs() {
               : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
           }`}
         >
-          <span>🎯</span>
-          <span>Matched For You</span>
+          <span>Matched</span>
           {companies.length > 0 && (
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
               jobsViewMode === "matched" ? "bg-primary/15 text-primary" : "bg-[var(--color-border-light)] text-[var(--color-text-secondary)]"
@@ -403,8 +402,7 @@ export function SuggestedJobs() {
               : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
           }`}
         >
-          <span>🏢</span>
-          <span>All Scraped Jobs by Company</span>
+          <span>All Jobs</span>
           {allCompanies.length > 0 && (
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
               jobsViewMode === "all" ? "bg-primary/15 text-primary" : "bg-[var(--color-border-light)] text-[var(--color-text-secondary)]"
@@ -506,54 +504,64 @@ export function SuggestedJobs() {
               </button>
             </div>
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-              {activeCompanyModal.jobs.map((job) => (
-                <div key={job.id} className="p-4 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col gap-2.5">
-                  <div className="flex justify-between items-start gap-2">
-                    <h4 className="font-semibold text-sm text-[var(--color-text)] m-0 leading-snug">{job.title}</h4>
-                    {job.label === "Strong Match" ? (
-                      <span className="badge bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
-                        🔥 Strong Match • {job.score || job.matchRate}%
-                      </span>
-                    ) : job.label === "Good Match" ? (
-                      <span className="badge bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
-                        ✨ Good Match • {job.score || job.matchRate}%
-                      </span>
-                    ) : job.label === "Moderate Match" ? (
-                      <span className="badge bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
-                        💡 {job.label || "Moderate Match"} • {job.score || job.matchRate}%
-                      </span>
-                    ) : (
-                      <span className="badge bg-primary/10 text-primary border border-primary/20 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
-                        🏢 Active Role
-                      </span>
-                    )}
-                  </div>
+              {[...activeCompanyModal.jobs]
+                .sort((a, b) => {
+                  const dateA = a.posted_at ? new Date(a.posted_at).getTime() : 0;
+                  const dateB = b.posted_at ? new Date(b.posted_at).getTime() : 0;
+                  if (dateB !== dateA) return dateB - dateA;
+                  return (b.score || 0) - (a.score || 0);
+                })
+                .map((job) => {
+                  const cleanDirectUrl = (job.url || "").replace(/&amp;/g, "&").trim();
+                  return (
+                    <div key={job.id} className="p-4 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col gap-2.5">
+                      <div className="flex justify-between items-start gap-2">
+                        <h4 className="font-semibold text-sm text-[var(--color-text)] m-0 leading-snug">{job.title}</h4>
+                        {job.label === "Strong Match" ? (
+                          <span className="badge bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
+                            🔥 Strong Match • {job.score || job.matchRate}%
+                          </span>
+                        ) : job.label === "Good Match" ? (
+                          <span className="badge bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
+                            ✨ Good Match • {job.score || job.matchRate}%
+                          </span>
+                        ) : job.label === "Moderate Match" ? (
+                          <span className="badge bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
+                            💡 {job.label || "Moderate Match"} • {job.score || job.matchRate}%
+                          </span>
+                        ) : (
+                          <span className="badge bg-primary/10 text-primary border border-primary/20 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
+                            🏢 Active Role
+                          </span>
+                        )}
+                      </div>
 
-                  {job.reason && (
-                    <div className="text-xs text-text-secondary bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-md p-2.5 flex items-start gap-2">
-                      <span className="text-primary text-xs shrink-0 mt-0.5">💡</span>
-                      <span className="leading-relaxed font-normal">{job.reason}</span>
+                      {job.reason && (
+                        <div className="text-xs text-text-secondary bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-md p-2.5 flex items-start gap-2">
+                          <span className="text-primary text-xs shrink-0 mt-0.5">💡</span>
+                          <span className="leading-relaxed font-normal">{job.reason}</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-4 text-xs text-[var(--color-text-secondary)]">
+                        <span>📍 {job.location || "Remote"}</span>
+                        {job.posted_at && (
+                          <span>📅 {new Date(job.posted_at).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                      {cleanDirectUrl && (
+                        <a 
+                          href={cleanDirectUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-sm btn-primary mt-1 text-center text-xs block py-1.5 no-underline font-semibold"
+                        >
+                          Apply on Career Website
+                        </a>
+                      )}
                     </div>
-                  )}
-
-                  <div className="flex items-center gap-4 text-xs text-[var(--color-text-secondary)]">
-                    <span>📍 {job.location || "Remote"}</span>
-                    {job.posted_at && (
-                      <span>📅 {new Date(job.posted_at).toLocaleDateString()}</span>
-                    )}
-                  </div>
-                  {job.url && (
-                    <a 
-                      href={job.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-sm btn-primary mt-1 text-center text-xs block py-1.5 no-underline font-semibold"
-                    >
-                      Apply on Career Website
-                    </a>
-                  )}
-                </div>
-              ))}
+                  );
+                })}
             </div>
           </div>
         </div>

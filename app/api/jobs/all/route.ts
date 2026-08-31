@@ -2,6 +2,35 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+function cleanUrlAndTitle(rawTitle: string, rawUrl: string) {
+  let cleanUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
+  let title = (rawTitle || "").trim();
+
+  // If title is generic ("Job Opportunity", "Job Opening", or empty), extract from URL slug
+  if (!title || title.toLowerCase() === "job opportunity" || title.toLowerCase() === "job opening") {
+    try {
+      const parsed = new URL(cleanUrl);
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const jobIndex = parts.findIndex(p => p.toLowerCase() === "job");
+      if (jobIndex !== -1 && parts[jobIndex + 1]) {
+        const slug = decodeURIComponent(parts[jobIndex + 1]);
+        const cleanedSlug = slug
+          .replace(/-(IND|USA|CAN|GBR|AUS|SGP|DEU|FRA|NLD|IND|KA|MH|DL|TG|TN|AP)-\d+.*$/i, "")
+          .replace(/-\d{5,8}.*$/, "");
+        
+        const slugParts = cleanedSlug.split("-");
+        if (slugParts.length > 1) {
+          title = slugParts.slice(1).join(" ").replace(/_/g, " ").trim();
+        } else {
+          title = cleanedSlug.replace(/_/g, " ").trim();
+        }
+      }
+    } catch (e) {}
+  }
+
+  return { title: title || "Job Opening", url: cleanUrl };
+}
+
 export async function GET(request: Request) {
   try {
     const user = await getCurrentUser();
@@ -88,16 +117,27 @@ export async function GET(request: Request) {
 
       const compData = companiesMap.get(compKey)!;
       if (!compData.jobs.some(j => j.id === job.id)) {
+        const { title: formattedTitle, url: formattedUrl } = cleanUrlAndTitle(job.title, job.url);
+
         compData.jobs.push({
           id: job.id,
-          title: job.title || "Job Opening",
+          title: formattedTitle,
           location: job.location || "Remote / India",
-          url: job.url || "",
+          url: formattedUrl,
           description: job.description || "",
           posted_at: job.posted_at || new Date().toISOString(),
           keywords: job.keywords || [],
         });
       }
+    }
+
+    // Sort jobs within each company by posted_at descending (newest first)
+    for (const comp of companiesMap.values()) {
+      comp.jobs.sort((a, b) => {
+        const dateA = a.posted_at ? new Date(a.posted_at).getTime() : 0;
+        const dateB = b.posted_at ? new Date(b.posted_at).getTime() : 0;
+        return dateB - dateA;
+      });
     }
 
     // Convert map to array and sort by total job count (descending)

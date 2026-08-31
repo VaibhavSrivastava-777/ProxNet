@@ -287,27 +287,33 @@ export const successfactorsSitemapStrategy: ScrapeStrategy = async (
 
   // Fallback to url entries
   return allEntries.map((entry) => {
-    // Extract location and title from the URL
-    // e.g. /job/Pune-Team-leader-IND-411005/1331778955/
-    const parts = entry.url.split("/");
-    const jobPart = parts.find((p) => p.includes("-IND-") || p.includes("-USA-") || p.toLowerCase().includes("job"));
+    const cleanUrl = (entry.url || "").replace(/&amp;/g, "&").trim();
+    const parts = cleanUrl.split("/").filter(Boolean);
+    const jobIndex = parts.findIndex((p) => p.toLowerCase() === "job");
     let title = "Job Opportunity";
     let location = "India";
 
-    if (jobPart) {
-      const clean = jobPart.replace(/-\d+$/, "").split("-");
-      if (clean.length > 1) {
-        location = clean[0];
-        title = clean.slice(1).join(" ");
+    if (jobIndex !== -1 && parts[jobIndex + 1]) {
+      const slug = decodeURIComponent(parts[jobIndex + 1]);
+      const cleanedSlug = slug
+        .replace(/-(IND|USA|CAN|GBR|AUS|SGP|DEU|FRA|NLD|IND|KA|MH|DL|TG|TN|AP)-\d+.*$/i, "")
+        .replace(/-\d{5,8}.*$/, "");
+      
+      const slugParts = cleanedSlug.split("-");
+      if (slugParts.length > 1) {
+        location = slugParts[0];
+        title = slugParts.slice(1).join(" ").replace(/_/g, " ").trim();
+      } else {
+        title = cleanedSlug.replace(/_/g, " ").trim();
       }
     }
 
     return {
-      title,
-      location,
-      url: entry.url,
+      title: title || "Job Opportunity",
+      location: location || "India",
+      url: cleanUrl,
       posted_at: entry.lastmod ? new Date(entry.lastmod).toISOString() : new Date().toISOString(),
-      description: `Job Opportunity position located at ${location}. Please view details on the company's careers site.`,
+      description: `${title} role located at ${location}. View details and apply directly on the company career portal.`,
       source: "successfactors_sitemap",
     };
   });
