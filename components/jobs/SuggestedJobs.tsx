@@ -117,9 +117,13 @@ export function SuggestedJobs() {
         if (allRes.status === "fulfilled" && allRes.value) {
           const allData = allRes.value;
           setAllCompanies(allData.companies || []);
+          if (allData.hasResume !== undefined) {
+            setHasResume(allData.hasResume);
+          }
           try {
             sessionStorage.setItem("proxnet_all_jobs_cache", JSON.stringify({
               companies: allData.companies || [],
+              hasResume: allData.hasResume ?? true,
             }));
           } catch (e) {}
         }

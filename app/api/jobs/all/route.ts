@@ -145,6 +145,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
+      hasResume: Boolean(user?.resume_text && user.resume_text.trim().length > 50),
       totalCompanies: companiesArray.length,
       totalJobs: scrapedJobs?.length || 0,
       companies: companiesArray,
