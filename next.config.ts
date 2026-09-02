@@ -8,14 +8,14 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
-        source: '/:path*',
+        source: '/:path((?!api/).*)',
         has: [
           {
             type: 'host',
             value: 'proxnet.in',
           },
         ],
-        destination: 'https://www.proxnet.in/:path*',
+        destination: 'https://www.proxnet.in/:path',
         permanent: true,
       },
     ];

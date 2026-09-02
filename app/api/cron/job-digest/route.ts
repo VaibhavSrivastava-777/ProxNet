@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
 import { getAdminSession } from "@/lib/admin-session";
 
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   return handleJobDigest(request);
 }
@@ -14,7 +16,8 @@ export async function POST(request: Request) {
 async function handleJobDigest(request: Request) {
   // Authorization check (Vercel Cron Secret or Admin Session)
   const authHeader = request.headers.get("authorization");
-  const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  const isCron = !!cronSecret && authHeader === `Bearer ${cronSecret}`;
   const adminSession = await getAdminSession();
 
   if (!isCron && !adminSession) {

@@ -63,10 +63,13 @@ function isIndianOrRemote(location: string): boolean {
   return indianKeywords.some(k => loc.includes(k)) || loc === "in" || loc === "ind" || loc.includes("pan india");
 }
 
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   // Authorization: Vercel Cron Secret or Admin Session
   const authHeader = request.headers.get("authorization");
-  const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  const isCron = !!cronSecret && authHeader === `Bearer ${cronSecret}`;
   const adminSession = await getAdminSession();
 
   if (!isCron && !adminSession) {
