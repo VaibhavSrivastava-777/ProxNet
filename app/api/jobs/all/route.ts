@@ -177,6 +177,12 @@ export async function GET() {
       totalCompanies: companiesArray.length,
       totalJobs: scrapedJobs?.length || 0,
       companies: companiesArray,
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
     });
   } catch (err: unknown) {
     console.error("[/api/jobs/all] unexpected error:", err);

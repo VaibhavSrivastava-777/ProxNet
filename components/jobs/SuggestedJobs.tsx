@@ -37,7 +37,8 @@ export function SuggestedJobs() {
   const [companies, setCompanies] = useState<CompanyGroup[]>(() => {
     if (typeof window === "undefined") return [];
     try {
-      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
+      sessionStorage.removeItem("proxnet_suggested_jobs_cache"); // purge legacy
+      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache_v2");
       if (cached) return JSON.parse(cached).companies || [];
     } catch {
       // ignore
@@ -47,7 +48,8 @@ export function SuggestedJobs() {
   const [allCompanies, setAllCompanies] = useState<CompanyGroup[]>(() => {
     if (typeof window === "undefined") return [];
     try {
-      const cached = sessionStorage.getItem("proxnet_all_jobs_cache");
+      sessionStorage.removeItem("proxnet_all_jobs_cache"); // purge legacy
+      const cached = sessionStorage.getItem("proxnet_all_jobs_cache_v2");
       if (cached) return JSON.parse(cached).companies || [];
     } catch {
       // ignore
@@ -58,7 +60,7 @@ export function SuggestedJobs() {
   const [profileDigest, setProfileDigest] = useState<ProfileDigest | null>(() => {
     if (typeof window === "undefined") return null;
     try {
-      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
+      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache_v2");
       if (cached) return JSON.parse(cached).profileDigest || null;
     } catch {
       // ignore
@@ -118,9 +120,10 @@ export function SuggestedJobs() {
 
   const loadData = useCallback(async () => {
     try {
+      const t = Date.now();
       const [suggestedRes, allRes] = await Promise.allSettled([
-        fetch("/api/jobs/suggested").then(r => r.ok ? r.json() : null),
-        fetch("/api/jobs/all").then(r => r.ok ? r.json() : null),
+        fetch(`/api/jobs/suggested?_t=${t}`, { cache: "no-store" }).then(r => r.ok ? r.json() : null),
+        fetch(`/api/jobs/all?_t=${t}`, { cache: "no-store" }).then(r => r.ok ? r.json() : null),
       ]);
 
       if (suggestedRes.status === "fulfilled" && suggestedRes.value) {
@@ -140,7 +143,7 @@ export function SuggestedJobs() {
           setProfileDigest(data.profileDigest);
         }
         try {
-          sessionStorage.setItem("proxnet_suggested_jobs_cache", JSON.stringify({
+          sessionStorage.setItem("proxnet_suggested_jobs_cache_v2", JSON.stringify({
             companies: data.companies || [],
             profileDigest: data.profileDigest || null,
             hasResume: data.hasResume ?? true,
@@ -165,7 +168,7 @@ export function SuggestedJobs() {
           setUserWallet(allData.wallet);
         }
         try {
-          sessionStorage.setItem("proxnet_all_jobs_cache", JSON.stringify({
+          sessionStorage.setItem("proxnet_all_jobs_cache_v2", JSON.stringify({
             companies: allData.companies || [],
             hasResume: allData.hasResume ?? true,
             resumeUrl: allData.resumeUrl || null,

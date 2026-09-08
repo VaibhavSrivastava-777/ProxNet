@@ -408,6 +408,12 @@ Return ONLY a JSON object with:
       wallet: userProfile?.wallet ?? 0,
       profileDigest,
       companies: finalCompanies
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
     });
 
   } catch (error) {
