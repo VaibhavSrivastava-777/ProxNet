@@ -62,12 +62,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Job posting not found" }, { status: 404 });
     }
 
-    // 3. Deduct 1 credit point from the user's wallet
     const newWallet = currentWallet - 1;
-    await supabase
-      .from("users")
-      .update({ wallet: newWallet })
-      .eq("id", user.id);
 
     // 4. Evaluate match rate in real-time using OpenAI
     const openaiKey = process.env.OPENAI_API_KEY;
@@ -147,6 +142,28 @@ ${jobContext}`;
         console.error("[match-rate] AI evaluation error:", msg);
       }
     }
+
+    // 5. Persist evaluated match in user's profile_digest.evaluated_matches & deduct wallet credit
+    const currentProfileDigest = userData.profile_digest || {};
+    const evaluatedMatches = currentProfileDigest.evaluated_matches || {};
+    evaluatedMatches[job.id] = {
+      jobId: job.id,
+      score,
+      label,
+      reason,
+      evaluated_at: new Date().toISOString(),
+    };
+
+    await supabase
+      .from("users")
+      .update({
+        wallet: newWallet,
+        profile_digest: {
+          ...currentProfileDigest,
+          evaluated_matches: evaluatedMatches,
+        },
+      })
+      .eq("id", user.id);
 
     return NextResponse.json({
       success: true,

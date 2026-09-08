@@ -40,20 +40,38 @@ export async function GET() {
 
     const supabase = createAdminClient();
 
-    // 1. Fetch scraped jobs from the last 60 days
-    const sixtyDaysAgo = new Date();
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+    // 1. Fetch scraped jobs strictly from the last 30 days (1 month)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysIso = thirtyDaysAgo.toISOString();
 
-    const { data: scrapedJobs, error: jobsError } = await supabase
-      .from("scraped_jobs")
-      .select("id, company, title, location, url, description, posted_at, keywords")
-      .gte("posted_at", sixtyDaysAgo.toISOString())
-      .order("posted_at", { ascending: false })
-      .limit(3000);
+    let scrapedJobs: any[] = [];
+    let from = 0;
+    const batchSize = 1000;
+    let hasMore = true;
 
-    if (jobsError) {
-      console.error("[/api/jobs/all] jobsError:", jobsError);
-      return NextResponse.json({ error: jobsError.message }, { status: 500 });
+    while (hasMore) {
+      const { data: batch, error: jobsError } = await supabase
+        .from("scraped_jobs")
+        .select("id, company, title, location, url, description, posted_at, keywords")
+        .gte("posted_at", thirtyDaysIso)
+        .order("posted_at", { ascending: false })
+        .range(from, from + batchSize - 1);
+
+      if (jobsError) {
+        console.error("[/api/jobs/all] jobsError:", jobsError);
+        return NextResponse.json({ error: jobsError.message }, { status: 500 });
+      }
+
+      if (batch && batch.length > 0) {
+        scrapedJobs.push(...batch);
+      }
+
+      if (!batch || batch.length < batchSize || scrapedJobs.length >= 10000) {
+        hasMore = false;
+      } else {
+        from += batchSize;
+      }
     }
 
     // 2. Fetch all active users with companies for referral matching

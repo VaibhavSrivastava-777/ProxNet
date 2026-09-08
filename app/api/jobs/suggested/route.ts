@@ -289,6 +289,66 @@ Return ONLY a JSON object with:
       }
     }
 
+    // 5. Merge on-demand evaluated matches (from profile_digest.evaluated_matches)
+    const evaluatedMatches = (profileDigest as any)?.evaluated_matches || {};
+    const evaluatedJobIds = Object.keys(evaluatedMatches).filter(id => {
+      const m = evaluatedMatches[id];
+      return m && typeof m.score === "number" && m.score >= 50;
+    });
+
+    if (evaluatedJobIds.length > 0) {
+      const existingJobIds = new Set<string>();
+      for (const group of Object.values(companyGroups)) {
+        for (const j of group.jobs) {
+          existingJobIds.add(j.id);
+          // If already present, ensure latest evaluated score & reason take precedence
+          if (evaluatedMatches[j.id]) {
+            const ev = evaluatedMatches[j.id];
+            j.score = ev.score;
+            j.matchRate = ev.score;
+            j.label = ev.label;
+            j.reason = ev.reason;
+          }
+        }
+      }
+
+      const missingJobIds = evaluatedJobIds.filter(id => !existingJobIds.has(id));
+      if (missingJobIds.length > 0) {
+        const { data: missingJobs } = await supabase
+          .from("scraped_jobs")
+          .select("id, title, company, location, url, description, posted_at, keywords")
+          .in("id", missingJobIds);
+
+        for (const job of missingJobs || []) {
+          const compKey = (job.company || "Hiring Company").trim();
+          if (!companyGroups[compKey]) {
+            companyGroups[compKey] = {
+              company: job.company || "Hiring Company",
+              contactsCount: 0,
+              referralContacts: [],
+              jobs: [],
+            };
+          }
+          const evalData = evaluatedMatches[job.id];
+          if (!companyGroups[compKey].jobs.some(j => j.id === job.id)) {
+            companyGroups[compKey].jobs.push({
+              id: job.id,
+              title: job.title,
+              location: job.location || "Remote",
+              url: job.url || "",
+              description: job.description || "",
+              posted_at: job.posted_at || "",
+              keywords: job.keywords || [],
+              matchRate: evalData.score,
+              score: evalData.score,
+              label: evalData.label,
+              reason: evalData.reason,
+            });
+          }
+        }
+      }
+    }
+
     // Fetch user details for all referralContacts to anonymize names
     const allContactIds = Object.values(companyGroups).flatMap(g => g.referralContacts.map(c => c.id));
     if (allContactIds.length > 0) {

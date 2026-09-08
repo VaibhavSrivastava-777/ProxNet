@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CompanyLogo } from "@/components/qa/QuestionList";
 import { ResumeCard } from "./ResumeCard";
+import { playNotificationSound } from "@/lib/sound";
 
 interface SuggestedJob {
   id: string;
@@ -110,6 +111,7 @@ export function SuggestedJobs() {
   const [activeCompanyModal, setActiveCompanyModal] = useState<CompanyGroup | null>(null);
   const [isMatchingCompleted, setIsMatchingCompleted] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [matchAddedToast, setMatchAddedToast] = useState<{ show: boolean; message: string; score: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSummary, setShowSummary] = useState(true);
   const router = useRouter();
@@ -273,16 +275,13 @@ export function SuggestedJobs() {
         return j;
       };
 
-      setCompanies(prev => prev.map(c => ({
-        ...c,
-        jobs: c.jobs.map(updateJob)
-      })));
-
+      // Always update job state in allCompanies
       setAllCompanies(prev => prev.map(c => ({
         ...c,
         jobs: c.jobs.map(updateJob)
       })));
 
+      // Always update job state in active modal
       setActiveCompanyModal(prev => {
         if (!prev) return null;
         return {
@@ -290,6 +289,88 @@ export function SuggestedJobs() {
           jobs: prev.jobs.map(updateJob)
         };
       });
+
+      // Find the evaluated job and its company metadata
+      let evaluatedJobItem: SuggestedJob | null = null;
+      let evaluatedCompanyName = "";
+      let evaluatedContactsCount = 0;
+      let evaluatedReferralContacts: Array<{ id: string; alias: string; is_followed?: boolean }> = [];
+
+      for (const comp of allCompanies) {
+        const found = comp.jobs.find(j => j.id === jobId);
+        if (found) {
+          evaluatedJobItem = {
+            ...found,
+            score: data.score,
+            matchRate: data.score,
+            label: data.label,
+            reason: data.reason,
+          };
+          evaluatedCompanyName = comp.company;
+          evaluatedContactsCount = comp.contactsCount;
+          evaluatedReferralContacts = comp.referralContacts;
+          break;
+        }
+      }
+
+      if (!evaluatedJobItem && activeCompanyModal) {
+        const found = activeCompanyModal.jobs.find(j => j.id === jobId);
+        if (found) {
+          evaluatedJobItem = {
+            ...found,
+            score: data.score,
+            matchRate: data.score,
+            label: data.label,
+            reason: data.reason,
+          };
+          evaluatedCompanyName = activeCompanyModal.company;
+          evaluatedContactsCount = activeCompanyModal.contactsCount;
+          evaluatedReferralContacts = activeCompanyModal.referralContacts;
+        }
+      }
+
+      // If match rate is at least 70% (or Good/Strong match), ensure it is auto-present in "Matched" tab
+      if (data.score >= 70 && evaluatedJobItem) {
+        try {
+          playNotificationSound("job_match");
+        } catch {}
+
+        setCompanies(prev => {
+          const compIdx = prev.findIndex(c => c.company.toLowerCase().trim() === evaluatedCompanyName.toLowerCase().trim());
+          if (compIdx !== -1) {
+            const existingComp = prev[compIdx];
+            const updatedJobs = existingComp.jobs.filter(j => j.id !== jobId);
+            updatedJobs.unshift(evaluatedJobItem!);
+            updatedJobs.sort((a, b) => (b.score ?? b.matchRate ?? 0) - (a.score ?? a.matchRate ?? 0));
+
+            const newComps = [...prev];
+            newComps[compIdx] = {
+              ...existingComp,
+              jobs: updatedJobs,
+            };
+            return newComps.sort((a, b) => (b.jobs[0]?.score ?? 0) - (a.jobs[0]?.score ?? 0));
+          } else {
+            const newGroup: CompanyGroup = {
+              company: evaluatedCompanyName,
+              contactsCount: evaluatedContactsCount,
+              referralContacts: evaluatedReferralContacts,
+              jobs: [evaluatedJobItem!],
+            };
+            return [newGroup, ...prev].sort((a, b) => (b.jobs[0]?.score ?? 0) - (a.jobs[0]?.score ?? 0));
+          }
+        });
+
+        setMatchAddedToast({
+          show: true,
+          message: `🔥 High Match (${data.score}%): ${evaluatedJobItem.title} at ${evaluatedCompanyName} is now in your "Matched" tab!`,
+          score: data.score,
+        });
+      } else {
+        setCompanies(prev => prev.map(c => ({
+          ...c,
+          jobs: c.jobs.map(updateJob)
+        })));
+      }
     } catch (err: unknown) {
       console.error("Failed to find match rate:", err);
       const message = err instanceof Error ? err.message : "Failed to calculate match rate";
@@ -448,6 +529,49 @@ export function SuggestedJobs() {
           </div>
         )}
       </div>
+
+      {/* Real-time Matched Transition Notification */}
+      {matchAddedToast && (
+        <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 flex items-center justify-between gap-3 shadow-xs animate-fadeInUp">
+          <div className="flex items-center gap-2.5 text-xs font-medium">
+            <span className="text-base">🎉</span>
+            <span>{matchAddedToast.message}</span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {jobsViewMode !== "matched" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setJobsViewMode("matched");
+                  setMatchAddedToast(null);
+                }}
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer border-0 shadow-xs"
+              >
+                View in Matched →
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setMatchAddedToast(null)}
+              className="p-1 text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-200 cursor-pointer border-0 bg-transparent"
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Freshness indicator for All Jobs */}
+      {jobsViewMode === "all" && (
+        <div className="flex items-center justify-between px-1 text-[11px] text-text-tertiary">
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>All verified listings posted within the last 30 days (≤ 1 month old)</span>
+          </span>
+          <span>{allCompanies.length} companies • {totalAllJobs} jobs</span>
+        </div>
+      )}
 
       {/* Search Bar */}
       <div className="relative">
