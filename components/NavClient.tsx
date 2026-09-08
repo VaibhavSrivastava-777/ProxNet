@@ -11,6 +11,7 @@ import { isProfileIncomplete } from "@/lib/profile-validation";
 import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
 import { RechargeModal } from "@/components/RechargeModal";
 import { playNotificationSound, unlockAudioContext, getSoundTypeForNotification, SoundType } from "@/lib/sound";
+import { SmartAppBanner } from "./SmartAppBanner";
 
 interface NavClientProps {
   session: boolean;
@@ -65,8 +66,6 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
   // Login Modal State
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [showPwaInstallModal, setShowPwaInstallModal] = useState(false);
-  const [deviceOs, setDeviceOs] = useState<"ios" | "android" | null>(null);
 
   // Wallet State
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -102,35 +101,9 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     return () => window.removeEventListener("openLoginModal", handler);
   }, []);
 
-  // Detect if running on mobile browser (not standalone PWA and not native app)
+  // Strip fresh_login param from URL without triggering a reload
   useEffect(() => {
     if (typeof window !== "undefined" && session && searchParams.get("fresh_login") === "true") {
-      const isStandalone = 
-        (window.navigator as any).standalone === true || 
-        window.matchMedia("(display-mode: standalone)").matches;
-
-      if (!isStandalone) {
-        const ua = window.navigator.userAgent.toLowerCase();
-        const isIpad = ua.includes("ipad");
-        const isIphone = ua.includes("iphone") && !ua.includes("like iphone");
-        const isMacintosh = ua.includes("macintosh") && typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
-        
-        const isIosDevice = isIphone || isIpad || isMacintosh;
-        const isAndroidDevice = ua.includes("android");
-        const isNativeApp = !!(window as any).AndroidBridge;
-
-        if (!isNativeApp) {
-          if (isIosDevice) {
-            setDeviceOs("ios");
-            setShowPwaInstallModal(true);
-          } else if (isAndroidDevice) {
-            setDeviceOs("android");
-            setShowPwaInstallModal(true);
-          }
-        }
-      }
-      
-      // Strip fresh_login from URL without triggering a reload
       const newUrl = window.location.pathname + window.location.search.replace(/([?&])fresh_login=true&?/, '$1').replace(/[?&]$/, '');
       window.history.replaceState({}, '', newUrl);
     }
@@ -1072,6 +1045,9 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         </header>
       )}
 
+      {/* Smart App Banner for Mobile Web Browsers */}
+      <SmartAppBanner />
+
       {/* Login Modal */}
       {showLoginModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fadeIn">
@@ -1287,81 +1263,6 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
           );
         })}
       </div>
-
-      {/* PWA Install Guide Modal Overlay */}
-      {showPwaInstallModal && deviceOs && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl max-w-sm w-full p-6 shadow-2xl relative animate-scaleIn pointer-events-auto flex flex-col items-center">
-            <button
-              onClick={() => setShowPwaInstallModal(false)}
-              className="absolute top-4 right-4 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] cursor-pointer bg-[var(--color-surface-hover)] rounded-full p-1"
-              title="Close modal"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            <img src="/logo.png" alt="ProxNet" className="w-12 h-12 rounded-xl shadow-sm mb-4" />
-            <h3 className="text-lg font-bold text-[var(--color-text)] text-center mb-1">Install ProxNet</h3>
-            <p className="text-sm text-[var(--color-text-secondary)] text-center mb-6">
-              Get the fast, app-like experience on your home screen.
-            </p>
-
-            {deviceOs === "ios" ? (
-              <div className="flex flex-col gap-4 w-full">
-                <div className="flex gap-3 items-center bg-[var(--color-surface-hover)] p-3 rounded-lg border border-[var(--color-border-light)]">
-                  <div className="w-7 h-7 rounded bg-white flex items-center justify-center shadow-sm shrink-0">
-                    1
-                  </div>
-                  <p className="text-sm m-0 leading-tight">Tap the <strong className="text-[var(--color-text)]">Share</strong> icon at the bottom of Safari.</p>
-                </div>
-                <div className="flex gap-3 items-center bg-[var(--color-surface-hover)] p-3 rounded-lg border border-[var(--color-border-light)]">
-                  <div className="w-7 h-7 rounded bg-white flex items-center justify-center shadow-sm shrink-0">
-                    2
-                  </div>
-                  <p className="text-sm m-0 leading-tight">Select <strong className="text-[var(--color-text)]">Add to Home Screen</strong> from the menu.</p>
-                </div>
-                <div className="flex gap-3 items-center bg-[var(--color-surface-hover)] p-3 rounded-lg border border-[var(--color-border-light)]">
-                  <div className="w-7 h-7 rounded bg-white flex items-center justify-center shadow-sm shrink-0">
-                    3
-                  </div>
-                  <p className="text-sm m-0 leading-tight"><strong className="text-[var(--color-text)]">Open the App</strong> from your Home Screen.</p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4 w-full">
-                <button
-                  onClick={() => {
-                    if (deferredPrompt) {
-                      deferredPrompt.prompt();
-                      deferredPrompt.userChoice.then((choiceResult: any) => {
-                        if (choiceResult.outcome === 'accepted') {
-                          console.log('User accepted the A2HS prompt');
-                        }
-                        setDeferredPrompt(null);
-                        setShowPwaInstallModal(false);
-                      });
-                    } else {
-                      // Fallback if deferredPrompt is not available
-                      alert("Please use the 'Install App' or 'Add to Home Screen' option from your browser's menu.");
-                    }
-                  }}
-                  className="w-full bg-[var(--color-primary)] text-white py-3 rounded-lg font-semibold hover:opacity-90 active:scale-95 transition-all shadow-md"
-                >
-                  Install App
-                </button>
-              </div>
-            )}
-            <button 
-              onClick={() => setShowPwaInstallModal(false)}
-              className="mt-6 text-sm font-semibold text-[var(--color-primary)] hover:underline"
-            >
-              Continue in browser
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Login Modal Overlay */}
       {showLoginModal && (
