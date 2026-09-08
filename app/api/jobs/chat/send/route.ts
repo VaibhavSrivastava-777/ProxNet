@@ -47,9 +47,15 @@ export async function POST(request: Request) {
     try {
       await sendNotification(targetUserId, {
         title: `New Message from ${participant.alias}`,
-        body: body.length > 60 ? body.substring(0, 60) + "..." : body,
+        body: body.length > 80 ? body.substring(0, 80) + "..." : body,
         url: `/jobs/chat/${threadId}`,
-        data: { sound: "default" }
+        data: {
+          threadId,
+          type: "chat_message",
+          soundType: "message",
+          sound: "default",
+          senderAlias: participant.alias
+        }
       });
     } catch (e) {
       console.error("Failed to send notification", e);

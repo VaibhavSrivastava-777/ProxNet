@@ -1,9 +1,11 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function cleanUrlAndTitle(rawTitle: string, rawUrl: string) {
-  let cleanUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
+  const cleanUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
   let title = (rawTitle || "").trim();
 
   // If title is generic ("Job Opportunity", "Job Opening", or empty), extract from URL slug
@@ -25,13 +27,15 @@ function cleanUrlAndTitle(rawTitle: string, rawUrl: string) {
           title = cleanedSlug.replace(/_/g, " ").trim();
         }
       }
-    } catch (e) {}
+    } catch {
+      // ignore parsing error
+    }
   }
 
   return { title: title || "Job Opening", url: cleanUrl };
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -143,15 +147,24 @@ export async function GET(request: Request) {
     // Convert map to array and sort by total job count (descending)
     const companiesArray = Array.from(companiesMap.values()).sort((a, b) => b.jobs.length - a.jobs.length);
 
+    const { data: userProfile } = await supabase
+      .from("users")
+      .select("resume_text, resume_url, wallet")
+      .eq("id", user.id)
+      .single();
+
     return NextResponse.json({
       success: true,
-      hasResume: Boolean(user?.resume_text && user.resume_text.trim().length > 50),
+      hasResume: Boolean(userProfile?.resume_text && userProfile.resume_text.trim().length > 50),
+      resumeUrl: userProfile?.resume_url || null,
+      wallet: userProfile?.wallet ?? 0,
       totalCompanies: companiesArray.length,
       totalJobs: scrapedJobs?.length || 0,
       companies: companiesArray,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[/api/jobs/all] unexpected error:", err);
-    return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Internal Server Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

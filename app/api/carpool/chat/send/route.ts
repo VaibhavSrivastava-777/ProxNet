@@ -47,7 +47,11 @@ export async function POST(request: Request) {
       body,
       url: `/carpool/chat/${threadId}`,
       data: {
-        sound: "default"
+        threadId,
+        type: "chat_message",
+        soundType: "message",
+        sound: "default",
+        senderAlias: participant.alias
       }
     });
   }

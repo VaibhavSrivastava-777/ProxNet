@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { playNotificationSound } from "@/lib/sound";
 
 function formatAbsoluteTime(ts: string): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -39,6 +40,11 @@ export function JobChatRoom({ threadId, userId }: Props) {
         { event: "INSERT", schema: "public", table: "job_messages", filter: `thread_id=eq.${threadId}` },
         (payload) => {
           setMessages((prev) => [...prev, payload.new]);
+          if (payload?.new && payload.new.sender_id !== userId) {
+            try {
+              playNotificationSound("message");
+            } catch (e) {}
+          }
         }
       )
       .on(

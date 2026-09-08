@@ -1,6 +1,8 @@
 // Web Audio API Sound Utility for ProxNet
 // Bypasses browser autoplay restrictions using silent buffer priming
 
+export type SoundType = "message" | "job_match" | "job_alert" | "chime";
+
 let globalAudioCtx: AudioContext | null = null;
 let isUnlocked = false;
 
@@ -55,63 +57,188 @@ export function unlockAudioContext() {
 }
 
 /**
- * Plays a modern, subtle glass chime or message pop notification via Web Audio API.
- * No external .mp3 files required.
+ * Derives the appropriate sound type based on notification title, type, and payload data.
  */
-export function playNotificationSound(type: "chime" | "job_match" | "message" = "chime") {
+export function getSoundTypeForNotification(
+  title: string = "",
+  data?: Record<string, any>
+): SoundType {
+  if (data?.soundType) {
+    const st = String(data.soundType).toLowerCase();
+    if (st === "message" || st === "job_match" || st === "job_alert" || st === "chime") {
+      return st as SoundType;
+    }
+  }
+
+  const lowerTitle = title.toLowerCase();
+  const lowerType = String(data?.type || "").toLowerCase();
+
+  if (
+    lowerType.includes("chat") ||
+    lowerType.includes("message") ||
+    lowerTitle.includes("message") ||
+    lowerTitle.includes("chat") ||
+    lowerTitle.includes("said")
+  ) {
+    return "message";
+  }
+
+  if (
+    lowerType.includes("match") ||
+    lowerTitle.includes("match") ||
+    lowerTitle.includes("fit") ||
+    lowerTitle.includes("strong")
+  ) {
+    return "job_match";
+  }
+
+  if (
+    lowerType.includes("job") ||
+    lowerType.includes("refer") ||
+    lowerTitle.includes("job") ||
+    lowerTitle.includes("opening") ||
+    lowerTitle.includes("refer") ||
+    lowerTitle.includes("hiring")
+  ) {
+    return "job_alert";
+  }
+
+  return "chime";
+}
+
+/**
+ * Plays a modern, distinctive synthesized ring tone for each notification type via Web Audio API.
+ * Synthesized locally - zero network latency, zero external asset dependencies.
+ */
+export function playNotificationSound(type: SoundType = "chime") {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
 
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+
     const now = ctx.currentTime;
 
-    if (type === "job_match" || type === "chime") {
-      // Modern Glass Chime (C5: 523.25Hz -> G5: 783.99Hz)
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
+    switch (type) {
+      case "message": {
+        // WhatsApp-style bright, snappy double-pip pop (880Hz [A5] -> 1174Hz [D6])
+        const notes = [
+          { freq: 880, start: 0, dur: 0.09, gain: 0.22 },
+          { freq: 1174.66, start: 0.08, dur: 0.14, gain: 0.25 },
+        ];
 
-      osc1.type = "sine";
-      osc1.frequency.setValueAtTime(523.25, now);
-      gain1.gain.setValueAtTime(0.15, now);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        notes.forEach(({ freq, start, dur, gain: targetGain }) => {
+          const osc = ctx.createOscillator();
+          const gainNode = ctx.createGain();
 
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, now + start);
 
-      osc1.start(now);
-      osc1.stop(now + 0.12);
+          gainNode.gain.setValueAtTime(0.001, now + start);
+          gainNode.gain.linearRampToValueAtTime(targetGain, now + start + 0.015);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
 
-      // Second higher tone (G5) starting slightly offset (30ms)
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
+          osc.connect(gainNode);
+          gainNode.connect(ctx.destination);
 
-      osc2.type = "sine";
-      osc2.frequency.setValueAtTime(783.99, now + 0.03);
-      gain2.gain.setValueAtTime(0.2, now + 0.03);
-      gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+          osc.start(now + start);
+          osc.stop(now + start + dur);
+        });
+        break;
+      }
 
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
+      case "job_match": {
+        // Upbeat 4-note ascending celebration arpeggio (C5 -> E5 -> G5 -> C6)
+        const arpeggio = [
+          { freq: 523.25, offset: 0, dur: 0.12 },
+          { freq: 659.25, offset: 0.06, dur: 0.12 },
+          { freq: 783.99, offset: 0.12, dur: 0.14 },
+          { freq: 1046.5, offset: 0.18, dur: 0.35 },
+        ];
 
-      osc2.start(now + 0.03);
-      osc2.stop(now + 0.4);
-    } else if (type === "message") {
-      // Soft double-tap wooden/glass pop (D5: 587.33Hz -> A5: 880Hz)
-      [0, 0.08].forEach((offset, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
+        arpeggio.forEach(({ freq, offset, dur }, idx) => {
+          const osc = ctx.createOscillator();
+          const gainNode = ctx.createGain();
 
-        osc.type = "triangle";
-        osc.frequency.setValueAtTime(idx === 0 ? 587.33 : 880, now + offset);
-        gain.gain.setValueAtTime(0.18, now + offset);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.08);
+          osc.type = idx === 3 ? "sine" : "triangle";
+          osc.frequency.setValueAtTime(freq, now + offset);
 
-        osc.connect(gain);
-        gain.connect(ctx.destination);
+          const peak = idx === 3 ? 0.24 : 0.16;
+          gainNode.gain.setValueAtTime(0.001, now + offset);
+          gainNode.gain.linearRampToValueAtTime(peak, now + offset + 0.01);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + offset + dur);
 
-        osc.start(now + offset);
-        osc.stop(now + offset + 0.08);
-      });
+          osc.connect(gainNode);
+          gainNode.connect(ctx.destination);
+
+          osc.start(now + offset);
+          osc.stop(now + offset + dur);
+        });
+        break;
+      }
+
+      case "job_alert": {
+        // Bright dual-bell job alert chime (E5: 659.25Hz -> B5: 987.77Hz)
+        const bells = [
+          { freq: 659.25, start: 0, dur: 0.22, gain: 0.18 },
+          { freq: 987.77, start: 0.07, dur: 0.38, gain: 0.22 },
+        ];
+
+        bells.forEach(({ freq, start, dur, gain: targetGain }) => {
+          const osc = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, now + start);
+
+          gainNode.gain.setValueAtTime(0.001, now + start);
+          gainNode.gain.linearRampToValueAtTime(targetGain, now + start + 0.012);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+
+          osc.connect(gainNode);
+          gainNode.connect(ctx.destination);
+
+          osc.start(now + start);
+          osc.stop(now + start + dur);
+        });
+        break;
+      }
+
+      case "chime":
+      default: {
+        // Modern ambient glass chime (C5: 523.25Hz -> G5: 783.99Hz)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+
+        osc1.type = "sine";
+        osc1.frequency.setValueAtTime(523.25, now);
+        gain1.gain.setValueAtTime(0.14, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+
+        osc1.start(now);
+        osc1.stop(now + 0.14);
+
+        // Second higher tone (G5) offset by 35ms
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+
+        osc2.type = "sine";
+        osc2.frequency.setValueAtTime(783.99, now + 0.035);
+        gain2.gain.setValueAtTime(0.18, now + 0.035);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+
+        osc2.start(now + 0.035);
+        osc2.stop(now + 0.42);
+        break;
+      }
     }
   } catch (e) {
     console.warn("Web Audio playback error:", e);

@@ -50,3 +50,6 @@ android/app/build/
 android/build/
 android/.idea/
 android/local.properties
+
+# Scratch scripts
+scratch/

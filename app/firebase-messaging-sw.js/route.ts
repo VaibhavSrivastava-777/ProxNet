@@ -18,12 +18,14 @@ export async function GET() {
     messaging.onBackgroundMessage((payload) => {
       const { title, body } = payload.notification || {};
       const data = payload.data || {};
-      const link = data.url || '/';
+      const link = data.url || data.click_action || '/';
 
       self.registration.showNotification(title || 'ProxNet', {
         body: body || '',
-        icon: '/logo.png',
-        badge: '/icons/icon-96.png',
+        icon: 'https://www.proxnet.in/logo.png',
+        badge: 'https://www.proxnet.in/icons/icon-96.png',
+        vibrate: [200, 100, 200],
+        silent: false,
         data: { url: link, ...data },
         actions: [
           { action: 'reply', title: 'Reply', type: 'text', placeholder: 'Type a reply...' }
@@ -58,7 +60,7 @@ export async function GET() {
         }
       }
 
-      const urlToOpen = event.notification.data?.url || '/';
+      const urlToOpen = event.notification.data?.url || event.notification.data?.click_action || '/';
 
       event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {

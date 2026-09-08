@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CompanyLogo } from "@/components/qa/QuestionList";
+import { ResumeCard } from "./ResumeCard";
 
 interface SuggestedJob {
   id: string;
@@ -32,13 +33,80 @@ interface ProfileDigest {
 }
 
 export function SuggestedJobs() {
-  const [companies, setCompanies] = useState<CompanyGroup[]>([]);
-  const [allCompanies, setAllCompanies] = useState<CompanyGroup[]>([]);
+  const [companies, setCompanies] = useState<CompanyGroup[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
+      if (cached) return JSON.parse(cached).companies || [];
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+  const [allCompanies, setAllCompanies] = useState<CompanyGroup[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const cached = sessionStorage.getItem("proxnet_all_jobs_cache");
+      if (cached) return JSON.parse(cached).companies || [];
+    } catch {
+      // ignore
+    }
+    return [];
+  });
   const [jobsViewMode, setJobsViewMode] = useState<"matched" | "all">("matched");
-  const [profileDigest, setProfileDigest] = useState<ProfileDigest | null>(null);
-  const [hasResume, setHasResume] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [startingChat, setStartingChat] = useState<string | null>(null);
+  const [profileDigest, setProfileDigest] = useState<ProfileDigest | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
+      if (cached) return JSON.parse(cached).profileDigest || null;
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+  const [hasResume, setHasResume] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.hasResume !== undefined) return parsed.hasResume;
+      }
+    } catch {
+      // ignore
+    }
+    return true;
+  });
+  const [resumeUrl, setResumeUrl] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
+      if (cached) return JSON.parse(cached).resumeUrl || null;
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+  const [userWallet, setUserWallet] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
+      if (cached) return JSON.parse(cached).wallet ?? null;
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+  const [calculatingMatchJobId, setCalculatingMatchJobId] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      return !sessionStorage.getItem("proxnet_suggested_jobs_cache");
+    } catch {
+      // ignore
+    }
+    return true;
+  });
   const [activeCompanyModal, setActiveCompanyModal] = useState<CompanyGroup | null>(null);
   const [isMatchingCompleted, setIsMatchingCompleted] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -46,95 +114,84 @@ export function SuggestedJobs() {
   const [showSummary, setShowSummary] = useState(true);
   const router = useRouter();
 
-  const decodeHtml = (html: string) => {
-    if (!html) return "";
-    let text = html.replace(/<[^>]*>?/gm, " ");
-    text = text.replace(/&nbsp;/g, " ");
-    text = text.replace(/&amp;/g, "&");
-    text = text.replace(/&lt;/g, "<");
-    text = text.replace(/&gt;/g, ">");
-    text = text.replace(/&quot;/g, '"');
-    text = text.replace(/&#39;/g, "'");
-    text = text.replace(/&rsquo;/g, "'");
-    text = text.replace(/&lsquo;/g, "'");
-    text = text.replace(/&rdquo;/g, '"');
-    text = text.replace(/&ldquo;/g, '"');
-    text = text.replace(/&ndash;/g, "-");
-    text = text.replace(/&mdash;/g, "-");
-    return text.replace(/\s+/g, " ").trim();
-  };
+  const loadData = useCallback(async () => {
+    try {
+      const [suggestedRes, allRes] = await Promise.allSettled([
+        fetch("/api/jobs/suggested").then(r => r.ok ? r.json() : null),
+        fetch("/api/jobs/all").then(r => r.ok ? r.json() : null),
+      ]);
+
+      if (suggestedRes.status === "fulfilled" && suggestedRes.value) {
+        const data = suggestedRes.value;
+        setCompanies(data.companies || []);
+        setIsMatchingCompleted(data.isMatchingCompleted ?? true);
+        if (data.hasResume !== undefined) {
+          setHasResume(data.hasResume);
+        }
+        if (data.resumeUrl !== undefined) {
+          setResumeUrl(data.resumeUrl);
+        }
+        if (data.wallet !== undefined) {
+          setUserWallet(data.wallet);
+        }
+        if (data.profileDigest) {
+          setProfileDigest(data.profileDigest);
+        }
+        try {
+          sessionStorage.setItem("proxnet_suggested_jobs_cache", JSON.stringify({
+            companies: data.companies || [],
+            profileDigest: data.profileDigest || null,
+            hasResume: data.hasResume ?? true,
+            resumeUrl: data.resumeUrl || null,
+            wallet: data.wallet ?? 0,
+          }));
+        } catch {
+          // ignore
+        }
+      }
+
+      if (allRes.status === "fulfilled" && allRes.value) {
+        const allData = allRes.value;
+        setAllCompanies(allData.companies || []);
+        if (allData.hasResume !== undefined) {
+          setHasResume(allData.hasResume);
+        }
+        if (allData.resumeUrl !== undefined) {
+          setResumeUrl(allData.resumeUrl);
+        }
+        if (allData.wallet !== undefined) {
+          setUserWallet(allData.wallet);
+        }
+        try {
+          sessionStorage.setItem("proxnet_all_jobs_cache", JSON.stringify({
+            companies: allData.companies || [],
+            hasResume: allData.hasResume ?? true,
+            resumeUrl: allData.resumeUrl || null,
+            wallet: allData.wallet ?? 0,
+          }));
+        } catch {
+          // ignore
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load jobs feed", e);
+      setErrorMsg("An error occurred while fetching jobs.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    // 1. Immediately hydrate from cache if available (instant 0ms render)
-    try {
-      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed.companies && parsed.companies.length > 0) {
-          setCompanies(parsed.companies);
-          if (parsed.profileDigest) setProfileDigest(parsed.profileDigest);
-          if (parsed.hasResume !== undefined) setHasResume(parsed.hasResume);
-          setLoading(false);
-        }
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (active) {
+        loadData();
       }
-      const cachedAll = sessionStorage.getItem("proxnet_all_jobs_cache");
-      if (cachedAll) {
-        const parsedAll = JSON.parse(cachedAll);
-        if (parsedAll.companies && parsedAll.companies.length > 0) {
-          setAllCompanies(parsedAll.companies);
-        }
-      }
-    } catch (e) {}
-
-    // 2. Fetch fresh data in the background and update cache
-    async function loadData() {
-      try {
-        const [suggestedRes, allRes] = await Promise.allSettled([
-          fetch("/api/jobs/suggested").then(r => r.ok ? r.json() : null),
-          fetch("/api/jobs/all").then(r => r.ok ? r.json() : null),
-        ]);
-
-        if (suggestedRes.status === "fulfilled" && suggestedRes.value) {
-          const data = suggestedRes.value;
-          setCompanies(data.companies || []);
-          setIsMatchingCompleted(data.isMatchingCompleted ?? true);
-          if (data.hasResume !== undefined) {
-            setHasResume(data.hasResume);
-          }
-          if (data.profileDigest) {
-            setProfileDigest(data.profileDigest);
-          }
-          try {
-            sessionStorage.setItem("proxnet_suggested_jobs_cache", JSON.stringify({
-              companies: data.companies || [],
-              profileDigest: data.profileDigest || null,
-              hasResume: data.hasResume ?? true,
-            }));
-          } catch (e) {}
-        }
-
-        if (allRes.status === "fulfilled" && allRes.value) {
-          const allData = allRes.value;
-          setAllCompanies(allData.companies || []);
-          if (allData.hasResume !== undefined) {
-            setHasResume(allData.hasResume);
-          }
-          try {
-            sessionStorage.setItem("proxnet_all_jobs_cache", JSON.stringify({
-              companies: allData.companies || [],
-              hasResume: allData.hasResume ?? true,
-            }));
-          } catch (e) {}
-        }
-      } catch (e) {
-        console.error("Failed to load jobs feed", e);
-        setErrorMsg("An error occurred while fetching jobs.");
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
-  }, []);
+    });
+    return () => {
+      active = false;
+    };
+  }, [loadData]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -148,6 +205,12 @@ export function SuggestedJobs() {
           setIsMatchingCompleted(completed);
           if (data.hasResume !== undefined) {
             setHasResume(data.hasResume);
+          }
+          if (data.resumeUrl !== undefined) {
+            setResumeUrl(data.resumeUrl);
+          }
+          if (data.wallet !== undefined) {
+            setUserWallet(data.wallet);
           }
           if (data.profileDigest) {
             setProfileDigest(data.profileDigest);
@@ -169,83 +232,80 @@ export function SuggestedJobs() {
     };
   }, [isMatchingCompleted]);
 
+  const handleFindMatchRate = async (jobId: string) => {
+    setCalculatingMatchJobId(jobId);
+    try {
+      const res = await fetch("/api/jobs/match-rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.error === "INSUFFICIENT_CREDITS") {
+          alert(data.message || "Your credit balance is exhausted. Please recharge your wallet to calculate match rates.");
+          return;
+        }
+        if (data.error === "NO_RESUME") {
+          alert("Please upload your resume to calculate a real-time match rate.");
+          return;
+        }
+        throw new Error(data.message || data.error || "Failed to calculate match rate");
+      }
+
+      if (data.remainingWallet !== undefined) {
+        setUserWallet(data.remainingWallet);
+        window.dispatchEvent(new CustomEvent("wallet-updated", { detail: data.remainingWallet }));
+      }
+
+      const updateJob = (j: SuggestedJob) => {
+        if (j.id === jobId) {
+          return {
+            ...j,
+            score: data.score,
+            matchRate: data.score,
+            label: data.label,
+            reason: data.reason,
+          };
+        }
+        return j;
+      };
+
+      setCompanies(prev => prev.map(c => ({
+        ...c,
+        jobs: c.jobs.map(updateJob)
+      })));
+
+      setAllCompanies(prev => prev.map(c => ({
+        ...c,
+        jobs: c.jobs.map(updateJob)
+      })));
+
+      setActiveCompanyModal(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          jobs: prev.jobs.map(updateJob)
+        };
+      });
+    } catch (err: unknown) {
+      console.error("Failed to find match rate:", err);
+      const message = err instanceof Error ? err.message : "Failed to calculate match rate";
+      setErrorMsg(message);
+      setTimeout(() => setErrorMsg(""), 5000);
+    } finally {
+      setCalculatingMatchJobId(null);
+    }
+  };
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowSummary(false);
     }, 5000);
     return () => clearTimeout(timer);
   }, []);
-
-  async function handleStartReferral(company: CompanyGroup, job: SuggestedJob, contactId: string) {
-    setStartingChat(job.id);
-    try {
-      const res = await fetch("/api/jobs/chat/init-referral", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contactId,
-          jobId: job.id,
-          company: company.company,
-          jobTitle: job.title
-        }),
-      });
-      const data = await res.json();
-      
-      if (data.walletWarning) {
-        alert("Insufficient credits, but opening chat anyway.");
-      }
-
-      if (data.threadId) {
-        window.open(`/jobs/chat/${data.threadId}`, '_blank', 'noopener,noreferrer');
-      } else {
-        throw new Error(data.error || "Failed to start chat");
-      }
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg("Failed to start referral: " + (err.message || ""));
-      setTimeout(() => setErrorMsg(""), 5000);
-    } finally {
-      setStartingChat(null);
-    }
-  }
-
-  const handleFollowToggle = async (contactId: string, companyName: string, currentlyFollowed?: boolean) => {
-    // Optimistic update
-    setCompanies(prev => prev.map(c => {
-      if (c.company === companyName) {
-        return {
-          ...c,
-          referralContacts: c.referralContacts.map(rc => 
-            rc.id === contactId ? { ...rc, is_followed: !currentlyFollowed } : rc
-          )
-        };
-      }
-      return c;
-    }));
-
-    try {
-      const res = await fetch("/api/follow", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ following_id: contactId }),
-      });
-      if (!res.ok) throw new Error("Failed to follow");
-    } catch (e) {
-      console.error(e);
-      // Revert on error
-      setCompanies(prev => prev.map(c => {
-        if (c.company === companyName) {
-          return {
-            ...c,
-            referralContacts: c.referralContacts.map(rc => 
-              rc.id === contactId ? { ...rc, is_followed: currentlyFollowed } : rc
-            )
-          };
-        }
-        return c;
-      }));
-    }
-  };
 
   if (loading) {
     return (
@@ -298,29 +358,12 @@ export function SuggestedJobs() {
         </div>
       )}
 
-      {/* Resume Upload Incentive Banner */}
-      {!hasResume && (
-        <div className="bg-gradient-to-r from-primary/15 via-primary/5 to-transparent border border-primary/30 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-fadeInUp">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl sm:text-3xl shrink-0">📄</span>
-            <div>
-              <h4 className="font-bold text-sm sm:text-base text-[var(--color-text)] m-0 flex items-center gap-2 flex-wrap">
-                Unlock Accurate 90%+ Strong Matches & Referral Intros
-                <span className="badge bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] px-2 py-0.5 font-bold">Resume Needed</span>
-              </h4>
-              <p className="text-xs text-[var(--color-text-secondary)] mt-1 m-0 leading-relaxed">
-                ProxNet is constantly scraping new job openings daily. Upload your resume so our AI can accurately match your specific skills, generate tailored fit reasons, and connect you with internal referrers.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => router.push("/profile?prompt=resume")}
-            className="btn btn-primary btn-sm shrink-0 whitespace-nowrap shadow-sm font-semibold flex items-center gap-1.5 self-stretch sm:self-auto justify-center"
-          >
-            <span>🚀</span> Upload Resume
-          </button>
-        </div>
-      )}
+      {/* Resume Management & Automated Job Alerts Card */}
+      <ResumeCard
+        hasResume={hasResume}
+        resumeUrl={resumeUrl}
+        onResumeUpdated={loadData}
+      />
 
       {/* Bio Digest (Minimal Header) */}
       <div className="flex flex-col gap-4">
@@ -354,44 +397,56 @@ export function SuggestedJobs() {
       </div>
 
       {/* Segmented View Switcher: Matched vs All Jobs */}
-      <div className="flex items-center p-1 bg-[var(--color-surface-secondary)] rounded-xl border border-[var(--color-border-light)] gap-1 shadow-xs">
-        <button
-          type="button"
-          onClick={() => setJobsViewMode("matched")}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border-0 cursor-pointer ${
-            jobsViewMode === "matched"
-              ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm"
-              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
-          }`}
-        >
-          <span>Matched</span>
-          {companies.length > 0 && (
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-              jobsViewMode === "matched" ? "bg-primary/15 text-primary" : "bg-[var(--color-border-light)] text-[var(--color-text-secondary)]"
-            }`}>
-              {companies.length}
-            </span>
-          )}
-        </button>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex-1 flex items-center p-1 bg-[var(--color-surface-secondary)] rounded-xl border border-[var(--color-border-light)] gap-1 shadow-xs">
+          <button
+            type="button"
+            onClick={() => setJobsViewMode("matched")}
+            className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border-0 cursor-pointer ${
+              jobsViewMode === "matched"
+                ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm"
+                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
+            }`}
+          >
+            <span>Matched</span>
+            {companies.length > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                jobsViewMode === "matched" ? "bg-primary/15 text-primary" : "bg-[var(--color-border-light)] text-[var(--color-text-secondary)]"
+              }`}>
+                {companies.length} ({totalMatchedJobs})
+              </span>
+            )}
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setJobsViewMode("all")}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border-0 cursor-pointer ${
-            jobsViewMode === "all"
-              ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm"
-              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
-          }`}
-        >
-          <span>All Jobs</span>
-          {allCompanies.length > 0 && (
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-              jobsViewMode === "all" ? "bg-primary/15 text-primary" : "bg-[var(--color-border-light)] text-[var(--color-text-secondary)]"
-            }`}>
-              {allCompanies.length} ({totalAllJobs})
-            </span>
-          )}
-        </button>
+          <button
+            type="button"
+            onClick={() => setJobsViewMode("all")}
+            className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border-0 cursor-pointer ${
+              jobsViewMode === "all"
+                ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm"
+                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
+            }`}
+          >
+            <span>All Jobs</span>
+            {allCompanies.length > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                jobsViewMode === "all" ? "bg-primary/15 text-primary" : "bg-[var(--color-border-light)] text-[var(--color-text-secondary)]"
+              }`}>
+                {allCompanies.length} ({totalAllJobs})
+              </span>
+            )}
+          </button>
+        </div>
+
+        {userWallet !== null && (
+          <div 
+            className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface border border-border-light text-xs font-bold text-text-secondary shrink-0 shadow-2xs"
+            title="Your current credit balance for match evaluations and network chats"
+          >
+            <span>🪙</span>
+            <span>Credits: <strong className="text-primary">{userWallet}</strong></span>
+          </div>
+        )}
       </div>
 
       {/* Search Bar */}
@@ -512,12 +567,61 @@ export function SuggestedJobs() {
                           <span className="badge bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
                             💡 {job.label || "Moderate Match"} • {job.score || job.matchRate}%
                           </span>
+                        ) : job.label === "Low Match" ? (
+                          <span className="badge bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border border-zinc-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
+                            Low Match • {job.score || job.matchRate}%
+                          </span>
                         ) : (
                           <span className="badge bg-primary/10 text-primary border border-primary/20 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
                             🏢 Active Role
                           </span>
                         )}
                       </div>
+
+                      {/* On-demand Match Rate Button for All Jobs / Unscored Jobs */}
+                      {(!job.score || job.label === "Active Role") && (
+                        <div className="flex items-center gap-2 pt-0.5">
+                          {hasResume ? (
+                            <button
+                              type="button"
+                              onClick={() => handleFindMatchRate(job.id)}
+                              disabled={calculatingMatchJobId === job.id}
+                              className="btn btn-xs bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-[11px] font-semibold px-2.5 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs disabled:opacity-60"
+                            >
+                              {calculatingMatchJobId === job.id ? (
+                                <>
+                                  <svg className="animate-spin h-3.5 w-3.5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                  </svg>
+                                  <span>Calculating Match with Latest Resume...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>✨</span>
+                                  <span>Find Match Rate</span>
+                                  <span className="text-[10px] bg-primary/20 text-primary font-bold px-1.5 py-0.2 rounded-full">
+                                    1 credit
+                                  </span>
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveCompanyModal(null);
+                                window.scrollTo({ top: 0, behavior: "smooth" });
+                              }}
+                              className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 p-0 font-medium"
+                              title="Upload resume at top to check match rate"
+                            >
+                              <span>📄</span>
+                              <span>Upload resume to find match rate (1 credit)</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
 
                       {job.reason && (
                         <div className="text-xs text-text-secondary bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-md p-2.5 flex items-start gap-2">

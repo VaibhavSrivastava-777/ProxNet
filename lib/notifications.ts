@@ -34,6 +34,21 @@ export async function sendNotification(
   // 2. Dispatch FCM notifications
   if (fcmMessaging && fcmTokens && fcmTokens.length > 0) {
     console.log(`Sending FCM to ${fcmTokens.length} active devices for user ${userId}...`);
+    
+    // Ensure all FCM data payload values are strings (required by Firebase Admin)
+    const stringifiedData: Record<string, string> = {
+      url: url || "/",
+      click_action: `https://www.proxnet.in${url}`,
+      type: String(data?.type || "general"),
+    };
+    if (data) {
+      for (const [key, val] of Object.entries(data)) {
+        if (val !== undefined && val !== null) {
+          stringifiedData[key] = typeof val === "object" ? JSON.stringify(val) : String(val);
+        }
+      }
+    }
+
     for (const tokenRecord of fcmTokens) {
       try {
         await fcmMessaging.send({
@@ -42,25 +57,38 @@ export async function sendNotification(
             title,
             body,
           },
+          data: stringifiedData,
           webpush: {
             fcmOptions: {
               link: `https://www.proxnet.in${url}`,
             },
             notification: {
-              icon: "/logo.png",
-              badge: "/icons/icon-96.png",
+              icon: "https://www.proxnet.in/logo.png",
+              badge: "https://www.proxnet.in/icons/icon-96.png",
+              vibrate: [200, 100, 200],
+              silent: false,
               data: { url, ...data },
               actions: [
                 { action: "reply", title: "Reply", type: "text", placeholder: "Type a reply..." } as any
               ]
-            },
+            } as any,
           },
           android: {
             priority: "high",
             notification: {
               channelId: "proxnet_messages",
               sound: "default",
+              defaultSound: true,
+              defaultVibrateTimings: true,
               icon: "@mipmap/ic_launcher",
+            },
+          },
+          apns: {
+            payload: {
+              aps: {
+                sound: "default",
+                badge: 1,
+              },
             },
           },
         });
@@ -110,7 +138,7 @@ export async function sendNotification(
               <h2 style="color: #0A66C2; margin-top: 0;">ProxNet Notification</h2>
               <p style="font-size: 16px; color: #191919; line-height: 1.5;">${body}</p>
               <div style="margin-top: 24px;">
-                <a href="https://proxnet.vercel.app${url}" style="background-color: #0A66C2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 9999px; font-weight: bold; display: inline-block;">
+                <a href="https://www.proxnet.in${url}" style="background-color: #0A66C2; color: white; padding: 10px 20px; text-decoration: none; border-radius: 9999px; font-weight: bold; display: inline-block;">
                   Open ProxNet
                 </a>
               </div>

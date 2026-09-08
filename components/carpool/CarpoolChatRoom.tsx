@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { playNotificationSound } from "@/lib/sound";
 
 function formatAbsoluteTime(ts: string): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -37,13 +38,26 @@ export function CarpoolChatRoom({ threadId }: { threadId: string }) {
   const [actionLoading, setActionLoading] = useState(false);
   
   const bottomRef = useRef<HTMLDivElement>(null);
+  const lastKnownMessageCountRef = useRef(0);
 
   const loadData = useCallback(async () => {
     // To simplify, we can create a single GET /api/carpool/chat/[threadId] that returns msgs + status
     const res = await fetch(`/api/carpool/chat/${threadId}`);
     if (res.ok) {
       const data = await res.json();
-      setMessages(data.messages ?? []);
+      const newMsgs = data.messages ?? [];
+
+      if (newMsgs.length > lastKnownMessageCountRef.current) {
+        const latest = newMsgs[newMsgs.length - 1];
+        if (lastKnownMessageCountRef.current > 0 && latest && !latest.isOwn) {
+          try {
+            playNotificationSound("message");
+          } catch (e) {}
+        }
+        lastKnownMessageCountRef.current = newMsgs.length;
+      }
+
+      setMessages(newMsgs);
       setMyAlias(data.myAlias ?? "");
       setThreadStatus(data.status ?? "active");
       if (!revealPhone && data.myPhone) setRevealPhone(data.myPhone);

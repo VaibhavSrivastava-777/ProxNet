@@ -200,6 +200,29 @@ Never mention that you are an AI assistant or simulated user. Play your characte
                   sender_id: otherParticipant.user_id,
                   body: replyText.trim()
                 });
+
+                // Fetch simulated user alias to brand the notification
+                const { data: simulatedParticipant } = await supabase
+                  .from("chat_participants")
+                  .select("alias")
+                  .eq("session_id", sessionId)
+                  .eq("user_id", otherParticipant.user_id)
+                  .maybeSingle();
+
+                const senderName = simulatedParticipant?.alias || otherUser.job_title || "Neighbor";
+
+                // Notify the human participant who may be away from the chat
+                await sendNotification(user.id, {
+                  title: `New Message from ${senderName}`,
+                  body: `${replyText.trim().slice(0, 80)}${replyText.trim().length > 80 ? "..." : ""}`,
+                  url: `/chat/${sessionId}`,
+                  data: {
+                    sessionId,
+                    type: "chat_message",
+                    soundType: "message",
+                    senderAlias: senderName
+                  }
+                });
               }
             }
           } catch (e) {
@@ -208,10 +231,15 @@ Never mention that you are an AI assistant or simulated user. Play your characte
         })();
       } else {
         await sendNotification(otherParticipant.user_id, {
-          title: "New Message",
-          body: `${participant.alias}: "${body.trim().slice(0, 60)}${body.trim().length > 60 ? "..." : ""}"`,
+          title: `New Message from ${participant.alias || "Neighbor"}`,
+          body: `${body.trim().slice(0, 80)}${body.trim().length > 80 ? "..." : ""}`,
           url: `/chat/${sessionId}`,
-          data: { sessionId }
+          data: {
+            sessionId,
+            type: "chat_message",
+            soundType: "message",
+            senderAlias: participant.alias || "Neighbor"
+          }
         });
       }
     }

@@ -5,6 +5,7 @@ import { createBrowserClient } from "@/lib/supabase/client";
 
 import { useRouter } from "next/navigation";
 import { CompanyLogo, parseAlias } from "../qa/QuestionList";
+import { playNotificationSound } from "@/lib/sound";
 
 interface Message {
   id: string;
@@ -63,6 +64,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   const suggestionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const presenceChannelRef = useRef<any>(null);
   const mountTime = useRef(Date.now());
+  const lastKnownMessageCountRef = useRef(0);
   const [viewportHeight, setViewportHeight] = useState("100dvh");
 
   useEffect(() => {
@@ -139,7 +141,41 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
     const res = await fetch(`/api/chat/${sessionId}`);
     if (res.ok) {
       const data = await res.json();
-      setMessages(data.messages ?? []);
+      const newMsgs = data.messages ?? [];
+      
+      // Play incoming message ring if a new message from the other person arrives
+      if (newMsgs.length > lastKnownMessageCountRef.current) {
+        const latest = newMsgs[newMsgs.length - 1];
+        if (lastKnownMessageCountRef.current > 0 && latest && !latest.isOwn) {
+          try {
+            playNotificationSound("message");
+          } catch (e) {}
+
+          // Flash document tab title if the tab is hidden
+          if (typeof document !== "undefined" && document.hidden) {
+            const originalTitle = document.title;
+            let flashCount = 0;
+            const flashInterval = setInterval(() => {
+              flashCount++;
+              document.title = flashCount % 2 === 1 ? `💬 New message • ProxNet` : originalTitle;
+              if (flashCount >= 6) {
+                clearInterval(flashInterval);
+                document.title = originalTitle;
+              }
+            }, 1000);
+
+            const handleFocus = () => {
+              clearInterval(flashInterval);
+              document.title = originalTitle;
+              window.removeEventListener("focus", handleFocus);
+            };
+            window.addEventListener("focus", handleFocus, { once: true });
+          }
+        }
+        lastKnownMessageCountRef.current = newMsgs.length;
+      }
+
+      setMessages(newMsgs);
       setMyAlias(data.myAlias ?? "");
       setOtherAliasState(data.otherAlias ?? "");
     }

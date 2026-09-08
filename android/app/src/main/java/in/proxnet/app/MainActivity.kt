@@ -70,8 +70,15 @@ class MainActivity : AppCompatActivity() {
         // Check if app was launched via notification click containing redirect URL
         val redirectUrl = intent?.getStringExtra("url")
         if (!redirectUrl.isNullOrEmpty()) {
-            android.util.Log.d("ProxNetWebView", "Loading redirect URL: https://www.proxnet.in$redirectUrl")
-            webView.loadUrl("https://www.proxnet.in$redirectUrl")
+            val fullUrl = if (redirectUrl.startsWith("http://") || redirectUrl.startsWith("https://")) {
+                redirectUrl
+            } else if (redirectUrl.startsWith("/")) {
+                "https://www.proxnet.in$redirectUrl"
+            } else {
+                "https://www.proxnet.in/$redirectUrl"
+            }
+            android.util.Log.d("ProxNetWebView", "Loading redirect URL: $fullUrl")
+            webView.loadUrl(fullUrl)
         } else {
             android.util.Log.d("ProxNetWebView", "Loading default URL: https://www.proxnet.in")
             webView.loadUrl("https://www.proxnet.in")
@@ -85,7 +92,15 @@ class MainActivity : AppCompatActivity() {
         // Handle URL load if intent changes while app is running
         val redirectUrl = intent?.getStringExtra("url")
         if (!redirectUrl.isNullOrEmpty()) {
-            webView.loadUrl("https://www.proxnet.in$redirectUrl")
+            val fullUrl = if (redirectUrl.startsWith("http://") || redirectUrl.startsWith("https://")) {
+                redirectUrl
+            } else if (redirectUrl.startsWith("/")) {
+                "https://www.proxnet.in$redirectUrl"
+            } else {
+                "https://www.proxnet.in/$redirectUrl"
+            }
+            android.util.Log.d("ProxNetWebView", "Loading redirect URL on new intent: $fullUrl")
+            webView.loadUrl(fullUrl)
         }
     }
 

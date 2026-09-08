@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -58,7 +60,7 @@ export async function GET() {
 
     const { data: userProfile, error: profileError } = await supabase
       .from("users")
-      .select("job_title, company, about, resume_text, embedding, profile_digest")
+      .select("job_title, company, about, resume_text, resume_url, wallet, embedding, profile_digest")
       .eq("id", user.id)
       .single();
 
@@ -110,8 +112,9 @@ Return ONLY a JSON object with:
             .eq("id", user.id);
           console.log("Profile digest saved successfully.");
         }
-      } catch (digestErr: any) {
-        console.error("Error generating profile digest:", digestErr.message);
+      } catch (digestErr: unknown) {
+        const msg = digestErr instanceof Error ? digestErr.message : String(digestErr);
+        console.error("Error generating profile digest:", msg);
       }
     }
 
@@ -169,9 +172,23 @@ Return ONLY a JSON object with:
     const twoWeeksAgo = new Date();
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
+    interface ScrapedJobRow {
+      id: string;
+      title: string;
+      company: string;
+      location?: string | null;
+      description?: string | null;
+      keywords?: string[] | null;
+      posted_at?: string | null;
+      url?: string | null;
+      similarity?: number | null;
+      contact_id?: string | null;
+      contact_alias?: string | null;
+    }
+
     // Pre-filter candidate jobs by freshness and seniority before reranking
-    const candidateJobs: any[] = [];
-    for (const row of matchedJobs || []) {
+    const candidateJobs: ScrapedJobRow[] = [];
+    for (const row of (matchedJobs as ScrapedJobRow[] | null) || []) {
       if (row.posted_at) {
         const jobDate = new Date(row.posted_at);
         if (!isNaN(jobDate.getTime()) && jobDate < twoWeeksAgo) continue;
@@ -199,7 +216,7 @@ Return ONLY a JSON object with:
       keywords: j.keywords || [],
       posted_at: j.posted_at,
       url: j.url,
-      rawSimilarity: j.similarity,
+      rawSimilarity: j.similarity ?? undefined,
     }));
 
     const { rerankJobsForCandidate } = await import("@/lib/jobs/reranker");
@@ -209,7 +226,7 @@ Return ONLY a JSON object with:
     const companyGroups: Record<string, {
       company: string;
       contactsCount: number;
-      referralContacts: Array<{ id: string; alias: string }>;
+      referralContacts: Array<{ id: string; alias: string; is_followed?: boolean }>;
       jobs: Array<{
         id: string;
         title: string;
@@ -261,10 +278,10 @@ Return ONLY a JSON object with:
         group.jobs.push({
           id: row.id,
           title: row.title,
-          location: row.location,
-          url: row.url,
-          description: row.description,
-          posted_at: row.posted_at,
+          location: row.location || "Remote",
+          url: row.url || "",
+          description: row.description || "",
+          posted_at: row.posted_at || "",
           keywords: row.keywords || [],
           matchRate: score,
           score,
@@ -298,7 +315,7 @@ Return ONLY a JSON object with:
           if (u) {
             contact.alias = u.job_title ? `${u.job_title} @ ${u.company || group.company}` : `Professional @ ${u.company || group.company}`;
           }
-          (contact as any).is_followed = followedSet.has(contact.id);
+          contact.is_followed = followedSet.has(contact.id);
         }
       }
     }
@@ -329,6 +346,8 @@ Return ONLY a JSON object with:
       success: true,
       isMatchingCompleted: true,
       hasResume: Boolean(userProfile?.resume_text && userProfile.resume_text.trim().length > 50),
+      resumeUrl: userProfile?.resume_url || null,
+      wallet: userProfile?.wallet ?? 0,
       profileDigest,
       companies: finalCompanies
     });

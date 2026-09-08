@@ -335,6 +335,9 @@ export const customStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
     return [];
   }
 
+  // Rate-limit throttle for bulk runs
+  await new Promise((r) => setTimeout(r, 2500));
+
   if (openaiKey) {
     // Fast scrape + native OpenAI extraction
     const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
@@ -528,8 +531,12 @@ export const STRATEGIES: Record<string, ScrapeStrategy> = {
   oracle: oracleStrategy,
   phenom: phenomStrategy,
   ibm: ibmStrategy,
-  amazon: amazonStrategy
-}
+  amazon: amazonStrategy,
+  eightfold: customStrategy,
+  icims: customStrategy,
+  successfactors: customStrategy,
+  myworkdayjobs: workdayStrategy
+};
 
 export const eightfoldStrategy: ScrapeStrategy = customStrategy;
 export const icimsStrategy: ScrapeStrategy = customStrategy;

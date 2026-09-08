@@ -10,7 +10,7 @@ import { createBrowserClient } from "@/lib/supabase/client";
 import { isProfileIncomplete } from "@/lib/profile-validation";
 import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
 import { RechargeModal } from "@/components/RechargeModal";
-import { playNotificationSound, unlockAudioContext } from "@/lib/sound";
+import { playNotificationSound, unlockAudioContext, getSoundTypeForNotification, SoundType } from "@/lib/sound";
 
 interface NavClientProps {
   session: boolean;
@@ -208,16 +208,73 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     }
   };
 
-  const triggerToast = (toast: { title: string; body: string; url: string; soundType?: "chime" | "job_match" | "message" }) => {
+  const recentToastsRef = useRef<Map<string, number>>(new Map());
+
+  const triggerToast = (toast: {
+    title: string;
+    body: string;
+    url: string;
+    soundType?: SoundType;
+    data?: Record<string, any>;
+  }) => {
+    // 1. "Away from chat" check:
+    // If the user is actively viewing this exact chat conversation, suppress the overlay toast
+    const isChatUrl = toast.url.startsWith("/chat/") || toast.url.startsWith("/jobs/chat/") || toast.url.startsWith("/carpool/chat/");
+    const isActivelyInThisChat = isChatUrl && pathname === toast.url && typeof document !== "undefined" && !document.hidden;
+
+    if (isActivelyInThisChat) {
+      return;
+    }
+
+    // 2. Deduplicate rapid-fire alerts (same title + body + url within 3.5s)
+    const dedupKey = `${toast.title}:${toast.body}:${toast.url}`;
+    const now = Date.now();
+    const lastTriggered = recentToastsRef.current.get(dedupKey) || 0;
+    if (now - lastTriggered < 3500) {
+      return;
+    }
+    recentToastsRef.current.set(dedupKey, now);
+
+    // Prune stale cache entries
+    if (recentToastsRef.current.size > 50) {
+      for (const [k, ts] of recentToastsRef.current.entries()) {
+        if (now - ts > 10000) recentToastsRef.current.delete(k);
+      }
+    }
+
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, ...toast }]);
 
     fetchInAppNotifications();
 
+    // 3. Play distinct audio ring
     try {
-      const type = toast.soundType || (toast.title.includes("Match") ? "job_match" : toast.title.includes("Message") || toast.title.includes("Referral") ? "message" : "chime");
-      playNotificationSound(type);
+      const soundType = toast.soundType || getSoundTypeForNotification(toast.title, toast.data);
+      playNotificationSound(soundType);
     } catch (e) {}
+
+    // 4. Flash document tab title if user is multitasking / tab is inactive
+    if (typeof document !== "undefined" && document.hidden) {
+      const originalTitle = document.title;
+      let flashCount = 0;
+      const flashInterval = setInterval(() => {
+        flashCount++;
+        document.title = flashCount % 2 === 1 
+          ? `💬 ${toast.title.includes("Message") ? "New message" : "New alert"} • ProxNet`
+          : originalTitle;
+        if (flashCount >= 6) {
+          clearInterval(flashInterval);
+          document.title = originalTitle;
+        }
+      }, 1000);
+
+      const handleFocus = () => {
+        clearInterval(flashInterval);
+        document.title = originalTitle;
+        window.removeEventListener("focus", handleFocus);
+      };
+      window.addEventListener("focus", handleFocus, { once: true });
+    }
 
     // Auto-remove toast after 5 seconds
     setTimeout(() => {
@@ -601,6 +658,8 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
               title: `New Message from ${sender?.alias || "Anonymous"}`,
               body: payload.new.body,
               url: `/chat/${payload.new.session_id}`,
+              soundType: "message",
+              data: { sessionId: payload.new.session_id, type: "chat_message" }
             });
           }
         }
@@ -621,6 +680,8 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             title: newNotif.title,
             body: newNotif.body,
             url: newNotif.url || "/",
+            soundType: getSoundTypeForNotification(newNotif.title, newNotif.data),
+            data: newNotif.data,
           });
         }
       )
@@ -1182,7 +1243,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
               onClick={() => {
                 if (Math.abs(delta) > 10) return; // don't navigate if was swiping
                 setToasts((prev) => prev.filter((item) => item.id !== t.id));
-                window.location.href = t.url;
+                router.push(t.url);
               }}
               onTouchStart={(e) => {
                 swipeStart.current[t.id] = e.touches[0].clientX;

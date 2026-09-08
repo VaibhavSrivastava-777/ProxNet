@@ -24,8 +24,10 @@ if (firebaseConfig.messagingSenderId && firebaseConfig.apiKey) {
       const notificationTitle = payload.notification.title || "ProxNet Notification";
       const notificationOptions = {
         body: payload.notification.body || "",
-        icon: '/logo.png',
-        badge: '/logo.png',
+        icon: 'https://www.proxnet.in/logo.png',
+        badge: 'https://www.proxnet.in/icons/icon-96.png',
+        vibrate: [200, 100, 200],
+        silent: false,
         data: payload.data || {}
       };
       
@@ -39,7 +41,8 @@ if (firebaseConfig.messagingSenderId && firebaseConfig.apiKey) {
 // Background notification click actions
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const clickAction = event.notification.data?.click_action || '/';
+  const data = event.notification.data || {};
+  const clickAction = data.url || data.click_action || '/';
   
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
