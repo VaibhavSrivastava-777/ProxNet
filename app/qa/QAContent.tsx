@@ -98,7 +98,7 @@ export function QAContent() {
               <span>&bull;</span>
               <a href="/disclaimer" className="hover:text-[var(--color-accent)] transition-colors">Disclaimer</a>
               <span>&bull;</span>
-              <a href="https://wa.me/918197678983?text=Hi%20ProxNet,%20I%20have%20some%20feedback" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--color-accent)] transition-colors">Contact Us</a>
+              <a href="https://www.instagram.com/proxnet.connect/" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--color-accent)] transition-colors">Contact Us</a>
             </div>
             <div>&copy; ProxNet 2026</div>
           </div>
@@ -121,7 +121,7 @@ export function QAContent() {
               <span>&bull;</span>
               <a href="/disclaimer" className="hover:text-[var(--color-accent)] transition-colors">Disclaimer</a>
               <span>&bull;</span>
-              <a href="https://wa.me/918197678983?text=Hi%20ProxNet,%20I%20have%20some%20feedback" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--color-accent)] transition-colors">Contact Us</a>
+              <a href="https://www.instagram.com/proxnet.connect/" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--color-accent)] transition-colors">Contact Us</a>
             </div>
             <div>&copy; ProxNet 2026</div>
           </div>
