@@ -1255,7 +1255,7 @@ export function ProfileForm({ initialUser }: Props) {
               </span>
             </div>
             {(() => {
-              const isAndroidApp = typeof window !== "undefined" && !!(window as any).AndroidBridge;
+              const isAndroidApp = typeof window !== "undefined" && "AndroidBridge" in window && Boolean((window as unknown as Record<string, unknown>).AndroidBridge);
               const isNotificationSupported = typeof window !== "undefined" && "Notification" in window;
 
               if (isAndroidApp) {
@@ -1271,6 +1271,47 @@ export function ProfileForm({ initialUser }: Props) {
                   <span className="text-xs text-gray-400 font-medium">
                     Unsupported browser/webview
                   </span>
+                );
+              }
+
+              if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span className="text-xs text-green-500 font-semibold flex items-center gap-1">
+                      ✓ Enabled on this device
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs text-[var(--color-text-secondary)]"
+                      title="Re-sync notification token"
+                      onClick={async () => {
+                        try {
+                          const fcmVapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+                          const { getMessaging, getToken, getFcmRegistration, isFirebaseConfigured } = await import("@/lib/firebase-client");
+                          if (!isFirebaseConfigured || !fcmVapidKey) return;
+                          const messaging = getMessaging();
+                          const registration = await getFcmRegistration();
+                          if (!registration) throw new Error("Service worker registration not found.");
+                          const token = await getToken(messaging, { vapidKey: fcmVapidKey, serviceWorkerRegistration: registration });
+                          if (token) {
+                            const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent || "");
+                            const res = await fetch("/api/fcm/register", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ token, platform: isIos ? "ios" : "web" }),
+                            });
+                            if (!res.ok) throw new Error("Failed to sync token.");
+                            alert("Notification token re-synced successfully!");
+                          }
+                        } catch (e: unknown) {
+                          const msg = e instanceof Error ? e.message : String(e);
+                          alert(`Token re-sync failed: ${msg}`);
+                        }
+                      }}
+                    >
+                      Re-sync
+                    </button>
+                  </div>
                 );
               }
 
@@ -1310,22 +1351,28 @@ export function ProfileForm({ initialUser }: Props) {
                       });
 
                       if (token) {
-                        await fetch("/api/fcm/register", {
+                        const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent || "");
+                        const res = await fetch("/api/fcm/register", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ token, platform: "web" }),
+                          body: JSON.stringify({ token, platform: isIos ? "ios" : "web" }),
                         });
+                        if (!res.ok) {
+                          const errData = await res.json().catch(() => ({}));
+                          throw new Error(errData.error || "Failed to register token with server");
+                        }
                         alert("Successfully subscribed to notifications on this device!");
                       } else {
                         throw new Error("No registration token received");
                       }
-                    } catch (error: any) {
+                    } catch (error: unknown) {
                       console.error("Subscription failed:", error);
                       const isConfigMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
                       if (isConfigMissing) {
                         alert("Firebase config keys are missing in your local .env.local file. Please configure NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, etc. to enable push notifications.");
                       } else {
-                        alert(`Failed to subscribe: ${error.message || "Are you in a supported browser?"}`);
+                        const msg = error instanceof Error ? error.message : "Are you in a supported browser?";
+                        alert(`Failed to subscribe: ${msg}`);
                       }
                     }
                   }}

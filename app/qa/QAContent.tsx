@@ -15,7 +15,16 @@ export function QAContent() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [directTarget, setDirectTarget] = useState<{ id: string; job_title: string; company: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("/network");
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const tabParam = new URLSearchParams(window.location.search).get("tab");
+      if (tabParam) return `/${tabParam}`;
+      const path = window.location.pathname;
+      const tabPaths = ["/jobs", "/network", "/qa", "/forum", "/grow"];
+      if (tabPaths.includes(path)) return path;
+    }
+    return "/qa";
+  });
 
   const searchParams = useSearchParams();
   const router = useRouter();

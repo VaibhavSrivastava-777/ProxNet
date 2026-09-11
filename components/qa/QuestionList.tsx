@@ -238,50 +238,107 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   const { data: jobInboxData } = useSWR<{ threads: any[] }>("/api/jobs/inbox", fetcher, { refreshInterval: 10000, revalidateOnFocus: false, keepPreviousData: true });
   const { data: notificationsData, mutate: mutateNotifications } = useSWR<{ notifications: any[] }>("/api/notifications", fetcher, { refreshInterval: 5000, revalidateOnFocus: false, keepPreviousData: true });
 
-  const asked = data?.asked || [];
-  const referralThreads = jobInboxData?.threads || [];
-  const incoming = data?.incoming || [];
-  const aiSession = data?.aiSession;
-  const suggestions = data?.suggestions || [];
+  // Instant hydration from sessionStorage to eliminate chat list reload latency
+  const [cachedData, setCachedData] = useState<{ asked?: any[]; incoming?: any[]; aiSession?: any; suggestions?: any[] } | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const c = sessionStorage.getItem("proxnet_qa_cache");
+        if (c) return JSON.parse(c);
+      } catch (e) {}
+    }
+    return null;
+  });
+
+  const [cachedInbox, setCachedInbox] = useState<{ threads?: any[] } | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const c = sessionStorage.getItem("proxnet_inbox_cache");
+        if (c) return JSON.parse(c);
+      } catch (e) {}
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (data) {
+      try {
+        sessionStorage.setItem("proxnet_qa_cache", JSON.stringify(data));
+        setCachedData(data);
+      } catch (e) {}
+    }
+  }, [data]);
+
+  useEffect(() => {
+    if (jobInboxData) {
+      try {
+        sessionStorage.setItem("proxnet_inbox_cache", JSON.stringify(jobInboxData));
+        setCachedInbox(jobInboxData);
+      } catch (e) {}
+    }
+  }, [jobInboxData]);
+
+  const activeData = data || cachedData;
+  const activeInbox = jobInboxData || cachedInbox;
+
+  const asked = activeData?.asked || [];
+  const referralThreads = activeInbox?.threads || [];
+  const incoming = activeData?.incoming || [];
+  const aiSession = activeData?.aiSession;
+  const suggestions = activeData?.suggestions || [];
   const notifications = notificationsData?.notifications || [];
+
+  function navigateToChat(sessionId: string) {
+    // Mark as read in background without blocking navigation
+    fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: `/chat/${sessionId}` })
+    }).then(() => mutateNotifications()).catch(() => {});
+
+    // Instant router transition without blocking spinner modal
+    router.push(`/chat/${sessionId}`);
+  }
 
   async function respond(questionId: string, targetId: string) {
     setIsNavigating(true);
-    const res = await fetch("/api/questions/respond", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ questionId, targetId }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      // Mark as read immediately
-      fetch("/api/notifications", {
-        method: "PATCH",
+    try {
+      const res = await fetch("/api/questions/respond", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: `/chat/${data.sessionId}` })
-      }).then(() => mutateNotifications());
-
-      router.push(`/chat/${data.sessionId}`);
-    } else {
-      setIsNavigating(false);
+        body: JSON.stringify({ questionId, targetId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        navigateToChat(data.sessionId);
+      } else {
+        alert("Failed to respond");
+      }
+    } catch (e) {
       alert("Failed to respond");
+    } finally {
+      setIsNavigating(false);
     }
   }
 
-  async function openChat(questionId: string) {
-    setIsNavigating(true);
-    const res = await fetch(`/api/chat/by-question/${questionId}`);
-    if (res.ok) {
-      const data = await res.json();
-      // Mark as read immediately
-      fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: `/chat/${data.sessionId}` })
-      }).then(() => mutateNotifications());
+  async function openChat(questionId: string, directSessionId?: string | null) {
+    // Fast path: if sessionId is already known, navigate immediately without network roundtrip or modal
+    if (directSessionId) {
+      navigateToChat(directSessionId);
+      return;
+    }
 
-      router.push(`/chat/${data.sessionId}`);
-    } else {
+    setIsNavigating(true);
+    try {
+      const res = await fetch(`/api/chat/by-question/${questionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        navigateToChat(data.sessionId);
+      } else {
+        alert("Failed to load chat");
+      }
+    } catch (e) {
+      alert("Failed to load chat");
+    } finally {
       setIsNavigating(false);
     }
   }
@@ -293,48 +350,52 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
         q.question_targets?.some((t: any) => t.professional_id === target.id)
       );
       if (extAsked) {
-        openChat(extAsked.id);
+        openChat(extAsked.id, extAsked.session_id);
         return;
       }
 
       const extIncoming = incoming.find((q: any) => q.asker_id === target.id);
       if (extIncoming) {
-        openChat(extIncoming.id);
+        openChat(extIncoming.id, extIncoming.session_id);
         return;
       }
 
-      const res = await fetch("/api/questions", {
+      const res = await fetch("/api/chat/direct", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          questionBody: `Hi, I'd like to start a chat with you!`,
-          targetUserId: target.id,
-          centerLat: null,
-          centerLng: null,
-          radiusMeters: 5000,
-        }),
+        body: JSON.stringify({ targetProfessionalId: target.id }),
       });
-
       if (res.ok) {
         const data = await res.json();
-        if (data.sessionId) {
-          router.push(`/chat/${data.sessionId}`);
-          return;
-        }
-        const questionId = data.question?.id;
-        if (questionId) {
-          const sessionRes = await fetch(`/api/chat/by-question/${questionId}`);
-          if (sessionRes.ok) {
-            const sessionData = await sessionRes.json();
-            router.push(`/chat/${sessionData.sessionId}`);
-            return;
-          }
-        }
+        navigateToChat(data.sessionId);
+      } else {
+        alert("Failed to initiate direct chat");
       }
-      alert("Failed to start chat session.");
-      setIsNavigating(false);
     } catch (e) {
-      alert("Error starting chat session.");
+      alert("Failed to initiate direct chat");
+    } finally {
+      setIsNavigating(false);
+    }
+  }
+
+  async function openAiChat() {
+    if (aiSession) {
+      navigateToChat(aiSession.id);
+      return;
+    }
+
+    setIsNavigating(true);
+    try {
+      const res = await fetch("/api/chat/ai", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        navigateToChat(data.sessionId);
+      } else {
+        alert("Failed to load AI Assistant");
+      }
+    } catch (e) {
+      alert("Failed to load AI Assistant");
+    } finally {
       setIsNavigating(false);
     }
   }
@@ -352,13 +413,13 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
 
   // Unify and sort
   const unified = [
-    ...referralThreads.map(t => ({
+    ...referralThreads.map((t: any) => ({
       type: "referral" as const,
       data: t,
       ts: new Date(t.latestMessageAt || t.created_at || Date.now()).getTime()
     })),
-    ...asked.map(q => ({ type: "asked" as const, data: q, ts: new Date(q.latest_activity_at).getTime() })),
-    ...incoming.map(q => ({ type: "incoming" as const, data: q, ts: new Date(q.latest_activity_at).getTime() }))
+    ...asked.map((q: any) => ({ type: "asked" as const, data: q, ts: new Date(q.latest_activity_at).getTime() })),
+    ...incoming.map((q: any) => ({ type: "incoming" as const, data: q, ts: new Date(q.latest_activity_at).getTime() }))
   ].sort((a, b) => b.ts - a.ts);
 
   // Client-side search filters
@@ -705,6 +766,8 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
                       key={t.id} 
                       className={`flex items-center gap-3.5 py-3.5 px-4 cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors ${!isLast ? "border-b border-[var(--color-border-light)]" : ""}`}
                       onClick={() => router.push(`/jobs/chat/${t.id}`)}
+                      onMouseEnter={() => router.prefetch(`/jobs/chat/${t.id}`)}
+                      onTouchStart={() => router.prefetch(`/jobs/chat/${t.id}`)}
                     >
                       <CompanyLogo company={t.postCompany || null} size={48} />
                       <div className="flex-1 min-w-0">
@@ -739,7 +802,9 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
                     <div 
                       key={q.id} 
                       className={`flex items-center gap-3.5 py-3.5 px-4 cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors ${!isLast ? "border-b border-[var(--color-border-light)]" : ""}`}
-                      onClick={() => openChat(q.id)}
+                      onClick={() => openChat(q.id, q.session_id)}
+                      onMouseEnter={() => q.session_id && router.prefetch(`/chat/${q.session_id}`)}
+                      onTouchStart={() => q.session_id && router.prefetch(`/chat/${q.session_id}`)}
                     >
                       <CompanyLogo company={company || null} size={48} />
                       <div className="flex-1 min-w-0">
@@ -775,7 +840,9 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
                     <div 
                       key={q.target_id} 
                       className={`flex items-center gap-3.5 py-3.5 px-4 cursor-pointer hover:bg-[var(--color-surface-hover)] transition-colors ${!isLast ? "border-b border-[var(--color-border-light)]" : ""}`}
-                      onClick={() => hasResponse ? openChat(q.id) : respond(q.id, q.target_id)}
+                      onClick={() => hasResponse ? openChat(q.id, q.session_id) : respond(q.id, q.target_id)}
+                      onMouseEnter={() => q.session_id && router.prefetch(`/chat/${q.session_id}`)}
+                      onTouchStart={() => q.session_id && router.prefetch(`/chat/${q.session_id}`)}
                     >
                       <CompanyLogo company={company || null} size={48} />
                       <div className="flex-1 min-w-0">

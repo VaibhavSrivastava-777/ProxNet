@@ -27,20 +27,41 @@ export async function GET(
 
   const supabase = createAdminClient();
 
-  // Mark incoming messages from other participant as read
-  await supabase
+  // Run queries in parallel: mark as read non-blocking, fetch session, messages, and participants simultaneously
+  const markAsReadPromise = supabase
     .from("chat_messages")
     .update({ is_read: true })
     .eq("session_id", sessionId)
     .neq("sender_id", user.id)
     .eq("is_read", false);
 
-  // Fetch session details to get the question
-  const { data: session } = await supabase
-    .from("chat_sessions")
-    .select("question_id, created_at")
-    .eq("id", sessionId)
-    .maybeSingle();
+  const [sessionRes, messagesRes, participantsRes] = await Promise.all([
+    supabase
+      .from("chat_sessions")
+      .select("question_id, created_at")
+      .eq("id", sessionId)
+      .maybeSingle(),
+    supabase
+      .from("chat_messages")
+      .select("id, body, created_at, sender_id, is_read")
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("chat_participants")
+      .select("user_id, alias")
+      .eq("session_id", sessionId),
+    Promise.resolve(markAsReadPromise).catch((err) => {
+      console.warn("Failed to mark chat messages read concurrently:", err);
+    }),
+  ]);
+
+  if (messagesRes.error) {
+    return NextResponse.json({ error: messagesRes.error.message }, { status: 500 });
+  }
+
+  const session = sessionRes.data;
+  const messages = messagesRes.data ?? [];
+  const participants = participantsRes.data ?? [];
 
   let questionMessage = null;
   if (session?.question_id) {
@@ -51,14 +72,7 @@ export async function GET(
       .maybeSingle();
 
     if (question) {
-      // Find the asker's alias from participants
-      const { data: askerParticipant } = await supabase
-        .from("chat_participants")
-        .select("alias")
-        .eq("session_id", sessionId)
-        .eq("user_id", question.asker_id)
-        .maybeSingle();
-
+      const askerParticipant = participants.find((p) => p.user_id === question.asker_id);
       questionMessage = {
         id: `q-${question.id}`,
         body: question.body,
@@ -70,22 +84,9 @@ export async function GET(
     }
   }
 
-  const { data: messages, error } = await supabase
-    .from("chat_messages")
-    .select("id, body, created_at, sender_id, is_read")
-    .eq("session_id", sessionId)
-    .order("created_at", { ascending: true });
+  const aliasMap = new Map(participants.map((p) => [p.user_id, p.alias]));
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const { data: participants } = await supabase
-    .from("chat_participants")
-    .select("user_id, alias")
-    .eq("session_id", sessionId);
-
-  const aliasMap = new Map((participants ?? []).map((p) => [p.user_id, p.alias]));
-
-  let sanitized = (messages ?? []).map((m) => ({
+  let sanitized = messages.map((m) => ({
     id: m.id,
     body: m.body,
     created_at: m.created_at,
@@ -98,7 +99,7 @@ export async function GET(
     sanitized = [questionMessage, ...sanitized];
   }
 
-  const otherParticipant = (participants ?? []).find((p) => p.user_id !== user.id);
+  const otherParticipant = participants.find((p) => p.user_id !== user.id);
   const otherAlias = otherParticipant?.alias ?? "Anonymous";
 
   return NextResponse.json({

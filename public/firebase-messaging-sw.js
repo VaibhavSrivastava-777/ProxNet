@@ -20,18 +20,39 @@ if (firebaseConfig.messagingSenderId && firebaseConfig.apiKey) {
   messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
     
-    if (payload.notification) {
-      const notificationTitle = payload.notification.title || "ProxNet Notification";
+    if (payload.notification || payload.data) {
+      const notificationTitle = payload.notification?.title || payload.data?.title || "ProxNet Notification";
+      const notificationBody = payload.notification?.body || payload.data?.body || "";
+      const data = payload.data || {};
+      // Deduplicate messages per chat session or notification category to prevent clutter
+      const tag = data.sessionId ? `chat-${data.sessionId}` : (data.type || "proxnet-general");
+      
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || "");
+
       const notificationOptions = {
-        body: payload.notification.body || "",
+        body: notificationBody,
         icon: 'https://www.proxnet.in/logo.png',
         badge: 'https://www.proxnet.in/icons/icon-96.png',
-        vibrate: [200, 100, 200],
         silent: false,
-        data: payload.data || {}
+        tag: tag,
+        data: data
       };
+
+      // vibrate and renotify cause WebKit TypeError on iOS Safari
+      if (!isIOS) {
+        notificationOptions.vibrate = [200, 100, 200];
+        notificationOptions.renotify = true;
+      }
       
-      self.registration.showNotification(notificationTitle, notificationOptions);
+      try {
+        self.registration.showNotification(notificationTitle, notificationOptions);
+      } catch (err) {
+        console.warn('[firebase-messaging-sw.js] showNotification standard failed, falling back to minimal:', err);
+        self.registration.showNotification(notificationTitle, {
+          body: notificationBody,
+          data: data
+        });
+      }
     }
   });
 } else {
@@ -42,20 +63,38 @@ if (firebaseConfig.messagingSenderId && firebaseConfig.apiKey) {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
-  const clickAction = data.url || data.click_action || '/';
+  const rawTarget = data.url || data.click_action || '/';
+  
+  const origin = self.location.origin;
+  let targetUrl = origin;
+  try {
+    if (rawTarget.startsWith('http://') || rawTarget.startsWith('https://')) {
+      targetUrl = rawTarget;
+    } else {
+      targetUrl = new URL(rawTarget.startsWith('/') ? rawTarget : `/${rawTarget}`, origin).href;
+    }
+  } catch (e) {
+    targetUrl = origin;
+  }
   
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // Check if there is already a window open with this URL
-      for (let i = 0; i < windowClients.length; i++) {
-        const client = windowClients[i];
-        if (client.url.includes(clickAction) && 'focus' in client) {
-          return client.focus();
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (windowClients) => {
+      // 1. WhatsApp-style tab reuse: find existing open ProxNet tab, focus it, and navigate to the target URL
+      for (const client of windowClients) {
+        if (client.url && client.url.startsWith(origin)) {
+          if ('focus' in client) {
+            await client.focus();
+          }
+          if ('navigate' in client) {
+            return client.navigate(targetUrl);
+          }
+          return;
         }
       }
-      // If not, open a new window
+      
+      // 2. If no existing ProxNet window/tab is open, cold-open a new window
       if (clients.openWindow) {
-        return clients.openWindow(clickAction);
+        return clients.openWindow(targetUrl);
       }
     })
   );

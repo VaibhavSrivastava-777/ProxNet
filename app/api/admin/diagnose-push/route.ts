@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fcmMessaging } from "@/lib/firebase-admin";
@@ -42,11 +43,30 @@ export async function GET(request: Request) {
 
   for (const tokenRecord of tokens || []) {
     try {
+      const isIos = tokenRecord.platform === "ios";
       const responseId = await fcmMessaging.send({
         token: tokenRecord.token,
         notification: {
           title: "ProxNet Diagnostics",
           body: "Verification message sent via diagnose-push endpoint.",
+        },
+        data: {
+          url: "/",
+          type: "diagnostic",
+        },
+        webpush: {
+          headers: {
+            Urgency: "high",
+          },
+          fcmOptions: {
+            link: "https://www.proxnet.in/",
+          },
+          notification: {
+            icon: "https://www.proxnet.in/logo.png",
+            badge: "https://www.proxnet.in/icons/icon-96.png",
+            data: { url: "/" },
+            ...(isIos ? {} : { vibrate: [200, 100, 200] }),
+          } as any,
         },
         android: {
           priority: "high",
@@ -54,6 +74,22 @@ export async function GET(request: Request) {
             channelId: "proxnet_messages",
             sound: "default",
             icon: "@mipmap/ic_launcher",
+          },
+        },
+        apns: {
+          headers: {
+            "apns-priority": "10",
+            "apns-push-type": "alert",
+          },
+          payload: {
+            aps: {
+              alert: {
+                title: "ProxNet Diagnostics",
+                body: "Verification message sent via diagnose-push endpoint.",
+              },
+              sound: "default",
+              badge: 1,
+            },
           },
         },
       });

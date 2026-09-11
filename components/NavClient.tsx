@@ -13,13 +13,30 @@ import { RechargeModal } from "@/components/RechargeModal";
 import { playNotificationSound, unlockAudioContext, getSoundTypeForNotification, SoundType } from "@/lib/sound";
 import { SmartAppBanner } from "./SmartAppBanner";
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function isPushPromptDismissed(cooldownMs: number = SEVEN_DAYS_MS): boolean {
+  if (typeof window === "undefined") return true;
+  const dismissedAtStr = localStorage.getItem("dismissed_push_prompt_at");
+  if (dismissedAtStr) {
+    const dismissedAt = parseInt(dismissedAtStr, 10);
+    return !isNaN(dismissedAt) && Date.now() - dismissedAt < cooldownMs;
+  }
+  // Backwards compatibility for legacy boolean dismissal:
+  if (localStorage.getItem("dismissed_push_prompt") === "true") {
+    localStorage.setItem("dismissed_push_prompt_at", String(Date.now()));
+    localStorage.removeItem("dismissed_push_prompt");
+    return true;
+  }
+  return false;
+}
+
 interface NavClientProps {
   session: boolean;
   userName: string;
   userId?: string;
 }
-
-
 
 export function NavClient({ session, userName, userId }: NavClientProps) {
   const pathname = usePathname();
@@ -308,11 +325,12 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     navigator.serviceWorker.register(`/firebase-messaging-sw.js${query}`, { scope: "/" }).catch(err => console.error("SW FCM registration failed:", err));
 
     const checkPermission = async () => {
+      if (typeof Notification === "undefined") return;
       const permission = Notification.permission;
-      const dismissed = localStorage.getItem("dismissed_push_prompt") === "true";
+      const dismissed = isPushPromptDismissed(SEVEN_DAYS_MS);
       const fcmVapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
 
-      // Only show prompt if permission is default, not dismissed, and FCM VAPID key is configured
+      // Only show prompt if permission is default, not dismissed within 7 days, and FCM VAPID key is configured
       if (permission === "default" && !dismissed && fcmVapidKey) {
         setShowPushPrompt(true);
       } else if (permission === "granted") {
@@ -335,9 +353,24 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             await fetch("/api/fcm/register", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ token, platform: "web" }),
+              body: JSON.stringify({ token, platform: isIosUser ? "ios" : "web" }),
             });
           }
+
+          // In foreground: listen to onMessage to prevent duplicate native notifications
+          import("firebase/messaging").then(({ onMessage }) => {
+            onMessage(messaging, (payload) => {
+              console.log("Foreground FCM message received:", payload);
+              if (payload.notification) {
+                triggerToast({
+                  title: payload.notification.title || "ProxNet Notification",
+                  body: payload.notification.body || "",
+                  url: (payload.data?.url as string) || "/",
+                  data: payload.data,
+                });
+              }
+            });
+          }).catch(() => {});
         } catch (e) {
           console.error("Failed to sync FCM token on mount:", e);
         }
@@ -361,7 +394,72 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
-  }, [session]);
+  }, [session, isIosUser]);
+
+  // Contextual triggers for push notification prompt (e.g. entering chat rooms)
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof Notification === "undefined") return;
+    if (Notification.permission !== "default") return;
+
+    const isChatRoute = pathname.startsWith("/chat/") || pathname.startsWith("/jobs/chat/") || pathname.startsWith("/carpool/chat/");
+    if (isChatRoute) {
+      // In chat context, if not dismissed in the last 24h, prompt contextually
+      if (!isPushPromptDismissed(ONE_DAY_MS) && process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
+        setShowPushPrompt(true);
+      }
+    }
+
+    const handlePromptEvent = () => {
+      if (Notification.permission === "default") {
+        setShowPushPrompt(true);
+      }
+    };
+
+    window.addEventListener("proxnet:prompt-push", handlePromptEvent);
+    return () => {
+      window.removeEventListener("proxnet:prompt-push", handlePromptEvent);
+    };
+  }, [pathname]);
+
+  // Keep FCM token fresh on tab/PWA visibility change (resuming from sleep/background)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleVisibilityChange = async () => {
+      if (
+        document.visibilityState === "visible" &&
+        typeof Notification !== "undefined" &&
+        Notification.permission === "granted" &&
+        process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+      ) {
+        try {
+          const { getMessaging, getToken, getFcmRegistration, isFirebaseConfigured } = await import("@/lib/firebase-client");
+          if (!isFirebaseConfigured) return;
+          const messaging = getMessaging();
+          const registration = await getFcmRegistration();
+          if (!registration) return;
+          const token = await getToken(messaging, {
+            vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+            serviceWorkerRegistration: registration,
+          });
+          if (token) {
+            fetch("/api/fcm/register", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token, platform: isIosUser ? "ios" : "web" }),
+            }).catch(() => {});
+          }
+        } catch (e) {
+          // silent background refresh
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isIosUser]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
@@ -381,12 +479,19 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
   // Handle FCM Push Subscription
   const subscribeToPush = async () => {
-    // Dismiss the prompt banner and save state immediately on click
+    // Dismiss the prompt banner and save timestamp immediately on click
     setShowPushPrompt(false);
-    localStorage.setItem("dismissed_push_prompt", "true");
+    localStorage.setItem("dismissed_push_prompt_at", String(Date.now()));
+    localStorage.removeItem("dismissed_push_prompt");
 
-    if (isIosUser) {
-      router.push("/profile#notifications");
+    const isStandalone = typeof window !== "undefined" && (
+      (window.navigator as any).standalone === true ||
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)
+    );
+
+    // In iOS Safari browser, Web Push is only supported once added to Home Screen
+    if (isIosUser && !isStandalone) {
+      router.push("/install/ios");
       return;
     }
 
@@ -423,7 +528,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         await fetch("/api/fcm/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token, platform: "web" }),
+          body: JSON.stringify({ token, platform: isIosUser ? "ios" : "web" }),
         });
       }
     } catch (error) {
@@ -432,7 +537,8 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   };
 
   const dismissPrompt = () => {
-    localStorage.setItem("dismissed_push_prompt", "true");
+    localStorage.setItem("dismissed_push_prompt_at", String(Date.now()));
+    localStorage.removeItem("dismissed_push_prompt");
     setShowPushPrompt(false);
   };
 
@@ -1186,7 +1292,11 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       {showPushPrompt && (
         <div className="fixed bottom-20 right-4 z-[99] max-w-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-lg)] animate-fadeInUp pointer-events-auto">
           <p className="text-sm font-semibold text-[var(--color-text)]">Enable Notifications</p>
-          <p className="text-xs text-[var(--color-text-secondary)] mt-1 mb-3">Get real-time updates when nearby professionals answer your questions or reply in chat.</p>
+          <p className="text-xs text-[var(--color-text-secondary)] mt-1 mb-3">
+            {pathname.startsWith("/chat/") || pathname.startsWith("/jobs/chat/") || pathname.startsWith("/carpool/chat/")
+              ? "Don't miss replies in this conversation! Enable notifications to know immediately when they respond."
+              : "Get real-time updates when nearby professionals answer your questions, reply in chat, or share new job referrals."}
+          </p>
           <div className="flex gap-2 justify-end">
             <button onClick={dismissPrompt} className="btn btn-ghost btn-sm text-xs px-3 py-1 cursor-pointer">Later</button>
             <button onClick={subscribeToPush} className="btn btn-primary btn-sm text-xs px-3 py-1 cursor-pointer">Enable</button>

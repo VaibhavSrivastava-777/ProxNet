@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { fcmMessaging } from "./firebase-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -51,6 +52,23 @@ export async function sendNotification(
 
     for (const tokenRecord of fcmTokens) {
       try {
+        const isIos = tokenRecord.platform === "ios";
+
+        const webpushNotification: Record<string, any> = {
+          icon: "https://www.proxnet.in/logo.png",
+          badge: "https://www.proxnet.in/icons/icon-96.png",
+          silent: false,
+          data: { url, ...data },
+        };
+
+        // Desktop/Android support rich actions and vibration; iOS WebKit throws TypeError on actions/vibrate
+        if (!isIos) {
+          webpushNotification.vibrate = [200, 100, 200];
+          webpushNotification.actions = [
+            { action: "reply", title: "Reply", type: "text", placeholder: "Type a reply..." } as any
+          ];
+        }
+
         await fcmMessaging.send({
           token: tokenRecord.token,
           notification: {
@@ -59,19 +77,13 @@ export async function sendNotification(
           },
           data: stringifiedData,
           webpush: {
+            headers: {
+              Urgency: "high",
+            },
             fcmOptions: {
               link: `https://www.proxnet.in${url}`,
             },
-            notification: {
-              icon: "https://www.proxnet.in/logo.png",
-              badge: "https://www.proxnet.in/icons/icon-96.png",
-              vibrate: [200, 100, 200],
-              silent: false,
-              data: { url, ...data },
-              actions: [
-                { action: "reply", title: "Reply", type: "text", placeholder: "Type a reply..." } as any
-              ]
-            } as any,
+            notification: webpushNotification as any,
           },
           android: {
             priority: "high",
@@ -84,8 +96,16 @@ export async function sendNotification(
             },
           },
           apns: {
+            headers: {
+              "apns-priority": "10",
+              "apns-push-type": "alert",
+            },
             payload: {
               aps: {
+                alert: {
+                  title,
+                  body,
+                },
                 sound: "default",
                 badge: 1,
               },

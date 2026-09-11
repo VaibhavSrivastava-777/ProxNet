@@ -19,18 +19,34 @@ export async function GET() {
       const { title, body } = payload.notification || {};
       const data = payload.data || {};
       const link = data.url || data.click_action || '/';
+      const notificationTitle = title || data.title || 'ProxNet';
+      const notificationBody = body || data.body || '';
 
-      self.registration.showNotification(title || 'ProxNet', {
-        body: body || '',
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent || "");
+
+      const notificationOptions = {
+        body: notificationBody,
         icon: 'https://www.proxnet.in/logo.png',
         badge: 'https://www.proxnet.in/icons/icon-96.png',
-        vibrate: [200, 100, 200],
         silent: false,
         data: { url: link, ...data },
-        actions: [
+      };
+
+      if (!isIOS) {
+        notificationOptions.vibrate = [200, 100, 200];
+        notificationOptions.actions = [
           { action: 'reply', title: 'Reply', type: 'text', placeholder: 'Type a reply...' }
-        ],
-      });
+        ];
+      }
+
+      try {
+        self.registration.showNotification(notificationTitle, notificationOptions);
+      } catch (err) {
+        self.registration.showNotification(notificationTitle, {
+          body: notificationBody,
+          data: { url: link, ...data }
+        });
+      }
     });
 
     self.addEventListener('notificationclick', (event) => {

@@ -41,14 +41,39 @@ function formatAbsoluteTime(ts: string): string {
 
 export function ChatRoom({ sessionId }: { sessionId: string }) {
   const router = useRouter();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [myAlias, setMyAlias] = useState("");
-  const [otherAliasState, setOtherAliasState] = useState("");
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`chat_cache_${sessionId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed.messages)) return parsed.messages;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [myAlias, setMyAlias] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`chat_cache_${sessionId}`);
+        if (cached) return JSON.parse(cached).myAlias || "";
+      } catch (e) {}
+    }
+    return "";
+  });
+  const [otherAliasState, setOtherAliasState] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`chat_cache_${sessionId}`);
+        if (cached) return JSON.parse(cached).otherAlias || "";
+      } catch (e) {}
+    }
+    return "";
+  });
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [showScroll, setShowScroll] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [otherIsTyping, setOtherIsTyping] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -61,7 +86,6 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const suggestionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const presenceChannelRef = useRef<any>(null);
   const mountTime = useRef(Date.now());
   const lastKnownMessageCountRef = useRef(0);
@@ -178,32 +202,23 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
       setMessages(newMsgs);
       setMyAlias(data.myAlias ?? "");
       setOtherAliasState(data.otherAlias ?? "");
-    }
-  }, [sessionId]);
 
-  const fetchSuggestions = useCallback(async () => {
-    setLoadingSuggestions(true);
-    try {
-      const res = await fetch(`/api/chat/${sessionId}/suggestions`);
-      if (res.ok) {
-        const data = await res.json();
-        setSuggestions(data.suggestions ?? []);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingSuggestions(false);
+      // Instant cache for subsequent visits
+      try {
+        sessionStorage.setItem(`chat_cache_${sessionId}`, JSON.stringify({
+          messages: newMsgs,
+          myAlias: data.myAlias ?? "",
+          otherAlias: data.otherAlias ?? "",
+        }));
+      } catch (e) {}
     }
   }, [sessionId]);
 
   useEffect(() => {
     loadMessages();
-    fetchSuggestions();
 
     const interval = setInterval(loadMessages, 3000);
     const supabase = createBrowserClient();
-
-    loadMessages();
     
     // Force re-render for message ticks
     const tickInterval = setInterval(() => setCurrentTime(Date.now()), 2000);
@@ -221,9 +236,6 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
         },
         () => {
           loadMessages();
-          // Refresh suggestions after a new message (debounced 2s)
-          if (suggestionDebounceRef.current) clearTimeout(suggestionDebounceRef.current);
-          suggestionDebounceRef.current = setTimeout(fetchSuggestions, 2000);
         }
       )
       .subscribe();
@@ -248,9 +260,8 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
       supabase.removeChannel(channel);
       supabase.removeChannel(presenceChannel);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      if (suggestionDebounceRef.current) clearTimeout(suggestionDebounceRef.current);
     };
-  }, [sessionId, loadMessages, fetchSuggestions, myAlias]);
+  }, [sessionId, loadMessages, myAlias]);
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -394,6 +405,14 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   const charsLeft = MAX_CHARS - text.length;
   const charsNearLimit = charsLeft < 50;
 
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/qa");
+    }
+  };
+
   return (
     <div 
       className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl bg-[var(--color-surface)] md:border-x border-[var(--color-border-light)] shadow-md flex flex-col overflow-hidden"
@@ -406,9 +425,12 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
         style={{ paddingTop: "calc(12px + env(safe-area-inset-top))" }}
       >
         <button
-          onClick={() => router.push("/qa")}
-          className="btn-icon text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] rounded-full p-1"
+          onClick={handleBack}
+          onMouseEnter={() => router.prefetch("/qa")}
+          onTouchStart={() => router.prefetch("/qa")}
+          className="btn-icon text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] rounded-full p-1 cursor-pointer"
           style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center" }}
+          aria-label="Back to chats"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="19" y1="12" x2="5" y2="12" />
@@ -435,25 +457,19 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 9.75a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
             </svg>
             <p className="text-body-sm text-[var(--color-text-secondary)]">Break the ice — say hello!</p>
-            {loadingSuggestions ? (
-              <div className="flex flex-wrap justify-center gap-2">
-                {[1, 2, 3].map((i) => <div key={i} className="skeleton rounded-full" style={{ width: "180px", height: "32px" }} />)}
-              </div>
-            ) : (
-              <div className="flex flex-wrap justify-center gap-2 max-w-[400px]">
-                {(suggestions.length > 0 ? suggestions : ICEBREAKERS).map((ib) => (
-                  <button
-                    key={ib}
-                    type="button"
-                    onClick={() => setText(ib)}
-                    className="px-3 py-1.5 rounded-full text-sm border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)] transition-colors cursor-pointer"
-                    style={{ fontWeight: 500 }}
-                  >
-                    {ib}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex flex-wrap justify-center gap-2 max-w-[400px]">
+              {ICEBREAKERS.map((ib) => (
+                <button
+                  key={ib}
+                  type="button"
+                  onClick={() => setText(ib)}
+                  className="px-3 py-1.5 rounded-full text-sm border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)] transition-colors cursor-pointer"
+                  style={{ fontWeight: 500 }}
+                >
+                  {ib}
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           messages.map((m, i) => {
@@ -681,33 +697,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
         </button>
       )}
 
-      {/* AI suggestion chips — only show when not typing */}
-      {!text && messages.length > 0 && suggestions.length > 0 && (
-        <div className="flex overflow-x-auto snap-x hidden-scrollbar gap-2 px-3 pt-2 pb-1 bg-[var(--color-surface)] border-t border-[var(--color-border-light)] shrink-0">
-          {loadingSuggestions ? (
-            <div className="flex gap-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="skeleton rounded-full shrink-0" style={{ width: "120px", height: "30px" }} />
-              ))}
-            </div>
-          ) : (
-            suggestions.map((s, i) => {
-              const isResident = myAlias.toLowerCase().startsWith("resident");
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setText(s)}
-                  className="snap-start shrink-0 px-3 py-1.5 rounded-full text-xs border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-sm text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)] transition-colors cursor-pointer whitespace-nowrap"
-                  style={{ fontWeight: 500, lineHeight: 1.4 }}
-                >
-                  {isResident ? "🔍" : "✨"} {s}
-                </button>
-              );
-            })
-          )}
-        </div>
-      )}
+
 
       {/* Editing Message Banner */}
       {editingMessageId && (
