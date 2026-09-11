@@ -103,7 +103,6 @@ async function handleReferralNudges(request: Request) {
 
     // Check user's explicitly targeted companies first
     for (const targetName of targetCompanies) {
-      if (targetName === userCompany) continue;
       const jobCount = companyJobCounts.get(targetName) || 0;
       const referrers = (companyReferrers.get(targetName) || []).filter(r => r.id !== user.id);
       if (jobCount > 0 && referrers.length > 0) {
@@ -115,7 +114,6 @@ async function handleReferralNudges(request: Request) {
     // If no target company match, check general active companies with jobs and referrers
     if (!bestCompany) {
       for (const [cKey, referrersList] of companyReferrers.entries()) {
-        if (cKey === userCompany) continue;
         const jobCount = companyJobCounts.get(cKey) || 0;
         const validReferrers = referrersList.filter(r => r.id !== user.id);
         if (jobCount >= 2 && validReferrers.length > 0) {
@@ -129,8 +127,13 @@ async function handleReferralNudges(request: Request) {
 
     const refCount = bestCompany.referrers.length;
     const compDisplayName = bestCompany.name;
-    const notifTitle = `🤝 ${refCount} ProxNet member${refCount > 1 ? "s" : ""} at ${compDisplayName} can refer you`;
-    const notifBody = `${compDisplayName} currently has ${bestCompany.jobCount} open roles. Connect with insiders in your proximity to fast-track your referral!`;
+    const isSameCompany = compDisplayName.trim().toLowerCase() === userCompany;
+    const notifTitle = isSameCompany
+      ? `🤝 ${refCount} colleague${refCount > 1 ? "s" : ""} at ${compDisplayName} can help with openings`
+      : `🤝 ${refCount} ProxNet member${refCount > 1 ? "s" : ""} at ${compDisplayName} can refer you`;
+    const notifBody = isSameCompany
+      ? `${compDisplayName} currently has ${bestCompany.jobCount} open roles. Connect with colleagues in your proximity to explore internal opportunities!`
+      : `${compDisplayName} currently has ${bestCompany.jobCount} open roles. Connect with insiders in your proximity to fast-track your referral!`;
     const targetUrl = `/jobs?company=${encodeURIComponent(compDisplayName)}&refnudge=1`;
 
     await sendNotification(user.id, {

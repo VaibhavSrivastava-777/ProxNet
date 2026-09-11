@@ -284,6 +284,14 @@ export function ProximityMap() {
   };
 
   const getChatSuggestion = (p: any) => {
+    const isSameCompany = Boolean(
+      profile?.company &&
+      p?.company &&
+      profile.company.trim().toLowerCase() === p.company.trim().toLowerCase()
+    );
+    if (isSameCompany) {
+      return `Hi! I noticed we both work at ${p.company} and are nearby in the area. Would love to connect and chat!`;
+    }
     return `Hi! I noticed we're professional neighbors in the area and you work as a ${p.job_title} at ${p.company}. Would love to connect and chat!`;
   };
 

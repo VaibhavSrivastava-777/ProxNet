@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export const dynamic = "force-dynamic";
+
 function cleanUrlAndTitle(rawTitle: string, rawUrl: string) {
   const cleanUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
   let title = (rawTitle || "").trim();
@@ -165,7 +167,7 @@ export async function GET() {
 
     const { data: userProfile } = await supabase
       .from("users")
-      .select("resume_text, resume_url, wallet")
+      .select("resume_text, resume_url, wallet, company")
       .eq("id", user.id)
       .single();
 
@@ -175,6 +177,7 @@ export async function GET() {
       resumeUrl: userProfile?.resume_url || null,
       wallet: userProfile?.wallet ?? 0,
       currentUserId: user.id,
+      currentUserCompany: userProfile?.company || null,
       totalCompanies: companiesArray.length,
       totalJobs: scrapedJobs?.length || 0,
       companies: companiesArray,

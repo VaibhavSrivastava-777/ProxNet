@@ -83,6 +83,12 @@ export async function POST(request: Request) {
   if (threadError) return NextResponse.json({ error: threadError.message }, { status: 500 });
 
   // 4. Create participants with aliases
+  const isSameCompany = Boolean(
+    currentUserDb?.company &&
+    targetUser?.company &&
+    currentUserDb.company.trim().toLowerCase() === targetUser.company.trim().toLowerCase()
+  );
+
   const getAlias = (u: any, defaultPrefix: string) => {
     if (u && u.job_title && u.company) {
       return `${u.job_title} @ ${u.company}`;
@@ -90,8 +96,12 @@ export async function POST(request: Request) {
     return `${defaultPrefix} ` + Math.random().toString(36).substring(2, 6).toUpperCase();
   };
 
-  const alias1 = getAlias(targetUser, "Referrer");
-  const alias2 = getAlias(currentUserDb, "Candidate");
+  const alias1 = isSameCompany
+    ? (targetUser.job_title ? `${targetUser.job_title} @ ${targetUser.company}` : `Colleague @ ${targetUser.company}`)
+    : getAlias(targetUser, "Referrer");
+  const alias2 = isSameCompany
+    ? (currentUserDb?.job_title ? `${currentUserDb.job_title} @ ${currentUserDb?.company}` : `Colleague @ ${currentUserDb?.company}`)
+    : getAlias(currentUserDb, "Candidate");
 
   await supabase.from("job_participants").insert([
     { thread_id: thread.id, user_id: contactId, alias: alias1 },
@@ -99,21 +109,32 @@ export async function POST(request: Request) {
   ]);
 
   // 5. Insert Automated Initial Message detailing the opportunity and introducing the user
-  const candidateRole = currentUserDb?.job_title
-    ? (currentUserDb?.company ? `${currentUserDb.job_title} at ${currentUserDb.company}` : currentUserDb.job_title)
-    : "a fellow professional";
-
   let initialMsg = customMessage;
   if (!initialMsg) {
-    const introLine = `Hi! I am currently working as ${candidateRole} and interested in exploring opportunities at ${company}.`;
-    const oppDetails = [
-      `📌 Role: ${jobTitle}`,
-      `🏢 Company: ${company}`,
-      location ? `📍 Location: ${location}` : null,
-      jobUrl ? `🔗 Career Link: ${jobUrl}` : null,
-    ].filter(Boolean).join("\n");
+    if (isSameCompany) {
+      const introLine = `Hi! I noticed we both work at ${targetUser.company || company}.`;
+      const oppDetails = [
+        `📌 Role: ${jobTitle}`,
+        `🏢 Company: ${company}`,
+        location ? `📍 Location: ${location}` : null,
+        jobUrl ? `🔗 Career Link: ${jobUrl}` : null,
+      ].filter(Boolean).join("\n");
 
-    initialMsg = `${introLine}\n\nI came across this opening and would love to be considered for a referral:\n${oppDetails}\n\nCould you please refer my profile or share insights about the role and team? I'd really appreciate your guidance!`;
+      initialMsg = `${introLine}\n\nI came across this internal/open opportunity on ProxNet and would love to connect about it:\n${oppDetails}\n\nCould you share insights about the team or role? Would love to connect!`;
+    } else {
+      const candidateRole = currentUserDb?.job_title
+        ? (currentUserDb?.company ? `${currentUserDb.job_title} at ${currentUserDb.company}` : currentUserDb.job_title)
+        : "a fellow professional";
+      const introLine = `Hi! I am currently working as ${candidateRole} and interested in exploring opportunities at ${company}.`;
+      const oppDetails = [
+        `📌 Role: ${jobTitle}`,
+        `🏢 Company: ${company}`,
+        location ? `📍 Location: ${location}` : null,
+        jobUrl ? `🔗 Career Link: ${jobUrl}` : null,
+      ].filter(Boolean).join("\n");
+
+      initialMsg = `${introLine}\n\nI came across this opening and would love to be considered for a referral:\n${oppDetails}\n\nCould you please refer my profile or share insights about the role and team? I'd really appreciate your guidance!`;
+    }
   }
 
   await supabase.from("job_messages").insert({
@@ -122,15 +143,22 @@ export async function POST(request: Request) {
     body: initialMsg
   });
 
-  // 6. Notify the Referrer in real-time
+  // 6. Notify the Referrer / Colleague in real-time
   try {
+    const notifTitle = isSameCompany
+      ? `💬 Message from a colleague regarding ${jobTitle}`
+      : `🤝 Referral Request: ${jobTitle}`;
+    const notifBody = isSameCompany
+      ? `${alias2} reached out regarding ${jobTitle} at ${company}. Tap to chat!`
+      : `${alias2} asked for a referral for ${jobTitle} at ${company}. Tap to chat!`;
+
     await sendNotification(contactId, {
-      title: `🤝 Referral Request: ${jobTitle}`,
-      body: `${alias2} asked for a referral for ${jobTitle} at ${company}. Tap to chat!`,
+      title: notifTitle,
+      body: notifBody,
       url: `/jobs/chat/${thread.id}`,
       data: {
         threadId: thread.id,
-        type: "referral_request",
+        type: isSameCompany ? "colleague_message" : "referral_request",
         soundType: "message",
         sound: "default",
         senderAlias: alias2

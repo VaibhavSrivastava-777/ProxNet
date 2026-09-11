@@ -17,13 +17,13 @@ export async function GET(request: Request) {
   const supabase = createAdminClient();
 
   try {
-    // 1. Search database for real active users matching company or job title
+    // 1. Search database for real active users matching company, job title, or name
     const { data: dbMatches, error: dbError } = await supabase
       .from("users")
-      .select("id, job_title, company")
+      .select("id, job_title, company, full_name")
       .eq("is_active", true)
       .neq("id", user.id)
-      .or(`company.ilike.%${query}%,job_title.ilike.%${query}%`)
+      .or(`company.ilike.%${query}%,job_title.ilike.%${query}%,full_name.ilike.%${query}%`)
       .limit(3);
 
     if (dbError) {
@@ -36,6 +36,7 @@ export async function GET(request: Request) {
           id: m.id,
           job_title: m.job_title,
           company: m.company,
+          full_name: m.full_name,
           isSimulated: false,
         })),
       });

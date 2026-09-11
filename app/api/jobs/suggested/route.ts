@@ -349,6 +349,42 @@ Return ONLY a JSON object with:
       }
     }
 
+    // 6. Populate real company employees into referral contacts for all companies (including user's own company)
+    const { data: companyEmployees } = await supabase
+      .from("users")
+      .select("id, company, job_title")
+      .eq("is_active", true)
+      .neq("id", user.id)
+      .not("company", "is", null);
+
+    const companyEmployeesMap = new Map<string, Array<{ id: string; alias: string }>>();
+    for (const u of companyEmployees || []) {
+      if (u.company && u.company.trim()) {
+        const cKey = u.company.trim().toLowerCase();
+        if (!companyEmployeesMap.has(cKey)) {
+          companyEmployeesMap.set(cKey, []);
+        }
+        companyEmployeesMap.get(cKey)!.push({
+          id: u.id,
+          alias: u.job_title ? `${u.job_title} @ ${u.company}` : `Professional @ ${u.company}`
+        });
+      }
+    }
+
+    // Merge company employees into referralContacts of each group
+    for (const group of Object.values(companyGroups)) {
+      const cKey = group.company.trim().toLowerCase();
+      const employees = companyEmployeesMap.get(cKey) || [];
+      for (const emp of employees) {
+        if (!group.referralContacts.find(c => c.id === emp.id)) {
+          group.referralContacts.push({
+            id: emp.id,
+            alias: emp.alias
+          });
+        }
+      }
+    }
+
     // Fetch user details for all referralContacts to anonymize names
     const allContactIds = Object.values(companyGroups).flatMap(g => g.referralContacts.map(c => c.id));
     if (allContactIds.length > 0) {
@@ -408,6 +444,7 @@ Return ONLY a JSON object with:
       wallet: userProfile?.wallet ?? 0,
       profileDigest,
       currentUserId: user.id,
+      currentUserCompany: userProfile?.company || null,
       companies: finalCompanies
     }, {
       headers: {

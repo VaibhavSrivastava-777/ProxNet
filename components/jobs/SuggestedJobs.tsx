@@ -112,6 +112,7 @@ export function SuggestedJobs() {
   });
   const [activeCompanyModal, setActiveCompanyModal] = useState<CompanyGroup | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserCompany, setCurrentUserCompany] = useState<string | null>(null);
   const [startingReferralJobId, setStartingReferralJobId] = useState<string | null>(null);
   const [isMatchingCompleted, setIsMatchingCompleted] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -134,6 +135,9 @@ export function SuggestedJobs() {
         setIsMatchingCompleted(data.isMatchingCompleted ?? true);
         if (data.currentUserId) {
           setCurrentUserId(data.currentUserId);
+        }
+        if (data.currentUserCompany) {
+          setCurrentUserCompany(data.currentUserCompany);
         }
         if (data.hasResume !== undefined) {
           setHasResume(data.hasResume);
@@ -166,6 +170,9 @@ export function SuggestedJobs() {
         setAllCompanies(allData.companies || []);
         if (allData.currentUserId) {
           setCurrentUserId(allData.currentUserId);
+        }
+        if (allData.currentUserCompany) {
+          setCurrentUserCompany(allData.currentUserCompany);
         }
         if (allData.hasResume !== undefined) {
           setHasResume(allData.hasResume);
@@ -217,6 +224,9 @@ export function SuggestedJobs() {
           setCompanies(data.companies || []);
           const completed = data.isMatchingCompleted ?? true;
           setIsMatchingCompleted(completed);
+          if (data.currentUserCompany) {
+            setCurrentUserCompany(data.currentUserCompany);
+          }
           if (data.hasResume !== undefined) {
             setHasResume(data.hasResume);
           }
@@ -858,6 +868,11 @@ export function SuggestedJobs() {
                           (c) => !currentUserId || c.id !== currentUserId
                         );
                         const hasReferrer = availableReferrers.length > 0;
+                        const isOwnCompany = Boolean(
+                          currentUserCompany &&
+                          activeCompanyModal.company &&
+                          currentUserCompany.trim().toLowerCase() === activeCompanyModal.company.trim().toLowerCase()
+                        );
 
                         if (hasReferrer) {
                           return (
@@ -878,8 +893,8 @@ export function SuggestedJobs() {
                                   </>
                                 ) : (
                                   <>
-                                    <span>🤝</span>
-                                    <span>Ask Referral</span>
+                                    <span>{isOwnCompany ? "💬" : "🤝"}</span>
+                                    <span>{isOwnCompany ? "Message Colleague" : "Ask Referral"}</span>
                                   </>
                                 )}
                               </button>
