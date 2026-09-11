@@ -4,8 +4,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generateAlias } from "@/lib/anonymize";
 import { sendNotification } from "@/lib/notifications";
 
-export const dynamic = "force-dynamic";
-
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

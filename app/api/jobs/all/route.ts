@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const dynamic = "force-dynamic";
-
 function cleanUrlAndTitle(rawTitle: string, rawUrl: string) {
   const cleanUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
   let title = (rawTitle || "").trim();
