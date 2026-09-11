@@ -127,15 +127,21 @@ export function getNotificationMeta(title: string = "", body: string = "", url: 
     t.includes("follower") ||
     t.includes("points") ||
     t.includes("level up") ||
-    t.includes("network")
+    t.includes("network") ||
+    t.includes("profile")
   ) {
+    const isProfile = u.startsWith("/profile") || t.includes("profile");
     return {
       category: "growth",
-      label: "Growth",
-      badgeClass: "bg-pink-500/10 text-pink-600 dark:text-pink-400 border border-pink-500/30",
-      iconBgClass: "bg-pink-500/15 text-pink-600 dark:text-pink-400",
-      accentBorder: "border-l-pink-500",
-      icon: "🎉",
+      label: isProfile ? "Profile" : "Growth",
+      badgeClass: isProfile
+        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+        : "bg-pink-500/10 text-pink-600 dark:text-pink-400 border border-pink-500/30",
+      iconBgClass: isProfile
+        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+        : "bg-pink-500/15 text-pink-600 dark:text-pink-400",
+      accentBorder: isProfile ? "border-l-amber-500" : "border-l-pink-500",
+      icon: isProfile ? "📝" : "🎉",
     };
   }
 
