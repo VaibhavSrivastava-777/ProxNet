@@ -361,14 +361,43 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
           import("firebase/messaging").then(({ onMessage }) => {
             onMessage(messaging, (payload) => {
               console.log("Foreground FCM message received:", payload);
-              if (payload.notification) {
-                triggerToast({
-                  title: payload.notification.title || "ProxNet Notification",
-                  body: payload.notification.body || "",
-                  url: (payload.data?.url as string) || "/",
-                  data: payload.data,
-                });
+              const title = payload.notification?.title || (payload.data?.title as string) || "ProxNet Notification";
+              const body = payload.notification?.body || (payload.data?.body as string) || "";
+              const url = (payload.data?.url as string) || "/";
+
+              // If the window is hidden or not focused (e.g. user switched to another app on iOS or desktop),
+              // show an OS system notification via the service worker registration so user gets alerted!
+              const isUnfocused = typeof document !== "undefined" && (document.hidden || !document.hasFocus());
+              if (isUnfocused && registration && typeof registration.showNotification === "function") {
+                const options: NotificationOptions = {
+                  body,
+                  icon: "https://www.proxnet.in/logo.png",
+                  badge: "https://www.proxnet.in/icons/icon-96.png",
+                  data: { url, ...payload.data },
+                };
+                if (!isIosUser) {
+                  (options as any).vibrate = [200, 100, 200];
+                }
+                try {
+                  registration.showNotification(title, options);
+                } catch {
+                  // Fallback without rich options for strict WebKit versions
+                  registration.showNotification(title, { body });
+                }
               }
+
+              // Play synthesized notification sound chime
+              import("@/lib/sound").then(({ getSoundTypeForNotification, playNotificationSound }) => {
+                const soundType = getSoundTypeForNotification(title, payload.data);
+                playNotificationSound(soundType);
+              }).catch(() => {});
+
+              triggerToast({
+                title,
+                body,
+                url,
+                data: payload.data,
+              });
             });
           }).catch(() => {});
         } catch (e) {

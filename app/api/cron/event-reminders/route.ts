@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
 import { getAdminSession } from "@/lib/admin-session";
+import { haversineDistanceMeters } from "@/lib/geo/haversine";
 
 export const maxDuration = 60;
 
@@ -28,13 +29,14 @@ async function handleEventReminders(request: Request) {
   const now = new Date();
   const nowTime = now.getTime();
 
-  // Fetch all active upcoming events within 4 days
-  const horizon = new Date(nowTime + 4 * 24 * 60 * 60 * 1000).toISOString();
+  // Fetch all active upcoming events within 7 days
+  const horizon = new Date(nowTime + 7 * 24 * 60 * 60 * 1000).toISOString();
   
   const { data: events, error } = await supabase
     .from("events")
     .select(`
       id, title, subtitle, description, starts_at, venue_name,
+      venue_lat, venue_lng, center_lat, center_lng, creator_id,
       rsvps:event_rsvps(user_id, status)
     `)
     .eq("status", "active")
@@ -45,6 +47,24 @@ async function handleEventReminders(request: Request) {
     return NextResponse.json({ error: error?.message || "No events found" }, { status: 500 });
   }
 
+  // Pre-fetch active users and locations once for radius calculations
+  const { data: activeUsers } = await supabase
+    .from("users")
+    .select("id, home_lat, home_lng, office_lat, office_lng")
+    .eq("is_active", true)
+    .eq("is_blocked", false);
+
+  const { data: currentLocations } = await supabase
+    .from("user_current_locations")
+    .select("user_id, lat, lng");
+
+  const locationMap = new Map<string, { lat: number; lng: number }>();
+  for (const loc of currentLocations || []) {
+    if (loc.lat != null && loc.lng != null) {
+      locationMap.set(loc.user_id, { lat: Number(loc.lat), lng: Number(loc.lng) });
+    }
+  }
+
   let sentCount = 0;
 
   for (const event of events) {
@@ -52,12 +72,7 @@ async function handleEventReminders(request: Request) {
     const msUntilStart = startsAt - nowTime;
     const hoursUntilStart = msUntilStart / (1000 * 60 * 60);
 
-    let notificationType = null;
-    let messageBody = "";
-
-    const rsvps = event.rsvps || [];
-    const goingAndMaybe = rsvps.filter((r: any) => ["yes", "maybe"].includes(r.status));
-    const goingOnly = rsvps.filter((r: any) => r.status === "yes");
+    if (hoursUntilStart <= 0) continue;
 
     const startObj = new Date(event.starts_at);
     const dateStr = startObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "Asia/Kolkata" });
@@ -68,56 +83,134 @@ async function handleEventReminders(request: Request) {
       ? `📋 Agenda: ${rawAgenda.length > 100 ? rawAgenda.substring(0, 100) + "..." : rawAgenda}`
       : "";
 
-    let notificationTitle = "";
+    // Fetch existing notification logs for this event to avoid duplicate blasts
+    const { data: existingLogs } = await supabase
+      .from("event_notifications_log")
+      .select("user_id, notification_type")
+      .eq("event_id", event.id);
 
-    if (hoursUntilStart <= 72 && hoursUntilStart > 48) {
-      notificationType = "3d";
-      notificationTitle = `Meetup in 3 Days: ${event.title} • ${dateStr}, ${timeStr} @ ${event.venue_name}`;
-      messageBody = agendaText ? `${agendaText} • ${goingOnly.length} going.` : `${goingOnly.length} going. Tap to view details!`;
-    } else if (hoursUntilStart <= 24 && hoursUntilStart > 12) {
-      notificationType = "1d";
-      notificationTitle = `Meetup Tomorrow: ${event.title} • ${dateStr}, ${timeStr} @ ${event.venue_name}`;
-      messageBody = agendaText ? `${agendaText}` : `Meetup is tomorrow at ${timeStr}.`;
-    } else if (hoursUntilStart <= 4 && hoursUntilStart > 1) {
-      notificationType = "4h";
-      notificationTitle = `Meetup Soon (4h): ${event.title} • Today, ${timeStr} @ ${event.venue_name}`;
-      messageBody = agendaText ? `${agendaText}` : `Starting in 4 hours at ${event.venue_name}.`;
-    } else if (hoursUntilStart <= 0.25) {
-      notificationType = "start";
-      notificationTitle = `Meetup Starting Now: ${event.title} @ ${event.venue_name}`;
-      messageBody = agendaText ? `${agendaText} • Tap for directions.` : `Happening now at ${event.venue_name}. Tap for directions.`;
+    const sentLogSet = new Set<string>();
+    for (const log of existingLogs || []) {
+      sentLogSet.add(`${log.user_id}_${log.notification_type}`);
     }
 
-    if (!notificationType) continue;
+    const rsvps = event.rsvps || [];
+    const rsvpMap = new Map<string, string>();
+    for (const r of rsvps) {
+      rsvpMap.set(r.user_id, r.status);
+    }
 
-    const targets = ["4h", "start"].includes(notificationType) ? goingOnly : goingAndMaybe;
+    // -------------------------------------------------------------
+    // Branch 1: Daily 2 km Radius Discovery (Days 7 through > 24 Hours)
+    // -------------------------------------------------------------
+    if (hoursUntilStart <= 7 * 24 && hoursUntilStart > 24) {
+      const daysLeft = Math.ceil(hoursUntilStart / 24);
+      const radiusNotifType = `radius_2km_${daysLeft}d`;
+      const venueLat = Number(event.venue_lat ?? event.center_lat);
+      const venueLng = Number(event.venue_lng ?? event.center_lng);
 
-    for (const rsvp of targets) {
-      const targetUserId = rsvp.user_id;
+      if (venueLat && venueLng && !isNaN(venueLat) && !isNaN(venueLng)) {
+        for (const user of activeUsers || []) {
+          // Skip event creator and users who have already RSVPed
+          if (user.id === event.creator_id || rsvpMap.has(user.id)) continue;
 
-      // Check if already sent
-      const { data: existingLog } = await supabase
-        .from("event_notifications_log")
-        .select("id")
-        .eq("event_id", event.id)
-        .eq("user_id", targetUserId)
-        .eq("notification_type", notificationType)
-        .single();
+          // Check if already notified for this countdown day
+          if (sentLogSet.has(`${user.id}_${radiusNotifType}`)) continue;
 
-      if (!existingLog) {
-        // Send and log
+          const currentLoc = locationMap.get(user.id);
+          let minDistance = Infinity;
+
+          const locsToCheck: Array<{ lat: number; lng: number }> = [];
+          if (user.home_lat != null && user.home_lng != null) {
+            locsToCheck.push({ lat: Number(user.home_lat), lng: Number(user.home_lng) });
+          }
+          if (user.office_lat != null && user.office_lng != null) {
+            locsToCheck.push({ lat: Number(user.office_lat), lng: Number(user.office_lng) });
+          }
+          if (currentLoc) {
+            locsToCheck.push(currentLoc);
+          }
+
+          for (const loc of locsToCheck) {
+            const dist = haversineDistanceMeters(venueLat, venueLng, loc.lat, loc.lng);
+            if (dist < minDistance) minDistance = dist;
+          }
+
+          // Within 2km radius (or fallback for users with no location configured)
+          const isMatch = minDistance <= 2000 || locsToCheck.length === 0;
+
+          if (isMatch) {
+            const title = `Meetup in ${daysLeft} Day${daysLeft > 1 ? "s" : ""}: ${event.title} @ ${event.venue_name}`;
+            const body = agendaText
+              ? `${agendaText} • Happening near you on ${dateStr} at ${timeStr}. Tap to RSVP!`
+              : `Happening near you on ${dateStr} at ${timeStr} @ ${event.venue_name}. Tap to view details & RSVP!`;
+
+            await sendNotification(user.id, {
+              title,
+              body,
+              url: `/event/${event.id}`,
+              data: { type: "event_radius", eventId: event.id, daysLeft }
+            });
+
+            await supabase.from("event_notifications_log").insert({
+              event_id: event.id,
+              user_id: user.id,
+              notification_type: radiusNotifType
+            });
+
+            sentLogSet.add(`${user.id}_${radiusNotifType}`);
+            sentCount++;
+          }
+        }
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Branch 2: RSVP Reminders (ONLY when <= 24 hours are left)
+    // -------------------------------------------------------------
+    if (hoursUntilStart <= 24 && hoursUntilStart > 0) {
+      const goingAndMaybe = rsvps.filter((r: any) => ["yes", "maybe"].includes(r.status));
+
+      let rsvpNotifType = "rsvp_24h";
+      let rsvpTitle = "";
+      let rsvpBody = "";
+
+      if (hoursUntilStart > 4) {
+        rsvpNotifType = "rsvp_24h";
+        rsvpTitle = `Meetup Tomorrow: ${event.title} • ${dateStr}, ${timeStr} @ ${event.venue_name}`;
+        rsvpBody = agendaText
+          ? `${agendaText}`
+          : `Meetup is starting in ${Math.round(hoursUntilStart)}h at ${event.venue_name}. Tap for directions!`;
+      } else if (hoursUntilStart > 0.25) {
+        rsvpNotifType = "rsvp_4h";
+        rsvpTitle = `Meetup Soon (${Math.round(hoursUntilStart)}h): ${event.title} • Today @ ${event.venue_name}`;
+        rsvpBody = agendaText
+          ? `${agendaText}`
+          : `Starting in ~${Math.round(hoursUntilStart)} hours at ${event.venue_name}.`;
+      } else {
+        rsvpNotifType = "rsvp_start";
+        rsvpTitle = `Meetup Starting Now: ${event.title} @ ${event.venue_name}`;
+        rsvpBody = `Happening now at ${event.venue_name}. Tap for directions.`;
+      }
+
+      for (const rsvp of goingAndMaybe) {
+        const targetUserId = rsvp.user_id;
+        if (sentLogSet.has(`${targetUserId}_${rsvpNotifType}`)) continue;
+
         await sendNotification(targetUserId, {
-          title: notificationTitle,
-          body: messageBody,
-          url: `/event/${event.id}`
+          title: rsvpTitle,
+          body: rsvpBody,
+          url: `/event/${event.id}`,
+          data: { type: "event_reminder", eventId: event.id, hoursUntilStart: Math.round(hoursUntilStart) }
         });
 
         await supabase.from("event_notifications_log").insert({
           event_id: event.id,
           user_id: targetUserId,
-          notification_type: notificationType
+          notification_type: rsvpNotifType
         });
-        
+
+        sentLogSet.add(`${targetUserId}_${rsvpNotifType}`);
         sentCount++;
       }
     }
