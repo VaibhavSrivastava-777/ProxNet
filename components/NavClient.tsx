@@ -12,6 +12,7 @@ import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
 import { RechargeModal } from "@/components/RechargeModal";
 import { playNotificationSound, unlockAudioContext, getSoundTypeForNotification, SoundType } from "@/lib/sound";
 import { SmartAppBanner } from "./SmartAppBanner";
+import { NotificationCenter } from "./NotificationCenter";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -138,9 +139,9 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
   // In-App Notification Center
   const [inAppNotifications, setInAppNotifications] = useState<any[]>([]);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [desktopNotificationsOpen, setDesktopNotificationsOpen] = useState(false);
+  const [mobileNotificationsOpen, setMobileNotificationsOpen] = useState(false);
   const [expandedNotifs, setExpandedNotifs] = useState<Record<string, boolean>>({});
-  const notificationsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -156,20 +157,14 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       ) {
         setMobileMenuOpen(false);
       }
-      if (
-        notificationsRef.current &&
-        !notificationsRef.current.contains(event.target as Node)
-      ) {
-        setNotificationsOpen(false);
-      }
     }
-    if (desktopMenuOpen || mobileMenuOpen || notificationsOpen) {
+    if (desktopMenuOpen || mobileMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [desktopMenuOpen, mobileMenuOpen, notificationsOpen]);
+  }, [desktopMenuOpen, mobileMenuOpen]);
 
   const fetchInAppNotifications = () => {
     fetch("/api/notifications")
@@ -181,7 +176,8 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   };
 
   const handleNotificationClick = (id: string, url: string) => {
-    setNotificationsOpen(false);
+    setDesktopNotificationsOpen(false);
+    setMobileNotificationsOpen(false);
     
     // Optimistic update - set is_read to true
     setInAppNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
@@ -194,7 +190,11 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     }).catch(e => console.error("Failed to mark notification as read", e));
 
     if (url) {
-      router.push(url);
+      if (url.startsWith("http://") || url.startsWith("https://")) {
+        window.open(url, "_blank");
+      } else {
+        router.push(url);
+      }
     }
   };
 
@@ -784,13 +784,18 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         { event: "INSERT", schema: "public", table: "in_app_notifications", filter: `user_id=eq.${userId}` },
         (payload) => {
           const newNotif = payload.new as any;
-          triggerToast({
-            title: newNotif.title,
-            body: newNotif.body,
-            url: newNotif.url || "/",
-            soundType: getSoundTypeForNotification(newNotif.title, newNotif.data),
-            data: newNotif.data,
-          });
+          if (newNotif) {
+            setInAppNotifications((prev) =>
+              prev.some((n) => n.id === newNotif.id) ? prev : [newNotif, ...prev]
+            );
+            triggerToast({
+              title: newNotif.title,
+              body: newNotif.body,
+              url: newNotif.url || "/",
+              soundType: getSoundTypeForNotification(newNotif.title, newNotif.data),
+              data: newNotif.data,
+            });
+          }
         }
       )
       .subscribe();
@@ -905,6 +910,16 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                 {theme === "dark" && <MoonIcon className="h-5 w-5" />}
                 {theme === "system" && <SystemIcon className="h-5 w-5" />}
               </button>
+
+              <NotificationCenter
+                notifications={inAppNotifications}
+                isOpen={desktopNotificationsOpen}
+                onToggle={() => setDesktopNotificationsOpen((prev) => !prev)}
+                onClose={() => setDesktopNotificationsOpen(false)}
+                onNotificationClick={handleNotificationClick}
+                onMarkAllRead={handleMarkAllRead}
+                session={session}
+              />
               
               {session ? (
                 <>
@@ -1066,6 +1081,16 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
               {theme === "dark" && <MoonIcon className="h-5 w-5" />}
               {theme === "system" && <SystemIcon className="h-5 w-5" />}
             </button>
+
+            <NotificationCenter
+              notifications={inAppNotifications}
+              isOpen={mobileNotificationsOpen}
+              onToggle={() => setMobileNotificationsOpen((prev) => !prev)}
+              onClose={() => setMobileNotificationsOpen(false)}
+              onNotificationClick={handleNotificationClick}
+              onMarkAllRead={handleMarkAllRead}
+              session={session}
+            />
             {session ? (
                 <>
                 <div className="relative" ref={mobileDropdownRef}>
