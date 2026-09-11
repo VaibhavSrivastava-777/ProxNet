@@ -407,6 +407,7 @@ Return ONLY a JSON object with:
       resumeUrl: userProfile?.resume_url || null,
       wallet: userProfile?.wallet ?? 0,
       profileDigest,
+      currentUserId: user.id,
       companies: finalCompanies
     }, {
       headers: {

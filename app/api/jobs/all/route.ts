@@ -174,6 +174,7 @@ export async function GET() {
       hasResume: Boolean(userProfile?.resume_text && userProfile.resume_text.trim().length > 50),
       resumeUrl: userProfile?.resume_url || null,
       wallet: userProfile?.wallet ?? 0,
+      currentUserId: user.id,
       totalCompanies: companiesArray.length,
       totalJobs: scrapedJobs?.length || 0,
       companies: companiesArray,

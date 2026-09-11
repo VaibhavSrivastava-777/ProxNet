@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendNotification } from "@/lib/notifications";
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { contactId, jobId, company, jobTitle } = await request.json();
+  const { contactId, jobId, company, jobTitle, jobUrl, location, score, reason, customMessage } = await request.json();
   if (!contactId || !jobId) return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
 
   const supabase = createAdminClient();
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
 
   const { data: currentUserDb } = await supabase
     .from("users")
-    .select("job_title, company")
+    .select("job_title, company, about, skills")
     .eq("id", user.id)
     .single();
 
@@ -97,14 +98,47 @@ export async function POST(request: Request) {
     { thread_id: thread.id, user_id: user.id, alias: alias2 }
   ]);
 
-  // 5. Insert Automated Initial Message
-  const initialMsg = `Hi! I saw your company (${company}) is hiring for the '${jobTitle}' role. I am very interested and would love to learn a bit more about the team culture or role expectations. Do you have a few minutes to chat?`;
+  // 5. Insert Automated Initial Message detailing the opportunity and introducing the user
+  const candidateRole = currentUserDb?.job_title
+    ? (currentUserDb?.company ? `${currentUserDb.job_title} at ${currentUserDb.company}` : currentUserDb.job_title)
+    : "a fellow professional";
+
+  let initialMsg = customMessage;
+  if (!initialMsg) {
+    const introLine = `Hi! I am currently working as ${candidateRole} and interested in exploring opportunities at ${company}.`;
+    const oppDetails = [
+      `📌 Role: ${jobTitle}`,
+      `🏢 Company: ${company}`,
+      location ? `📍 Location: ${location}` : null,
+      jobUrl ? `🔗 Career Link: ${jobUrl}` : null,
+    ].filter(Boolean).join("\n");
+
+    initialMsg = `${introLine}\n\nI came across this opening and would love to be considered for a referral:\n${oppDetails}\n\nCould you please refer my profile or share insights about the role and team? I'd really appreciate your guidance!`;
+  }
 
   await supabase.from("job_messages").insert({
     thread_id: thread.id,
     sender_id: user.id,
     body: initialMsg
   });
+
+  // 6. Notify the Referrer in real-time
+  try {
+    await sendNotification(contactId, {
+      title: `🤝 Referral Request: ${jobTitle}`,
+      body: `${alias2} asked for a referral for ${jobTitle} at ${company}. Tap to chat!`,
+      url: `/jobs/chat/${thread.id}`,
+      data: {
+        threadId: thread.id,
+        type: "referral_request",
+        soundType: "message",
+        sound: "default",
+        senderAlias: alias2
+      }
+    });
+  } catch (err) {
+    console.error("Failed to notify referrer:", err);
+  }
 
   return NextResponse.json({ threadId: thread.id, walletWarning: false });
 }

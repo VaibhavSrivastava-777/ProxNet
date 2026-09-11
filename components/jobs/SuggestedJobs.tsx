@@ -111,6 +111,8 @@ export function SuggestedJobs() {
     return true;
   });
   const [activeCompanyModal, setActiveCompanyModal] = useState<CompanyGroup | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [startingReferralJobId, setStartingReferralJobId] = useState<string | null>(null);
   const [isMatchingCompleted, setIsMatchingCompleted] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [matchAddedToast, setMatchAddedToast] = useState<{ show: boolean; message: string; score: number } | null>(null);
@@ -130,6 +132,9 @@ export function SuggestedJobs() {
         const data = suggestedRes.value;
         setCompanies(data.companies || []);
         setIsMatchingCompleted(data.isMatchingCompleted ?? true);
+        if (data.currentUserId) {
+          setCurrentUserId(data.currentUserId);
+        }
         if (data.hasResume !== undefined) {
           setHasResume(data.hasResume);
         }
@@ -149,6 +154,7 @@ export function SuggestedJobs() {
             hasResume: data.hasResume ?? true,
             resumeUrl: data.resumeUrl || null,
             wallet: data.wallet ?? 0,
+            currentUserId: data.currentUserId || null,
           }));
         } catch {
           // ignore
@@ -158,6 +164,9 @@ export function SuggestedJobs() {
       if (allRes.status === "fulfilled" && allRes.value) {
         const allData = allRes.value;
         setAllCompanies(allData.companies || []);
+        if (allData.currentUserId) {
+          setCurrentUserId(allData.currentUserId);
+        }
         if (allData.hasResume !== undefined) {
           setHasResume(allData.hasResume);
         }
@@ -236,6 +245,63 @@ export function SuggestedJobs() {
       if (timer) clearTimeout(timer);
     };
   }, [isMatchingCompleted]);
+
+  const handleAskReferral = async (job: SuggestedJob, group: CompanyGroup) => {
+    if (startingReferralJobId === job.id) return;
+    setStartingReferralJobId(job.id);
+    setErrorMsg("");
+
+    try {
+      // Prioritize followed referrers if available, otherwise pick the first referrer
+      const availableReferrers = (group.referralContacts || []).filter(
+        (c) => !currentUserId || c.id !== currentUserId
+      );
+      const targetContact = availableReferrers.find((c) => c.is_followed) || availableReferrers[0];
+
+      if (!targetContact) {
+        // Fallback to direct application if no referrer is available
+        const cleanUrl = (job.url || "").replace(/&amp;/g, "&").trim();
+        if (cleanUrl) {
+          window.open(cleanUrl, "_blank", "noopener,noreferrer");
+        }
+        return;
+      }
+
+      const cleanUrl = (job.url || "").replace(/&amp;/g, "&").trim();
+
+      const res = await fetch("/api/jobs/chat/init-referral", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactId: targetContact.id,
+          jobId: job.id,
+          company: group.company,
+          jobTitle: job.title,
+          jobUrl: cleanUrl,
+          location: job.location,
+          score: job.score ?? job.matchRate,
+          reason: job.reason,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to initiate referral chat");
+      }
+
+      const data = await res.json();
+      if (data.threadId) {
+        setActiveCompanyModal(null);
+        // Direct transition into the chat session without intermediate screens
+        router.push(`/jobs/chat/${data.threadId}`);
+      }
+    } catch (err: any) {
+      console.error("Referral request error:", err);
+      setErrorMsg(err.message || "Failed to ask for referral. Please try again.");
+    } finally {
+      setStartingReferralJobId(null);
+    }
+  };
 
   const handleFindMatchRate = async (jobId: string) => {
     setCalculatingMatchJobId(jobId);
@@ -666,6 +732,30 @@ export function SuggestedJobs() {
                 &times;
               </button>
             </div>
+
+            {(() => {
+              const count = (activeCompanyModal.referralContacts || []).filter(c => !currentUserId || c.id !== currentUserId).length;
+              if (count > 0) {
+                return (
+                  <div className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <span>🤝</span>
+                      <span><strong>{count} Referrer{count > 1 ? "s" : ""}</strong> available at {activeCompanyModal.company}</span>
+                    </span>
+                    <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full">
+                      Referral Chat Ready
+                    </span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {errorMsg && (
+              <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs">
+                ⚠️ {errorMsg}
+              </div>
+            )}
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               {[...activeCompanyModal.jobs]
                 .sort((a, b) => {
@@ -763,16 +853,74 @@ export function SuggestedJobs() {
                           <span>📅 {new Date(job.posted_at).toLocaleDateString()}</span>
                         )}
                       </div>
-                      {cleanDirectUrl && (
-                        <a 
-                          href={cleanDirectUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-sm btn-primary mt-1 text-center text-xs block py-1.5 no-underline font-semibold"
-                        >
-                          Apply on Career Website
-                        </a>
-                      )}
+                      {(() => {
+                        const availableReferrers = (activeCompanyModal.referralContacts || []).filter(
+                          (c) => !currentUserId || c.id !== currentUserId
+                        );
+                        const hasReferrer = availableReferrers.length > 0;
+
+                        if (hasReferrer) {
+                          return (
+                            <div className="grid grid-cols-2 gap-2 mt-1">
+                              <button
+                                type="button"
+                                onClick={() => handleAskReferral(job, activeCompanyModal)}
+                                disabled={startingReferralJobId === job.id}
+                                className="btn btn-sm btn-primary text-center text-xs font-semibold py-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-60"
+                              >
+                                {startingReferralJobId === job.id ? (
+                                  <>
+                                    <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                    </svg>
+                                    <span>Opening...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>🤝</span>
+                                    <span>Ask Referral</span>
+                                  </>
+                                )}
+                              </button>
+
+                              {cleanDirectUrl ? (
+                                <a
+                                  href={cleanDirectUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-sm bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] text-center text-xs font-semibold py-2 no-underline flex items-center justify-center gap-1 shadow-2xs"
+                                >
+                                  <span>↗</span>
+                                  <span>Apply Directly</span>
+                                </a>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="btn btn-sm bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)] border border-[var(--color-border-light)] text-center text-xs font-semibold py-2 opacity-50 cursor-not-allowed"
+                                >
+                                  Direct Link N/A
+                                </button>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        // When referrer is not available, keep the flow as-is
+                        return (
+                          cleanDirectUrl && (
+                            <a
+                              href={cleanDirectUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-sm btn-primary mt-1 text-center text-xs block py-1.5 no-underline font-semibold"
+                            >
+                              Apply on Career Website
+                            </a>
+                          )
+                        );
+                      })()}
                     </div>
                   );
                 })}
