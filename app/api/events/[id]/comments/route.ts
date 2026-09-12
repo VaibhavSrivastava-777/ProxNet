@@ -17,7 +17,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       user:users (
         id,
         full_name,
-        avatar_url,
+        profile_photo_url,
+        avatar_url:profile_photo_url,
         company,
         job_title
       )
@@ -62,7 +63,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       user:users (
         id,
         full_name,
-        avatar_url,
+        profile_photo_url,
+        avatar_url:profile_photo_url,
         company,
         job_title
       )
