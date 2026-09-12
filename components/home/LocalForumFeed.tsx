@@ -162,6 +162,10 @@ export function LocalForumFeed({
         setPostBody("");
         setIsAnonymous(true);
         setIsModalOpen(false);
+        // Trigger push notification prompt for first-time posters
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("proxnet:first-action", { detail: { type: "forum-post" } }));
+        }
         await Promise.all([
           mutate(questionsUrl),
           mutate((key) => typeof key === "string" && key.startsWith("/api/questions"), undefined, { revalidate: true }),

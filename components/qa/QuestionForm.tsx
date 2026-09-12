@@ -178,6 +178,10 @@ export function QuestionForm({
       const data = await res.json();
       setBody("");
       setIsSuccess(true);
+      // Trigger push notification prompt for first-time question askers
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("proxnet:first-action", { detail: { type: "qa-question" } }));
+      }
       if (targetUser && data.sessionId) {
         router.push(`/chat/${data.sessionId}`);
         onPosted?.();

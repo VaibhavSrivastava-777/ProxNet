@@ -13,6 +13,7 @@ import { RechargeModal } from "@/components/RechargeModal";
 import { playNotificationSound, unlockAudioContext, getSoundTypeForNotification, SoundType } from "@/lib/sound";
 import { SmartAppBanner } from "./SmartAppBanner";
 import { NotificationCenter } from "./NotificationCenter";
+import { PushNotificationModal } from "./PushNotificationModal";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -62,6 +63,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
   // Web Push & In-App Toast States
   const [showPushPrompt, setShowPushPrompt] = useState(false);
+  const [pushModalTrigger, setPushModalTrigger] = useState<"post-login" | "chat" | "first-post" | null>(null);
   const [toasts, setToasts] = useState<{ id: string; title: string; body: string; url: string }[]>([]);
   const [hasIncomingOpen, setHasIncomingOpen] = useState(false);
 
@@ -119,11 +121,16 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     return () => window.removeEventListener("openLoginModal", handler);
   }, []);
 
-  // Strip fresh_login param from URL without triggering a reload
+  // Strip fresh_login param from URL and trigger push notification modal
   useEffect(() => {
     if (typeof window !== "undefined" && session && searchParams.get("fresh_login") === "true") {
       const newUrl = window.location.pathname + window.location.search.replace(/([?&])fresh_login=true&?/, '$1').replace(/[?&]$/, '');
       window.history.replaceState({}, '', newUrl);
+
+      // Trigger post-login push modal if permission is still default
+      if (typeof Notification !== "undefined" && Notification.permission === "default" && process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
+        setPushModalTrigger("post-login");
+      }
     }
   }, [session, searchParams]);
 
@@ -425,16 +432,16 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     };
   }, [session, isIosUser]);
 
-  // Contextual triggers for push notification prompt (e.g. entering chat rooms)
+  // Contextual triggers for push notification modal (e.g. entering chat rooms)
   useEffect(() => {
     if (typeof window === "undefined" || typeof Notification === "undefined") return;
     if (Notification.permission !== "default") return;
 
     const isChatRoute = pathname.startsWith("/chat/") || pathname.startsWith("/jobs/chat/") || pathname.startsWith("/carpool/chat/");
-    if (isChatRoute) {
-      // In chat context, if not dismissed in the last 24h, prompt contextually
-      if (!isPushPromptDismissed(ONE_DAY_MS) && process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
-        setShowPushPrompt(true);
+    if (isChatRoute && !pushModalTrigger) {
+      // In chat context, use the modal with 24h cooldown (handled inside the modal component)
+      if (process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
+        setPushModalTrigger("chat");
       }
     }
 
@@ -444,11 +451,20 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       }
     };
 
+    // Listen for first-action events (forum post, Q&A question)
+    const handleFirstAction = () => {
+      if (typeof Notification !== "undefined" && Notification.permission === "default" && process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
+        setPushModalTrigger("first-post");
+      }
+    };
+
     window.addEventListener("proxnet:prompt-push", handlePromptEvent);
+    window.addEventListener("proxnet:first-action", handleFirstAction);
     return () => {
       window.removeEventListener("proxnet:prompt-push", handlePromptEvent);
+      window.removeEventListener("proxnet:first-action", handleFirstAction);
     };
-  }, [pathname]);
+  }, [pathname, pushModalTrigger]);
 
   // Keep FCM token fresh on tab/PWA visibility change (resuming from sleep/background)
   useEffect(() => {
@@ -1342,8 +1358,8 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         </nav>
       )}
 
-      {/* Push Permission Prompt Card */}
-      {showPushPrompt && (
+      {/* Push Permission Prompt Card (legacy fallback) */}
+      {showPushPrompt && !pushModalTrigger && (
         <div className="fixed bottom-20 right-4 z-[99] max-w-sm rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-lg)] animate-fadeInUp pointer-events-auto">
           <p className="text-sm font-semibold text-[var(--color-text)]">Enable Notifications</p>
           <p className="text-xs text-[var(--color-text-secondary)] mt-1 mb-3">
@@ -1356,6 +1372,15 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             <button onClick={subscribeToPush} className="btn btn-primary btn-sm text-xs px-3 py-1 cursor-pointer">Enable</button>
           </div>
         </div>
+      )}
+
+      {/* Contextual Push Notification Modal */}
+      {pushModalTrigger && (
+        <PushNotificationModal
+          trigger={pushModalTrigger}
+          onSubscribe={subscribeToPush}
+          onDismiss={() => setPushModalTrigger(null)}
+        />
       )}
 
       {/* PWA Install Prompt Card */}

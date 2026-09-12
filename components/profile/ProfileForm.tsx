@@ -1247,35 +1247,62 @@ export function ProfileForm({ initialUser }: Props) {
         defaultOpen={typeof window !== "undefined" && window.location.hash === "#notifications"}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <span className="text-body-sm font-semibold">Push Notifications</span>
-              <span className="text-caption text-[var(--color-text-secondary)]">
-                Receive notifications for local matches and chat answers on this device.
-              </span>
-            </div>
-            {(() => {
-              const isAndroidApp = typeof window !== "undefined" && "AndroidBridge" in window && Boolean((window as unknown as Record<string, unknown>).AndroidBridge);
-              const isNotificationSupported = typeof window !== "undefined" && "Notification" in window;
+          {(() => {
+            const isAndroidApp = typeof window !== "undefined" && "AndroidBridge" in window && Boolean((window as unknown as Record<string, unknown>).AndroidBridge);
+            const isNotificationSupported = typeof window !== "undefined" && "Notification" in window;
+            const isGranted = typeof Notification !== "undefined" && Notification.permission === "granted";
+            const isDefault = typeof Notification !== "undefined" && Notification.permission === "default";
 
-              if (isAndroidApp) {
-                return (
+            if (isAndroidApp) {
+              return (
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "14px 0",
+                }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <span className="text-body-sm font-semibold">Push Notifications</span>
+                    <span className="text-caption text-[var(--color-text-secondary)]">
+                      Receive notifications for local matches and chat answers on this device.
+                    </span>
+                  </div>
                   <span className="text-xs text-green-500 font-semibold flex items-center gap-1">
                     ✓ Enabled natively on Android
                   </span>
-                );
-              }
+                </div>
+              );
+            }
 
-              if (!isNotificationSupported) {
-                return (
+            if (!isNotificationSupported) {
+              return (
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "14px 0",
+                }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <span className="text-body-sm font-semibold">Push Notifications</span>
+                    <span className="text-caption text-[var(--color-text-secondary)]">
+                      Receive notifications for local matches and chat answers on this device.
+                    </span>
+                  </div>
                   <span className="text-xs text-gray-400 font-medium">
                     Unsupported browser/webview
                   </span>
-                );
-              }
+                </div>
+              );
+            }
 
-              if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-                return (
+            if (isGranted) {
+              return (
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "14px 0",
+                }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <span className="text-body-sm font-semibold">Push Notifications</span>
+                    <span className="text-caption text-[var(--color-text-secondary)]">
+                      Receive notifications for local matches and chat answers on this device.
+                    </span>
+                  </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <span className="text-xs text-green-500 font-semibold flex items-center gap-1">
                       ✓ Enabled on this device
@@ -1301,87 +1328,187 @@ export function ProfileForm({ initialUser }: Props) {
                               body: JSON.stringify({ token, platform: isIos ? "ios" : "web" }),
                             });
                             if (!res.ok) throw new Error("Failed to sync token.");
-                            alert("Notification token re-synced successfully!");
+                            setToast({ message: "Notification token re-synced successfully!", type: "success" });
                           }
                         } catch (e: unknown) {
                           const msg = e instanceof Error ? e.message : String(e);
-                          alert(`Token re-sync failed: ${msg}`);
+                          setToast({ message: `Token re-sync failed: ${msg}`, type: "error" });
                         }
                       }}
                     >
                       Re-sync
                     </button>
                   </div>
-                );
-              }
+                </div>
+              );
+            }
 
+            // Permission is "default" — show the incentive card
+            if (isDefault) {
               return (
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm"
-                  onClick={async () => {
-                    try {
-                      const permission = await Notification.requestPermission();
-                      if (permission !== "granted") {
-                        alert("Notification permission denied. Please enable them in your device settings.");
-                        return;
-                      }
-                      const fcmVapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
-                      const { getMessaging, getToken, getFcmRegistration, isFirebaseConfigured } = await import("@/lib/firebase-client");
-                      
-                      if (!isFirebaseConfigured) {
-                        alert("Push notifications are not fully configured (missing App ID or Project ID). Please set the Firebase environment variables.");
-                        return;
-                      }
-
-                      if (!fcmVapidKey) {
-                        alert("Push notification key is not set. Please try again later.");
-                        return;
-                      }
-
-                      const messaging = getMessaging();
-                      const registration = await getFcmRegistration();
-                      if (!registration) {
-                        throw new Error("Could not find FCM service worker registration.");
-                      }
-                      
-                      const token = await getToken(messaging, {
-                        vapidKey: fcmVapidKey,
-                        serviceWorkerRegistration: registration
-                      });
-
-                      if (token) {
-                        const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent || "");
-                        const res = await fetch("/api/fcm/register", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ token, platform: isIos ? "ios" : "web" }),
-                        });
-                        if (!res.ok) {
-                          const errData = await res.json().catch(() => ({}));
-                          throw new Error(errData.error || "Failed to register token with server");
-                        }
-                        alert("Successfully subscribed to notifications on this device!");
-                      } else {
-                        throw new Error("No registration token received");
-                      }
-                    } catch (error: unknown) {
-                      console.error("Subscription failed:", error);
-                      const isConfigMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
-                      if (isConfigMissing) {
-                        alert("Firebase config keys are missing in your local .env.local file. Please configure NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, etc. to enable push notifications.");
-                      } else {
-                        const msg = error instanceof Error ? error.message : "Are you in a supported browser?";
-                        alert(`Failed to subscribe: ${msg}`);
-                      }
-                    }
+                <div
+                  style={{
+                    borderRadius: "var(--radius-lg, 16px)",
+                    border: "1px solid var(--color-primary-subtle, rgba(10,102,194,0.15))",
+                    background: "linear-gradient(135deg, var(--color-primary-subtle, rgba(10,102,194,0.06)) 0%, var(--color-accent-subtle, rgba(168,85,247,0.06)) 100%)",
+                    padding: "20px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 16,
                   }}
                 >
-                  Enable on this device
-                </button>
+                  {/* Header row */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <div
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: "50%",
+                        background: "linear-gradient(135deg, var(--color-primary), var(--color-accent))",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 22,
+                        flexShrink: 0,
+                        boxShadow: "0 4px 12px rgba(10,102,194,0.2)",
+                      }}
+                    >
+                      🔔
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: "var(--color-text)", marginBottom: 2 }}>
+                        Enable Push Notifications
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+                        Get instant alerts for chat replies, job referrals, and local updates — even when the app is in the background.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Incentive badge */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "10px 14px",
+                      borderRadius: 10,
+                      background: "linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(34,197,94,0.05) 100%)",
+                      border: "1px solid rgba(34,197,94,0.2)",
+                    }}
+                  >
+                    <span style={{ fontSize: 20 }}>🎁</span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: "rgb(22,163,74)" }}>
+                        Earn 5 bonus credits
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
+                        Get free credits added to your wallet when you enable notifications
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Enable button */}
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{
+                      width: "100%",
+                      padding: "12px 20px",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      borderRadius: 12,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                    }}
+                    onClick={async () => {
+                      try {
+                        const permission = await Notification.requestPermission();
+                        if (permission !== "granted") {
+                          setToast({ message: "Notification permission denied. Please enable them in your device settings.", type: "error" });
+                          return;
+                        }
+                        const fcmVapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+                        const { getMessaging, getToken, getFcmRegistration, isFirebaseConfigured } = await import("@/lib/firebase-client");
+                        
+                        if (!isFirebaseConfigured) {
+                          setToast({ message: "Push notifications are not fully configured. Please try again later.", type: "error" });
+                          return;
+                        }
+
+                        if (!fcmVapidKey) {
+                          setToast({ message: "Push notification key is not set. Please try again later.", type: "error" });
+                          return;
+                        }
+
+                        const messaging = getMessaging();
+                        const registration = await getFcmRegistration();
+                        if (!registration) {
+                          throw new Error("Could not find FCM service worker registration.");
+                        }
+                        
+                        const token = await getToken(messaging, {
+                          vapidKey: fcmVapidKey,
+                          serviceWorkerRegistration: registration
+                        });
+
+                        if (token) {
+                          const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent || "");
+                          const res = await fetch("/api/fcm/register", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ token, platform: isIos ? "ios" : "web" }),
+                          });
+                          if (!res.ok) {
+                            const errData = await res.json().catch(() => ({}));
+                            throw new Error(errData.error || "Failed to register token with server");
+                          }
+
+                          // Claim the push reward credits
+                          try {
+                            const rewardRes = await fetch("/api/profile/push-reward", { method: "POST" });
+                            if (rewardRes.ok) {
+                              const rewardData = await rewardRes.json();
+                              if (rewardData.success && rewardData.creditsAwarded > 0) {
+                                setToast({ message: `🎉 Notifications enabled! ${rewardData.creditsAwarded} bonus credits added to your wallet.`, type: "success" });
+                              } else {
+                                setToast({ message: "Notifications enabled successfully on this device!", type: "success" });
+                              }
+                            } else {
+                              setToast({ message: "Notifications enabled successfully on this device!", type: "success" });
+                            }
+                          } catch {
+                            setToast({ message: "Notifications enabled successfully on this device!", type: "success" });
+                          }
+                        } else {
+                          throw new Error("No registration token received");
+                        }
+                      } catch (error: unknown) {
+                        console.error("Subscription failed:", error);
+                        const isConfigMissing = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || !process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
+                        if (isConfigMissing) {
+                          setToast({ message: "Firebase config keys are missing. Please contact support.", type: "error" });
+                        } else {
+                          const msg = error instanceof Error ? error.message : "Are you in a supported browser?";
+                          setToast({ message: `Failed to subscribe: ${msg}`, type: "error" });
+                        }
+                      }
+                    }}
+                  >
+                    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405C18.21 14.79 18 13.42 18 12V8a6 6 0 10-12 0v4c0 1.42-.21 2.79-.595 3.595L4 17h5m6 0a3 3 0 11-6 0m6 0H9" />
+                    </svg>
+                    Enable Now & Earn Credits
+                  </button>
+                </div>
               );
-            })()}
-          </div>
+            }
+
+            return null;
+          })()}
         </div>
       </CollapsibleSection>
 
