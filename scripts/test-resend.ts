@@ -45,16 +45,24 @@ async function main() {
       for (const d of domainData.data || []) {
         console.log(`  • Domain: ${d.name} (${d.status})`);
         
+        // Trigger verify endpoint
+        await fetch(`https://api.resend.com/domains/${d.id}/verify`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` },
+        }).catch(() => {});
+
         // Fetch detailed domain with DNS records
         const detailRes = await fetch(`https://api.resend.com/domains/${d.id}`, {
           headers: { Authorization: `Bearer ${apiKey}` },
         });
         if (detailRes.ok) {
           const detail = await detailRes.json();
+          console.log(`    Status: ${detail.status}`);
           if (detail.records && detail.records.length > 0) {
-            console.log("    Required DNS Records for Verification:");
+            console.log("    DNS Records Verification Status:");
             for (const r of detail.records) {
-              console.log(`      [${r.type}] ${r.name} -> ${r.value}`);
+              const icon = r.status === "verified" ? "✅" : (r.status === "failed" ? "❌" : "⏳");
+              console.log(`      ${icon} [${r.type}] ${r.name} -> status: ${r.status}`);
             }
           }
         }
