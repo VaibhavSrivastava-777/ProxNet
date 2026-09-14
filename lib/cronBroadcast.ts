@@ -160,7 +160,11 @@ export async function handleBroadcast(request: Request) {
           sendNotification(user.id, {
             title: broadcastType === "AM" ? "ProxNet Morning Match" : "ProxNet Evening Wrap-up",
             body: message,
-            url: "/"
+            url: "/",
+            data: {
+              type: "daily_engagement",
+              broadcastType,
+            },
           }).then(() => {
             notificationsSent++;
           }).catch((e) => {

@@ -130,16 +130,33 @@ export async function sendNotification(
   const resendApiKey = process.env.RESEND_API_KEY;
   if (resendApiKey) {
     const hasFcmTokens = fcmTokens && fcmTokens.length > 0;
+    const notifType = String(data?.type || "general");
     const isPriorityNotification =
       data?.forceEmail === true ||
-      data?.type === "profile_reminder" ||
-      data?.type === "starter_reminder" ||
-      data?.type === "job_match" ||
-      data?.type === "daily_engagement" ||
-      data?.type === "event_reminder";
+      notifType === "profile_reminder" ||
+      notifType === "complete_profile" ||
+      notifType === "enable_notifications" ||
+      notifType === "push_enable_reminder" ||
+      notifType === "chat_starter_reminder" ||
+      notifType === "starter_reminder" ||
+      notifType.startsWith("job_match") ||
+      notifType.startsWith("weekly_digest") ||
+      notifType.startsWith("daily_engagement") ||
+      notifType.startsWith("event_") ||
+      notifType === "referral_network_nudge" ||
+      notifType === "referral_request";
 
     // Dispatch email if user has no active FCM push tokens (crucial fallback), or for priority reminders
     if (!hasFcmTokens || isPriorityNotification) {
+      const { checkEmailRateLimit, recordEmailSent, generateContextEmail } = await import("@/lib/email-templates");
+
+      // Anti-spam gate check
+      const rateCheck = checkEmailRateLimit(userId, notifType, data?.forceEmail === true);
+      if (!rateCheck.allowed) {
+        console.log(`[Anti-Spam] Suppressed email to ${userId} (${notifType}): ${rateCheck.reason}`);
+        return;
+      }
+
       const { data: user, error: uError } = await supabase
         .from("users")
         .select("email, full_name")
@@ -151,11 +168,39 @@ export async function sendNotification(
         return;
       }
 
+      // Query other recent unread notifications to club into a digest if multiple items are waiting
+      let otherUnreadNotifs: Array<{ id: string; title: string; body: string; url: string; created_at?: string }> = [];
       try {
-        console.log(`[Resend] Sending notification email to ${user.email} (${title})...`);
-        const fromEmail = process.env.RESEND_FROM_EMAIL || "notifications@proxnet.in";
-        const actionUrl = url?.startsWith("http") ? url : `https://www.proxnet.in${url || "/"}`;
+        const { data: recentUnread } = await supabase
+          .from("in_app_notifications")
+          .select("id, title, body, url, created_at")
+          .eq("user_id", userId)
+          .eq("is_read", false)
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        if (recentUnread && recentUnread.length > 1) {
+          // Exclude the notification we just inserted
+          otherUnreadNotifs = recentUnread.filter((n) => n.title !== title || n.url !== url).slice(0, 3);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch other unread notifications for email clubbing:", err);
+      }
+
+      try {
         const recipientName = user.full_name?.split(" ")[0] || "Neighbor";
+        const emailContent = generateContextEmail({
+          recipientName,
+          recipientEmail: user.email,
+          title,
+          body,
+          url,
+          data,
+          otherUnreadNotifs,
+        });
+
+        console.log(`[Resend] Sending ${emailContent.category} notification email to ${user.email} (${emailContent.subject})...`);
+        const fromEmail = process.env.RESEND_FROM_EMAIL || "notifications@proxnet.in";
 
         const res = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -166,59 +211,8 @@ export async function sendNotification(
           body: JSON.stringify({
             from: `ProxNet <${fromEmail}>`,
             to: user.email,
-            subject: title,
-            html: `
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>${title}</title>
-              </head>
-              <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px 12px; color: #1e293b;">
-                <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-                  <!-- Header -->
-                  <div style="background: linear-gradient(135deg, #0A66C2 0%, #004182 100%); padding: 24px 28px; text-align: left;">
-                    <span style="font-size: 22px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">Prox<span style="color: #60a5fa;">Net</span></span>
-                    <span style="display: block; font-size: 13px; color: #bfdbfe; margin-top: 4px;">Hyperlocal Professional Community</span>
-                  </div>
-
-                  <!-- Content Body -->
-                  <div style="padding: 28px;">
-                    <p style="font-size: 15px; color: #64748b; margin-top: 0;">Hi ${recipientName},</p>
-                    <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 4px; margin-bottom: 12px; line-height: 1.4;">${title}</h2>
-                    
-                    <div style="background-color: #f1f5f9; border-left: 4px solid #0A66C2; padding: 16px; border-radius: 0 8px 8px 0; margin-bottom: 24px;">
-                      <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0;">${body}</p>
-                    </div>
-
-                    <!-- Call To Action -->
-                    <div style="text-align: center; margin: 28px 0 20px 0;">
-                      <a href="${actionUrl}" style="background-color: #0A66C2; color: #ffffff; padding: 13px 28px; text-decoration: none; border-radius: 50px; font-weight: 700; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(10, 102, 194, 0.25);">
-                        Open in ProxNet &rarr;
-                      </a>
-                    </div>
-
-                    <!-- Push Notification Conversion Tip -->
-                    <div style="margin-top: 28px; padding: 14px 16px; background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%); border-radius: 12px; border: 1px solid #dbeafe;">
-                      <p style="margin: 0; font-size: 13px; color: #1e40af; font-weight: 600;">
-                        💡 Want instant alerts without checking your email?
-                      </p>
-                      <p style="margin: 4px 0 0 0; font-size: 12px; color: #475569; line-height: 1.4;">
-                        Enable lock-screen push notifications on ProxNet to never miss a message, and receive 5 bonus wallet credits!
-                      </p>
-                    </div>
-                  </div>
-
-                  <!-- Footer -->
-                  <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 28px; text-align: center; font-size: 12px; color: #94a3b8;">
-                    <p style="margin: 0;">This email was sent to ${user.email} because of your activity on ProxNet.</p>
-                    <p style="margin: 4px 0 0 0;"><a href="https://www.proxnet.in/profile" style="color: #64748b; text-decoration: underline;">Manage notification preferences</a> &bull; <a href="https://www.proxnet.in" style="color: #64748b; text-decoration: underline;">proxnet.in</a></p>
-                  </div>
-                </div>
-              </body>
-              </html>
-            `,
+            subject: emailContent.subject,
+            html: emailContent.html,
           }),
           next: { revalidate: 0 },
         });
@@ -233,6 +227,17 @@ export async function sendNotification(
           }
         } else {
           console.log(`[Resend] Notification email successfully delivered to ${user.email}.`);
+          recordEmailSent(userId, notifType);
+
+          // Best-effort audit logging into email_notifications_log if table exists
+          Promise.resolve(
+            supabase.from("email_notifications_log").insert({
+              user_id: userId,
+              notification_type: notifType,
+              subject: emailContent.subject,
+              recipient_email: user.email,
+            })
+          ).catch(() => {});
         }
       } catch (emailErr) {
         console.error("[Resend] Error sending notification email:", emailErr);

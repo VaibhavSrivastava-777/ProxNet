@@ -54,6 +54,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         title: notificationTitle,
         body: `${user.full_name} invited you to this meetup.${agendaText ? ` ${agendaText}` : ""}`,
         url: `/event/${id}`,
+        data: {
+          type: "event_invite",
+          eventId: id,
+          inviterName: user.full_name,
+        },
       }).catch(e => console.error("Push failed for", targetId, e));
     }
   }

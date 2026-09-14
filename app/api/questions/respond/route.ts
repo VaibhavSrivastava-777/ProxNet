@@ -74,6 +74,10 @@ export async function POST(request: Request) {
       title: "Question Responded",
       body: `A nearby professional responded to your question: "${target.questions.body.slice(0, 60)}${target.questions.body.length > 60 ? "..." : ""}"`,
       url: `/chat/${sessionId}`,
+      data: {
+        type: "question_responded",
+        sessionId,
+      },
     });
   } catch (err) {
     console.error("Notification trigger error:", err);

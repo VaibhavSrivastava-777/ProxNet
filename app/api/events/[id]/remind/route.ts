@@ -176,7 +176,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await sendNotification(targetUserId, {
       title: notificationTitle,
       body: notificationBody,
-      url: `/event/${event.id}`
+      url: `/event/${event.id}`,
+      data: {
+        type: "event_reminder",
+        eventId: event.id,
+      },
     });
 
     await supabase.from("event_notifications_log").insert({

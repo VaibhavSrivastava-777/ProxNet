@@ -116,5 +116,10 @@ How can I help you today?`;
     title: "ProxNet AI",
     body: "Hello! I'm ProxNet AI, your hyper-local professional networking assistant...",
     url: `/chat/${sessionId}`,
+    data: {
+      type: "chat_message",
+      sessionId,
+      senderAlias: "ProxNet AI",
+    },
   });
 }

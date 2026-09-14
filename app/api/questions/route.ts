@@ -531,7 +531,11 @@ export async function POST(request: Request) {
                   title: "New Message",
                   body: `${myP?.alias || "Resident"}: "${questionBody.trim().slice(0, 60)}${questionBody.trim().length > 60 ? "..." : ""}"`,
                   url: `/chat/${session.id}`,
-                  data: { sessionId: session.id }
+                  data: {
+                    sessionId: session.id,
+                    type: "chat_message",
+                    senderAlias: myP?.alias || "Resident",
+                  }
                 });
 
                 // Simulated professional response logic
@@ -738,6 +742,12 @@ Never mention that you are an AI assistant or simulated user. Play your characte
                 title: isFollower ? `New post from ${posterName} @ ${companyName}` : "New Post in your Neighborhood",
                 body: `"${qText.slice(0, 80)}${qText.length > 80 ? "..." : ""}"`,
                 url: `/qa/forum/${question.id}`,
+                data: {
+                  type: "new_forum_post",
+                  questionId: question.id,
+                  posterName,
+                  company: companyName,
+                },
               });
             }
           }
@@ -807,6 +817,10 @@ Never mention that you are an AI assistant or simulated user. Play your characte
             title: "New Incoming Question",
             body: `A neighbor asked a question: "${question.body.slice(0, 60)}${question.body.length > 60 ? "..." : ""}"`,
             url: "/qa",
+            data: {
+              type: "new_question",
+              questionId: question.id,
+            },
           })
         );
         await Promise.all(notifications);

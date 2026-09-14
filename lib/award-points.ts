@@ -86,6 +86,11 @@ export async function awardPoints(
         title: `${newTier.badge} Level Up! You're now a ${newTier.name}`,
         body: `${label}. You've reached ${newPoints} pts and unlocked the ${newTier.name} tier!`,
         url: "/grow",
+        data: {
+          type: "award_points",
+          points: newPoints,
+          tier: newTier.name,
+        },
       }).catch((e) => console.error("Tier-up notification failed:", e));
     } else if (reason === "INVITE_SIGNUP") {
       // Always notify on new signups — this is the core dopamine hit
@@ -93,6 +98,11 @@ export async function awardPoints(
         title: "🎉 Your local network just grew!",
         body: `${label}. Your network is stronger now. (+${points} pts)`,
         url: "/grow",
+        data: {
+          type: "award_points",
+          points,
+          reason,
+        },
       }).catch((e) => console.error("Invite signup notification failed:", e));
     }
   }

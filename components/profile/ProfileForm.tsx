@@ -1236,6 +1236,7 @@ export function ProfileForm({ initialUser }: Props) {
       </CollapsibleSection>
 
       {/* ---- Notification Settings ---- */}
+      <div id="notifications" style={{ scrollMarginTop: "80px" }} />
       <CollapsibleSection
         id="notification-settings"
         title="Notification Settings"
@@ -1244,7 +1245,7 @@ export function ProfileForm({ initialUser }: Props) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405C18.21 14.79 18 13.42 18 12V8a6 6 0 10-12 0v4c0 1.42-.21 2.79-.595 3.595L4 17h5m6 0a3 3 0 11-6 0m6 0H9" />
           </svg>
         }
-        defaultOpen={typeof window !== "undefined" && window.location.hash === "#notifications"}
+        defaultOpen={typeof window !== "undefined" && (window.location.hash === "#notifications" || window.location.hash === "#notification-settings")}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {(() => {

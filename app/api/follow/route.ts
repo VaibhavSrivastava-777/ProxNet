@@ -88,6 +88,11 @@ export async function POST(request: Request) {
       title: "New Follower",
       body: `${followerName} @ ${companyName} is now following you.`,
       url: "/profile",
+      data: {
+        type: "new_follower",
+        followerName,
+        company: companyName,
+      },
     }).catch((e) => console.error("Failed to send follow notification:", e));
 
     return NextResponse.json({ followed: true });

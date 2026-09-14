@@ -71,6 +71,11 @@ export async function POST(
         title: "Identity Revealed",
         body: `${realAlias} has revealed their identity in your chat!`,
         url: `/chat/${sessionId}`,
+        data: {
+          type: "chat_message",
+          sessionId,
+          senderAlias: realAlias,
+        },
       });
     }
   } catch (err) {
