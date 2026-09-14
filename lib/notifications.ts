@@ -153,7 +153,7 @@ export async function sendNotification(
 
       try {
         console.log(`[Resend] Sending notification email to ${user.email} (${title})...`);
-        const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+        const fromEmail = process.env.RESEND_FROM_EMAIL || "notifications@proxnet.in";
         const actionUrl = url?.startsWith("http") ? url : `https://www.proxnet.in${url || "/"}`;
         const recipientName = user.full_name?.split(" ")[0] || "Neighbor";
 

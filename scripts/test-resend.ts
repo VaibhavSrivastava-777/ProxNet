@@ -2,7 +2,7 @@ import "dotenv/config";
 
 async function main() {
   const apiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const fromEmail = process.env.RESEND_FROM_EMAIL || "notifications@proxnet.in";
 
   console.log("=========================================");
   console.log("  PROXNET RESEND DIAGNOSTIC & TEST TOOL  ");
@@ -45,12 +45,6 @@ async function main() {
       for (const d of domainData.data || []) {
         console.log(`  • Domain: ${d.name} (${d.status})`);
         
-        // Trigger verify endpoint
-        await fetch(`https://api.resend.com/domains/${d.id}/verify`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}` },
-        }).catch(() => {});
-
         // Fetch detailed domain with DNS records
         const detailRes = await fetch(`https://api.resend.com/domains/${d.id}`, {
           headers: { Authorization: `Bearer ${apiKey}` },
