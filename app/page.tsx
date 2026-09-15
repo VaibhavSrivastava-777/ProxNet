@@ -79,8 +79,8 @@ export default async function HomePage({
           </div>
           <div className="flex flex-col items-center justify-center gap-4">
 
-            <LoginButton className="btn btn-linkedin btn-lg shadow-xl shadow-black/20" />
-            <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • GOOGLE & LINKEDIN VERIFIED • FREE TO USE</p>
+            <LoginButton className="btn btn-linkedin btn-lg shadow-xl shadow-black/20" showLinkedIn={false} />
+            <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • GOOGLE VERIFIED • FREE TO USE</p>
           </div>
         </div>
       </section>
@@ -174,7 +174,7 @@ export default async function HomePage({
           Join now to ask your awkward career questions anonymously and get referred to top companies!
         </p>
 
-        <LoginButton className="btn btn-linkedin btn-lg" />
+        <LoginButton className="btn btn-linkedin btn-lg" showLinkedIn={false} />
       </section>
 
       {/* Footer */}
