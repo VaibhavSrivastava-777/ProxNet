@@ -14,7 +14,7 @@ export default async function ProfilePage() {
         maxWidth: 720,
         marginLeft: "auto",
         marginRight: "auto",
-        padding: "32px 16px",
+        padding: "32px 16px 120px 16px",
       }}
     >
       <div style={{ marginBottom: 24 }}>

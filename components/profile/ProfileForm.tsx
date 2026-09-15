@@ -225,7 +225,8 @@ export function ProfileForm({ initialUser }: Props) {
     showPhoto ||
     showLinkedIn ||
     showHomeLocation;
-  const showModal = hasMissingFields;
+  const [dismissedModal, setDismissedModal] = useState(false);
+  const showModal = hasMissingFields && !dismissedModal;
 
   useEffect(() => {
     // If onboarding modal is shown and home location is not set, request coordinates & format name
@@ -662,6 +663,23 @@ export function ProfileForm({ initialUser }: Props) {
             />
           </svg>
           <span>Complete your profile details. All required fields (Name, Email) must be filled.</span>
+        </div>
+      )}
+
+      {/* ---- Quick Setup Dismissed Notice ---- */}
+      {dismissedModal && hasMissingFields && (
+        <div className="alert alert-warning flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-2">
+            <span className="text-base shrink-0">⚠️</span>
+            <span className="text-xs sm:text-sm">Your profile has missing required information. Fill out the fields below, or reopen the quick setup modal.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDismissedModal(false)}
+            className="btn btn-secondary btn-sm shrink-0 text-xs cursor-pointer"
+          >
+            Reopen Quick Setup
+          </button>
         </div>
       )}
 
@@ -1548,7 +1566,7 @@ export function ProfileForm({ initialUser }: Props) {
       </div>
 
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fadeIn">
           <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-2xl max-w-md w-full p-6 text-[var(--color-text)] animate-scaleIn flex flex-col gap-5">
             <div className="text-center">
               <div className="w-14 h-14 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
@@ -1631,45 +1649,55 @@ export function ProfileForm({ initialUser }: Props) {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-2xl max-w-lg w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden animate-scaleIn flex flex-col p-6 text-[var(--color-text)]">
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-2xl max-w-lg w-full max-h-[min(90dvh,calc(100vh-2rem))] overflow-hidden animate-scaleIn flex flex-col text-[var(--color-text)] relative">
             
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-[var(--color-border-light)] pb-4 mb-4">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between border-b border-[var(--color-border-light)] px-5 py-4 shrink-0">
+              <div className="flex items-center gap-2.5">
                 <span className="text-2xl">📍</span>
                 <div>
-                  <h3 className="text-h2 font-bold text-[var(--color-primary)]">Complete Your Profile</h3>
-                  <p className="text-caption mt-0.5">Please provide the missing details below to unlock all features.</p>
+                  <h3 className="text-h2 font-bold text-[var(--color-primary)] m-0">Complete Your Profile</h3>
+                  <p className="text-caption text-[var(--color-text-secondary)] mt-0.5 m-0">Please provide the missing details below to unlock all features.</p>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setDismissedModal(true)}
+                className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer shrink-0"
+                title="Fill directly on page"
+                aria-label="Close modal"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
-            <div className="flex items-center gap-4 bg-[var(--color-surface-secondary)] p-4 rounded-xl border border-[var(--color-border-light)] mb-5">
-              <div className="avatar avatar-md shrink-0">
-                {user.profile_photo_url ? (
-                  <img src={user.profile_photo_url} alt={user.full_name} className="rounded-full w-12 h-12 object-cover" />
-                ) : (
-                  <div className="bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-lg flex items-center justify-center w-12 h-12 rounded-full">
-                    {initials}
-                  </div>
-                )}
+            <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-5 py-4">
+              <div className="flex items-center gap-4 bg-[var(--color-surface-secondary)] p-3.5 rounded-xl border border-[var(--color-border-light)] shrink-0">
+                <div className="avatar avatar-md shrink-0">
+                  {user.profile_photo_url ? (
+                    <img src={user.profile_photo_url} alt={user.full_name} className="rounded-full w-12 h-12 object-cover" />
+                  ) : (
+                    <div className="bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-lg flex items-center justify-center w-12 h-12 rounded-full">
+                      {initials}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm m-0">{user.full_name}</h4>
+                  <p className="text-xs text-[var(--color-text-secondary)] m-0 mt-0.5">{user.email}</p>
+                  {(() => {
+                    const isGoogle = user.linkedin_sub ? /^\d+$/.test(user.linkedin_sub) : false;
+                    return (
+                      <span className="inline-block bg-[var(--color-success-bg)] text-[var(--color-success)] text-[10px] font-bold px-2 py-0.5 rounded-full mt-1.5 uppercase tracking-wider">
+                        {isGoogle ? "Google Connected" : "LinkedIn Connected"}
+                      </span>
+                    );
+                  })()}
+                </div>
               </div>
-              <div>
-                <h4 className="font-semibold text-sm">{user.full_name}</h4>
-                <p className="text-xs text-[var(--color-text-secondary)]">{user.email}</p>
-                {(() => {
-                  const isGoogle = user.linkedin_sub ? /^\d+$/.test(user.linkedin_sub) : false;
-                  return (
-                    <span className="inline-block bg-[var(--color-success-bg)] text-[var(--color-success)] text-[10px] font-bold px-2 py-0.5 rounded-full mt-1.5 uppercase tracking-wider">
-                      {isGoogle ? "Google Connected" : "LinkedIn Connected"}
-                    </span>
-                  );
-                })()}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-5 flex-1 overflow-y-auto pr-1">
               
               {/* Profile & Links Section (if photo or linkedin is missing) */}
               {(showPhoto || showLinkedIn) && (
@@ -1812,15 +1840,29 @@ export function ProfileForm({ initialUser }: Props) {
 
             </div>
 
-            {/* Footer Buttons */}
-            <div className="flex justify-end items-center gap-3 mt-4 pt-4 border-t border-[var(--color-border-light)]">
+            {/* Sticky Footer Buttons */}
+            <div className="shrink-0 sticky bottom-0 z-10 bg-[var(--color-surface)] border-t border-[var(--color-border-light)] px-5 py-3.5 flex flex-col items-center gap-2 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
               <button
                 type="button"
-                className="btn btn-primary w-full"
+                className="btn btn-primary w-full py-2.5 font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer"
                 disabled={saving}
                 onClick={handleOnboardingComplete}
               >
-                {saving ? "Completing..." : "Complete & Save Profile ✓"}
+                {saving ? (
+                  <>
+                    <span className="spinner spinner-sm" style={{ borderTopColor: "var(--color-text-inverse)" }} />
+                    Completing…
+                  </>
+                ) : (
+                  "Complete & Save Profile ✓"
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDismissedModal(true)}
+                className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors underline cursor-pointer bg-transparent border-none p-0"
+              >
+                Or fill details directly on full profile page →
               </button>
             </div>
 
