@@ -294,12 +294,143 @@ export async function handleMorningReminders(request?: Request | null, bypassAut
     console.error("Error processing unresponded opening message reminders:", chatErr);
   }
 
+  // =========================================================================
+  // 3. MORNING JOB BRIEF for Active Seekers
+  // =========================================================================
+  let jobBriefsSent = 0;
+  try {
+    const yesterdayIso = twentyFourHoursAgo;
+
+    // Fetch new jobs from the last 24 hours
+    const { data: newJobs } = await supabase
+      .from("scraped_jobs")
+      .select("id, title, company, posted_at, similarity")
+      .gte("posted_at", yesterdayIso)
+      .order("posted_at", { ascending: false });
+
+    const newJobCount = newJobs?.length || 0;
+
+    if (newJobCount > 0) {
+      // Aggregate new companies
+      const newCompanies = new Set<string>();
+      for (const j of newJobs || []) {
+        if (j.company) newCompanies.add(j.company.trim());
+      }
+
+      // Fetch active seekers: users with a resume who visited jobs tab recently
+      const { data: seekers } = await supabase
+        .from("users")
+        .select("id, email, full_name, resume_text, embedding, job_title, company, about, professional_bio, profile_digest, tags")
+        .eq("is_active", true)
+        .eq("is_blocked", false);
+
+      const { rerankJobsForCandidate } = await import("@/lib/jobs/reranker");
+
+      for (const seeker of seekers || []) {
+        // Only send to users who have a resume (active seekers)
+        if (!seeker.resume_text || seeker.resume_text.trim().length < 50) continue;
+
+        // Dedup: skip if already got a job brief notification in last 20 hours
+        const { data: recentJobBrief } = await supabase
+          .from("in_app_notifications")
+          .select("id")
+          .eq("user_id", seeker.id)
+          .like("url", "%morning_brief%")
+          .gte("created_at", new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString());
+
+        if (recentJobBrief && recentJobBrief.length > 0) continue;
+
+        // Find strong matches for this seeker among new jobs
+        let strongMatchCount = 0;
+        if (seeker.embedding && newJobs && newJobs.length > 0) {
+          try {
+            const { data: matchedNew } = await supabase.rpc("match_scraped_jobs", {
+              query_embedding: seeker.embedding,
+              match_threshold: 0.30,
+              match_count: 20,
+            });
+
+            if (matchedNew && matchedNew.length > 0) {
+              // Only count jobs from last 24h
+              const newJobIds = new Set((newJobs || []).map(j => j.id));
+              const recentMatches = matchedNew.filter((m: { id: string }) => newJobIds.has(m.id));
+
+              if (recentMatches.length > 0) {
+                const candidateProfile = {
+                  id: seeker.id,
+                  job_title: seeker.job_title,
+                  company: seeker.company,
+                  about: seeker.about || seeker.professional_bio,
+                  profile_digest: seeker.profile_digest,
+                  tags: seeker.tags,
+                };
+
+                const jobsToRerank = recentMatches.slice(0, 10).map((j: Record<string, unknown>) => ({
+                  id: j.id,
+                  title: (j as { title?: string }).title || "",
+                  company: ((j as { company?: string }).company || "").trim(),
+                  location: (j as { location?: string }).location,
+                  description: (j as { description?: string }).description,
+                  keywords: (j as { keywords?: string[] }).keywords || [],
+                  posted_at: (j as { posted_at?: string }).posted_at,
+                  url: (j as { url?: string }).url,
+                  rawSimilarity: (j as { similarity?: number }).similarity,
+                }));
+
+                const rerankedMap = await rerankJobsForCandidate(candidateProfile, jobsToRerank);
+                strongMatchCount = Array.from(rerankedMap.values()).filter(r => r.score >= 75).length;
+              }
+            }
+          } catch (e) {
+            // Skip reranking errors for this user
+          }
+        }
+
+        // Only send brief if there's something interesting
+        if (newJobCount < 3 && strongMatchCount === 0) continue;
+
+        const briefTitle = strongMatchCount > 0
+          ? `\u{1F305} Morning Brief: ${strongMatchCount} Strong Match${strongMatchCount > 1 ? "es" : ""} found!`
+          : `\u{1F305} Morning Brief: ${newJobCount} new role${newJobCount > 1 ? "s" : ""} posted`;
+
+        const topCompanyList = Array.from(newCompanies).slice(0, 3).join(", ");
+        const briefBody = strongMatchCount > 0
+          ? `${strongMatchCount} new 75%+ matches for your profile. ${newJobCount} total new roles across ${newCompanies.size} companies (${topCompanyList}). Tap to review!`
+          : `${newJobCount} new roles from ${topCompanyList}${newCompanies.size > 3 ? ` and ${newCompanies.size - 3} more` : ""}. Check your personalized matches!`;
+
+        await sendNotification(seeker.id, {
+          title: briefTitle,
+          body: briefBody,
+          url: "/jobs?morning_brief=1",
+          data: {
+            type: "morning_job_brief",
+            newJobCount,
+            strongMatchCount,
+            soundType: "notification",
+            sound: "default",
+          },
+        });
+
+        jobBriefsSent++;
+        auditLog.push({
+          type: "morning_job_brief",
+          userId: seeker.id,
+          title: briefTitle,
+          url: "/jobs?morning_brief=1",
+        });
+      }
+    }
+  } catch (jobBriefErr) {
+    console.error("Error sending morning job briefs:", jobBriefErr);
+  }
+
   return NextResponse.json({
     success: true,
     scheduledTime: "09:00 AM IST (03:30 UTC)",
     profileRemindersSent,
     starterRemindersSent,
-    totalSent: profileRemindersSent + starterRemindersSent,
-    auditLog: auditLog.slice(0, 20),
+    jobBriefsSent,
+    totalSent: profileRemindersSent + starterRemindersSent + jobBriefsSent,
+    auditLog: auditLog.slice(0, 30),
   });
 }

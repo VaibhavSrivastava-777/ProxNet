@@ -4,6 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CompanyLogo } from "@/components/qa/QuestionList";
 import { ResumeCard } from "./ResumeCard";
+import { ReferralPitchModal } from "./ReferralPitchModal";
+import { TargetCompanyManager } from "./TargetCompanyManager";
+import { ApplicationPipeline } from "./ApplicationPipeline";
 import { playNotificationSound } from "@/lib/sound";
 
 interface SuggestedJob {
@@ -119,6 +122,16 @@ export function SuggestedJobs() {
   const [matchAddedToast, setMatchAddedToast] = useState<{ show: boolean; message: string; score: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSummary, setShowSummary] = useState(true);
+  // New: Advanced Filters
+  const [hasReferrersOnly, setHasReferrersOnly] = useState(false);
+  const [minScoreFilter, setMinScoreFilter] = useState<number>(0);
+  const [freshnessFilter, setFreshnessFilter] = useState<number>(30); // days
+  // New: Pitch Modal
+  const [pitchModalJob, setPitchModalJob] = useState<{ job: SuggestedJob; group: CompanyGroup } | null>(null);
+  // New: Target Company Manager Modal
+  const [showTargetCompanyModal, setShowTargetCompanyModal] = useState(false);
+  // New: Save job toast
+  const [saveToast, setSaveToast] = useState<string | null>(null);
   const router = useRouter();
 
   const loadData = useCallback(async () => {
@@ -481,27 +494,96 @@ export function SuggestedJobs() {
     );
   }
 
-  // Filter companies/jobs by search query
-  const q = searchQuery.toLowerCase().trim();
-  const filteredMatchedCompanies = companies.filter(c => {
-    if (!q) return true;
-    return (
-      c.company.toLowerCase().includes(q) ||
-      c.jobs.some(j => j.title.toLowerCase().includes(q) || (j.keywords && j.keywords.some(k => k.toLowerCase().includes(q))))
-    );
-  });
+  // Helper: days since posted
+  const daysSince = (dateStr: string | undefined) => {
+    if (!dateStr) return 999;
+    const diff = Date.now() - new Date(dateStr).getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24));
+  };
 
-  const filteredAllCompanies = allCompanies.filter(c => {
-    if (!q) return true;
-    return (
-      c.company.toLowerCase().includes(q) ||
-      c.jobs.some(j => j.title.toLowerCase().includes(q) || (j.keywords && j.keywords.some(k => k.toLowerCase().includes(q))))
-    );
-  });
+  // Helper: freshness badge
+  const getFreshnessBadge = (dateStr: string | undefined) => {
+    const days = daysSince(dateStr);
+    if (days <= 7) return { text: `🟢 ${days}d ago`, cls: "text-emerald-600 dark:text-emerald-400" };
+    if (days <= 21) return { text: `🟡 ${days}d ago`, cls: "text-amber-600 dark:text-amber-400" };
+    return { text: `🟠 ${days}d ago`, cls: "text-orange-600 dark:text-orange-400" };
+  };
+
+  // Helper: save job to pipeline
+  const handleSaveJob = async (job: SuggestedJob, company: string) => {
+    try {
+      const res = await fetch("/api/jobs/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId: job.id,
+          company,
+          jobTitle: job.title,
+          jobUrl: job.url,
+          stage: "saved",
+          matchScore: job.score || job.matchRate || null,
+        }),
+      });
+      if (res.ok) {
+        setSaveToast(`🔖 Saved "${job.title}" to your pipeline`);
+        setTimeout(() => setSaveToast(null), 3000);
+      } else if (res.status === 409) {
+        setSaveToast(`Already saved "${job.title}"`);
+        setTimeout(() => setSaveToast(null), 2000);
+      }
+    } catch (e) {
+      console.error("Failed to save job:", e);
+    }
+  };
+
+  // Advanced filter logic
+  const applyAdvancedFilters = (companiesList: CompanyGroup[]) => {
+    const q = searchQuery.toLowerCase().trim();
+    return companiesList
+      .map(c => {
+        let jobs = c.jobs;
+
+        // Text search
+        if (q) {
+          const companyMatch = c.company.toLowerCase().includes(q);
+          if (!companyMatch) {
+            jobs = jobs.filter(j =>
+              j.title.toLowerCase().includes(q) ||
+              (j.keywords && j.keywords.some(k => k.toLowerCase().includes(q)))
+            );
+          }
+        }
+
+        // Freshness filter
+        if (freshnessFilter < 30) {
+          jobs = jobs.filter(j => daysSince(j.posted_at) <= freshnessFilter);
+        }
+
+        // Min score filter
+        if (minScoreFilter > 0) {
+          jobs = jobs.filter(j => (j.score ?? j.matchRate ?? 0) >= minScoreFilter);
+        }
+
+        return { ...c, jobs };
+      })
+      // Has referrers filter
+      .filter(c => {
+        if (hasReferrersOnly && c.contactsCount === 0) return false;
+        return c.jobs.length > 0;
+      });
+  };
+
+  const filteredMatchedCompanies = applyAdvancedFilters(companies);
+  const filteredAllCompanies = applyAdvancedFilters(allCompanies);
 
   const displayedCompanies = jobsViewMode === "matched" ? filteredMatchedCompanies : filteredAllCompanies;
-  const totalAllJobs = allCompanies.reduce((acc, c) => acc + c.jobs.length, 0);
+
+  // Stats for market pulse
   const totalMatchedJobs = companies.reduce((acc, c) => acc + c.jobs.length, 0);
+  const totalAllJobs = allCompanies.reduce((acc, c) => acc + c.jobs.length, 0);
+  const strongMatchCount = companies.reduce((acc, c) => acc + c.jobs.filter(j => (j.score ?? j.matchRate ?? 0) >= 85).length, 0);
+  const companiesWithReferrers = companies.filter(c => c.contactsCount > 0).length;
+  const totalReferrers = companies.reduce((acc, c) => acc + c.contactsCount, 0);
 
   return (
     <div className="space-y-4 stagger-children max-w-3xl mx-auto pb-8">
@@ -511,10 +593,17 @@ export function SuggestedJobs() {
         </div>
       )}
 
+      {/* Save Toast */}
+      {saveToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[70] px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold shadow-lg animate-fadeInUp">
+          {saveToast}
+        </div>
+      )}
+
       {/* Default/Prominent Message */}
       {!isMatchingCompleted && (
         <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-bold text-center animate-pulse">
-          ℹ️ GENERATING THE LATEST MATCH LIST IN THE BACKGROUD
+          ℹ️ GENERATING THE LATEST MATCH LIST IN THE BACKGROUND
         </div>
       )}
 
@@ -524,6 +613,37 @@ export function SuggestedJobs() {
         resumeUrl={resumeUrl}
         onResumeUpdated={loadData}
       />
+
+      {/* 📊 Market Pulse Summary */}
+      {(totalMatchedJobs > 0 || totalAllJobs > 0) && (
+        <div className="p-4 rounded-xl border border-[var(--color-border-light)] bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] shadow-xs">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">📊</span>
+            <span className="text-xs font-bold text-[var(--color-text)] uppercase tracking-wider">Hiring Pulse</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="flex flex-col items-center p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)]">
+              <span className="text-lg font-bold text-[var(--color-primary)]">{totalAllJobs}</span>
+              <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Active Roles</span>
+            </div>
+            <div className="flex flex-col items-center p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)]">
+              <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{strongMatchCount}</span>
+              <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Strong Matches</span>
+            </div>
+            <div className="flex flex-col items-center p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)]">
+              <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{totalReferrers}</span>
+              <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Insider Referrers</span>
+            </div>
+            <div className="flex flex-col items-center p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)]">
+              <span className="text-lg font-bold text-[var(--color-text)]">{allCompanies.length}</span>
+              <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Companies</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📋 Application Pipeline Tracker */}
+      <ApplicationPipeline />
 
       {/* Bio Digest (Minimal Header) */}
       <div className="flex flex-col gap-4">
@@ -598,14 +718,80 @@ export function SuggestedJobs() {
           </button>
         </div>
 
-        {userWallet !== null && (
-          <div 
-            className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface border border-border-light text-xs font-bold text-text-secondary shrink-0 shadow-2xs"
-            title="Your current credit balance for match evaluations and network chats"
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Track Company Button */}
+          <button
+            type="button"
+            onClick={() => setShowTargetCompanyModal(true)}
+            className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border-light)] text-xs font-bold text-[var(--color-primary)] hover:border-[var(--color-primary)] transition-colors cursor-pointer shadow-2xs"
+            title="Track any company for fresh job alerts"
           >
-            <span>🪙</span>
-            <span>Credits: <strong className="text-primary">{userWallet}</strong></span>
-          </div>
+            <span>+</span>
+            <span className="hidden sm:inline">Track Company</span>
+          </button>
+
+          {userWallet !== null && (
+            <div 
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface border border-border-light text-xs font-bold text-text-secondary shrink-0 shadow-2xs"
+              title="Your current credit balance for match evaluations and network chats"
+            >
+              <span>🪙</span>
+              <span>Credits: <strong className="text-primary">{userWallet}</strong></span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 🔍 Advanced Filter Bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Has Referrers Toggle */}
+        <button
+          type="button"
+          onClick={() => setHasReferrersOnly(!hasReferrersOnly)}
+          className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
+            hasReferrersOnly
+              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+              : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border-light)] hover:border-[var(--color-primary)]"
+          }`}
+        >
+          <span>🤝</span> Has Referrers {hasReferrersOnly && "✓"}
+        </button>
+
+        {/* Match Score Filter */}
+        <button
+          type="button"
+          onClick={() => setMinScoreFilter(minScoreFilter === 70 ? 85 : minScoreFilter === 85 ? 0 : 70)}
+          className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
+            minScoreFilter > 0
+              ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30"
+              : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border-light)] hover:border-[var(--color-primary)]"
+          }`}
+        >
+          <span>🔥</span> {minScoreFilter > 0 ? `${minScoreFilter}%+ Match` : "Match Score"}
+        </button>
+
+        {/* Freshness Filter */}
+        <button
+          type="button"
+          onClick={() => setFreshnessFilter(freshnessFilter === 7 ? 14 : freshnessFilter === 14 ? 30 : 7)}
+          className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
+            freshnessFilter < 30
+              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+              : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border-light)] hover:border-[var(--color-primary)]"
+          }`}
+        >
+          <span>📅</span> {freshnessFilter < 30 ? `Last ${freshnessFilter}d` : "Freshness"}
+        </button>
+
+        {/* Clear filters */}
+        {(hasReferrersOnly || minScoreFilter > 0 || freshnessFilter < 30) && (
+          <button
+            type="button"
+            onClick={() => { setHasReferrersOnly(false); setMinScoreFilter(0); setFreshnessFilter(30); }}
+            className="px-2 py-1.5 rounded-lg text-[11px] font-medium text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] cursor-pointer bg-transparent border-0"
+          >
+            ✕ Clear
+          </button>
         )}
       </div>
 
@@ -860,9 +1046,21 @@ export function SuggestedJobs() {
                       <div className="flex items-center gap-4 text-xs text-[var(--color-text-secondary)]">
                         <span>📍 {job.location || "Remote"}</span>
                         {job.posted_at && (
-                          <span>📅 {new Date(job.posted_at).toLocaleDateString()}</span>
+                          <span className={getFreshnessBadge(job.posted_at).cls}>
+                            {getFreshnessBadge(job.posted_at).text}
+                          </span>
                         )}
                       </div>
+                      {/* Skill Keywords */}
+                      {job.keywords && job.keywords.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {job.keywords.slice(0, 5).map((kw, idx) => (
+                            <span key={idx} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface)] border border-[var(--color-border-light)] text-[var(--color-text-secondary)] font-medium">
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {(() => {
                         const availableReferrers = (activeCompanyModal.referralContacts || []).filter(
                           (c) => !currentUserId || c.id !== currentUserId
@@ -876,28 +1074,47 @@ export function SuggestedJobs() {
 
                         if (hasReferrer) {
                           return (
-                            <div className="grid grid-cols-2 gap-2 mt-1">
-                              <button
-                                type="button"
-                                onClick={() => handleAskReferral(job, activeCompanyModal)}
-                                disabled={startingReferralJobId === job.id}
-                                className="btn btn-sm btn-primary text-center text-xs font-semibold py-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-60"
-                              >
-                                {startingReferralJobId === job.id ? (
-                                  <>
-                                    <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                                    </svg>
-                                    <span>Opening...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <span>{isOwnCompany ? "💬" : "🤝"}</span>
-                                    <span>{isOwnCompany ? "Message Colleague" : "Ask Referral"}</span>
-                                  </>
-                                )}
-                              </button>
+                            <div className="flex flex-col gap-2 mt-1">
+                              <div className="grid grid-cols-3 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (isOwnCompany) {
+                                      handleAskReferral(job, activeCompanyModal);
+                                    } else {
+                                      setPitchModalJob({ job, group: activeCompanyModal });
+                                    }
+                                  }}
+                                  disabled={startingReferralJobId === job.id}
+                                  className="btn btn-sm btn-primary text-center text-xs font-semibold py-2 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-60 col-span-2"
+                                >
+                                  {startingReferralJobId === job.id ? (
+                                    <>
+                                      <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                      </svg>
+                                      <span>Opening...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span>{isOwnCompany ? "💬" : "🤝"}</span>
+                                      <span>{isOwnCompany ? "Message Colleague" : "Ask Referral"}</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                {/* Save Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveJob(job, activeCompanyModal.company)}
+                                  className="btn btn-sm bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border)] text-center text-xs font-semibold py-2 flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+                                  title="Save to your pipeline"
+                                >
+                                  <span>🔖</span>
+                                  <span>Save</span>
+                                </button>
+                              </div>
 
                               {cleanDirectUrl ? (
                                 <a
@@ -939,6 +1156,108 @@ export function SuggestedJobs() {
                     </div>
                   );
                 })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Referral Pitch Modal */}
+      {pitchModalJob && (
+        <ReferralPitchModal
+          isOpen={true}
+          onClose={() => setPitchModalJob(null)}
+          onSend={async (customMessage: string) => {
+            const { job, group } = pitchModalJob;
+            setPitchModalJob(null);
+
+            // Use the custom message from the pitch modal
+            const availableReferrers = (group.referralContacts || []).filter(
+              (c) => !currentUserId || c.id !== currentUserId
+            );
+            const targetContact = availableReferrers.find((c) => c.is_followed) || availableReferrers[0];
+            if (!targetContact) return;
+
+            setStartingReferralJobId(job.id);
+            try {
+              const cleanUrl = (job.url || "").replace(/&amp;/g, "&").trim();
+              const res = await fetch("/api/jobs/chat/init-referral", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contactId: targetContact.id,
+                  jobId: job.id,
+                  company: group.company,
+                  jobTitle: job.title,
+                  jobUrl: cleanUrl,
+                  location: job.location,
+                  score: job.score ?? job.matchRate,
+                  reason: job.reason,
+                  customMessage,
+                }),
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.threadId) {
+                  setActiveCompanyModal(null);
+                  router.push(`/jobs/chat/${data.threadId}`);
+                }
+              }
+            } catch (err) {
+              console.error("Referral from pitch modal failed:", err);
+            } finally {
+              setStartingReferralJobId(null);
+            }
+          }}
+          job={{
+            id: pitchModalJob.job.id,
+            title: pitchModalJob.job.title,
+            url: pitchModalJob.job.url,
+            description: pitchModalJob.job.description,
+            keywords: pitchModalJob.job.keywords,
+            score: pitchModalJob.job.score,
+            label: pitchModalJob.job.label,
+            reason: pitchModalJob.job.reason,
+          }}
+          company={pitchModalJob.group.company}
+          referrerAlias={
+            (() => {
+              const refs = (pitchModalJob.group.referralContacts || []).filter(
+                (c) => !currentUserId || c.id !== currentUserId
+              );
+              const target = refs.find((c) => c.is_followed) || refs[0];
+              return target?.alias || "Insider";
+            })()
+          }
+          isSending={startingReferralJobId === pitchModalJob.job.id}
+        />
+      )}
+
+      {/* Target Company Manager Modal */}
+      {showTargetCompanyModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setShowTargetCompanyModal(false)}
+        >
+          <div
+            className="bg-[var(--color-surface)] w-full max-w-lg rounded-xl shadow-xl border border-[var(--color-border)] p-0 animate-scaleIn flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center p-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] rounded-t-xl">
+              <h3 className="text-sm font-bold text-[var(--color-text)] m-0 flex items-center gap-1.5">
+                <span>🎯</span> Track Target Companies
+              </h3>
+              <button
+                onClick={() => setShowTargetCompanyModal(false)}
+                className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border-0 bg-transparent cursor-pointer"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto">
+              <p className="text-xs text-[var(--color-text-secondary)] mb-3">
+                Add any company to automatically scrape their career site and get notified when matching roles appear.
+              </p>
+              <TargetCompanyManager onCompaniesChanged={() => { loadData(); }} />
             </div>
           </div>
         </div>

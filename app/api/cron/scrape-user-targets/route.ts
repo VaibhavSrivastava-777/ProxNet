@@ -3,8 +3,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdminSession } from "@/lib/admin-session";
 import { STRATEGIES } from "@/lib/scrape-strategies";
 
-// Hardcoded to single user for initial testing
-const TARGET_USER_ID = "50ecc4a2-c514-4922-8eb7-7e74961c7c4f";
 
 function isJuniorJob(title: string, description: string): boolean {
   const t = title.toLowerCase();
@@ -83,35 +81,82 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
   }
 
-  // 1. Fetch user profile + target companies
-  const { data: userProfile } = await supabase
+  // 1. Aggregate target companies from ALL sources (multi-user + global network)
+  const companySet = new Map<string, { company_name: string; ats_provider: string; ats_board_token: string; careers_url: string }>();
+
+  // Source A: All users' profile_digest.target_companies
+  const { data: allUsers } = await supabase
     .from("users")
-    .select("profile_digest")
-    .eq("id", TARGET_USER_ID)
-    .single();
+    .select("id, profile_digest")
+    .eq("is_active", true)
+    .eq("is_blocked", false);
 
-  const targetCompanyNames: string[] = userProfile?.profile_digest?.target_companies || [];
-
-  if (targetCompanyNames.length === 0) {
-    return NextResponse.json({ error: "No target companies found in user profile_digest" }, { status: 404 });
+  const allTargetNames = new Set<string>();
+  for (const u of allUsers || []) {
+    const targets: string[] = u.profile_digest?.target_companies || [];
+    for (const t of targets) {
+      if (t && t.trim()) allTargetNames.add(t.trim());
+    }
   }
 
-  const { data: configs } = await supabase
+  // Source B: All user_target_companies rows (per-user tracked companies)
+  const { data: userTargets } = await supabase
+    .from("user_target_companies")
+    .select("company_name, ats_provider, ats_board_token, careers_url")
+    .in("scrape_status", ["pending", "success"]);
+
+  for (const ut of userTargets || []) {
+    const key = ut.company_name.toLowerCase().trim();
+    if (ut.ats_provider && ut.ats_provider !== "none" && ut.ats_provider !== "no_ats") {
+      companySet.set(key, {
+        company_name: ut.company_name,
+        ats_provider: ut.ats_provider,
+        ats_board_token: ut.ats_board_token || "",
+        careers_url: ut.careers_url || "",
+      });
+    }
+  }
+
+  // Source C: Global company_ats_config (network companies)
+  const { data: globalConfigs } = await supabase
     .from("company_ats_config")
-    .select("*")
-    .in("company_name", targetCompanyNames);
+    .select("*");
 
-  const targetsMap = new Map(configs?.map(c => [c.company_name.toLowerCase().trim(), c]) || []);
+  for (const config of globalConfigs || []) {
+    const key = config.company_name.toLowerCase().trim();
+    if (!companySet.has(key) && config.provider && config.provider !== "none") {
+      companySet.set(key, {
+        company_name: config.company_name,
+        ats_provider: config.provider,
+        ats_board_token: config.board_token_or_url || "",
+        careers_url: config.board_token_or_url || "",
+      });
+    }
+  }
 
-  const targets = targetCompanyNames.map(name => {
-    const config = targetsMap.get(name.toLowerCase().trim());
-    return {
-      company_name: name,
-      ats_provider: config?.provider || "none",
-      ats_board_token: config?.board_token_or_url || "",
-      careers_url: config?.board_token_or_url || "",
-    };
-  }).filter(t => t.ats_provider !== "none");
+  // Also check if any user target names have a global config but weren't in user_target_companies
+  for (const name of allTargetNames) {
+    const key = name.toLowerCase().trim();
+    if (!companySet.has(key)) {
+      const config = (globalConfigs || []).find(c => c.company_name.toLowerCase().trim() === key);
+      if (config && config.provider && config.provider !== "none") {
+        companySet.set(key, {
+          company_name: name,
+          ats_provider: config.provider,
+          ats_board_token: config.board_token_or_url || "",
+          careers_url: config.board_token_or_url || "",
+        });
+      }
+    }
+  }
+
+  const targets = Array.from(companySet.values());
+
+  if (targets.length === 0) {
+    return NextResponse.json({ success: true, message: "No scrapeable target companies found across any user or global config." });
+  }
+
+  console.log(`[scrape-user-targets] Found ${targets.length} unique companies to scrape from ${allUsers?.length || 0} users + ${globalConfigs?.length || 0} global configs.`);
 
   const twoWeeksAgo = new Date();
   twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
@@ -276,7 +321,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     success: true,
-    userId: TARGET_USER_ID,
+    usersEvaluated: allUsers?.length || 0,
     companiesProcessed: companySummaries.length,
     totalScraped,
     totalSaved,
