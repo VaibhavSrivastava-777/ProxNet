@@ -102,15 +102,22 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   const mountTime = useRef(Date.now());
   const lastKnownMessageCountRef = useRef(0);
   const [viewportHeight, setViewportHeight] = useState("100dvh");
+  const [viewportTop, setViewportTop] = useState("0px");
 
   useEffect(() => {
     const originalPadding = document.body.style.paddingBottom;
     const originalBodyOverflow = document.body.style.overflow;
     const originalHtmlOverflow = document.documentElement.style.overflow;
+    const originalBodyPosition = document.body.style.position;
+    const originalBodyWidth = document.body.style.width;
+    const originalBodyHeight = document.body.style.height;
     
     document.body.style.paddingBottom = "0px";
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.width = "100%";
+    document.body.style.height = "100%";
 
     // Prevent window scrolling so keyboard focus doesn't pan the document body
     const handleScroll = () => {
@@ -122,6 +129,9 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
       document.body.style.paddingBottom = originalPadding;
       document.body.style.overflow = originalBodyOverflow;
       document.documentElement.style.overflow = originalHtmlOverflow;
+      document.body.style.position = originalBodyPosition;
+      document.body.style.width = originalBodyWidth;
+      document.body.style.height = originalBodyHeight;
       window.removeEventListener("scroll", handleScroll);
     };
   }, []);
@@ -130,7 +140,11 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
     if (typeof window === "undefined" || !window.visualViewport) return;
 
     const handleViewportChange = () => {
-      setViewportHeight(`${window.visualViewport!.height}px`);
+      const vv = window.visualViewport;
+      if (!vv) return;
+      setViewportHeight(`${vv.height}px`);
+      setViewportTop(`${vv.offsetTop}px`);
+      window.scrollTo(0, 0);
     };
 
     window.visualViewport.addEventListener("resize", handleViewportChange);
@@ -168,8 +182,9 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
 
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      textareaRef.current.style.height = "40px";
+      const scrollHeight = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = `${Math.min(Math.max(scrollHeight, 40), 120)}px`;
     }
   }, [text]);
 
@@ -431,8 +446,8 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
 
   return (
     <div 
-      className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl bg-[var(--color-surface)] md:border-x border-[var(--color-border-light)] shadow-md flex flex-col overflow-hidden"
-      style={{ height: viewportHeight }}
+      className="fixed left-1/2 -translate-x-1/2 w-full max-w-4xl bg-[var(--color-surface)] md:border-x border-[var(--color-border-light)] shadow-md flex flex-col overflow-hidden"
+      style={{ height: viewportHeight, top: viewportTop }}
     >
 
       {/* Header bar */}
@@ -754,16 +769,16 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
-      {/* Input bar */}
+      {/* WhatsApp-Style Input bar */}
       <form 
         onSubmit={handleSend} 
-        className="flex items-end gap-2 border-t border-[var(--color-border-light)] p-3 bg-[var(--whatsapp-bg)]/90 backdrop-blur-sm sticky bottom-0 z-10 w-full animate-fadeIn"
-        style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom))" }}
+        className="flex items-end gap-2 border-t border-[var(--color-border-light)] px-3 py-2 bg-[var(--whatsapp-bg)]/95 backdrop-blur-sm sticky bottom-0 z-10 w-full animate-fadeIn shrink-0"
+        style={{ paddingBottom: "calc(8px + env(safe-area-inset-bottom, 0px))" }}
       >
-        <div className="flex-1 relative">
+        <div className="flex-1 relative flex items-center">
           <textarea
             ref={textareaRef}
-            className="input w-full min-h-[36px] max-h-[120px] rounded-[20px] py-2 px-4 resize-none leading-normal bg-[var(--color-surface)] border-none shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:ring-0 focus:outline-none text-[var(--color-text)] transition-colors text-sm"
+            className="chat-textarea w-full h-10 min-h-[40px] max-h-[120px] rounded-[20px] py-[9px] px-4 resize-none text-sm leading-[22px] bg-[var(--color-surface)] border border-[var(--color-border-light)] shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:border-[var(--color-primary)] focus:ring-0 focus:outline-none text-[var(--color-text)] transition-colors box-border block"
             placeholder="Type a message…"
             value={text}
             onChange={(e) => handleTextChange(e.target.value)}
@@ -777,10 +792,9 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
             maxLength={MAX_CHARS}
           />
           {/* Character counter */}
-          {text.length > 0 && (
+          {text.length > 0 && charsNearLimit && (
             <span
-              className="absolute bottom-2.5 right-4 text-[10px] pointer-events-none"
-              style={{ color: charsNearLimit ? "var(--color-error)" : "var(--color-text-tertiary)" }}
+              className="absolute bottom-2 right-3 text-[10px] pointer-events-none font-medium text-[var(--color-error)]"
             >
               {charsLeft}
             </span>
@@ -789,15 +803,20 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
         <button
           type="submit"
           disabled={!text.trim() || sending}
-          className="btn-icon shrink-0 w-11 h-11 mb-0 flex items-center justify-center rounded-full transition-all active:scale-95 disabled:opacity-50 disabled:bg-gray-300 disabled:text-gray-500"
+          aria-label="Send message"
+          className="shrink-0 w-10 h-10 mb-0 flex items-center justify-center rounded-full transition-all active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs"
           style={{
-            backgroundColor: text.trim() ? "#00a884" : "#cbd5e1",
-            color: "white",
+            backgroundColor: text.trim() ? "#00a884" : "var(--color-border)",
+            color: text.trim() ? "white" : "var(--color-text-tertiary)",
           }}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 ml-0.5">
-            <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
-          </svg>
+          {sending ? (
+            <span className="spinner-sm" style={{ borderTopColor: "white" }} />
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 ml-0.5">
+              <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+            </svg>
+          )}
         </button>
       </form>
 

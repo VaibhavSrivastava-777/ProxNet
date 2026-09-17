@@ -239,24 +239,31 @@ export function CarpoolChatRoom({ threadId }: { threadId: string }) {
 
       {/* Input bar */}
       {threadStatus !== "revealed" ? (
-        <form onSubmit={sendMessage} className="flex items-end gap-2 border-t border-[var(--color-border-light)] bg-[var(--whatsapp-bg)]/90 backdrop-blur-sm p-3 shrink-0">
-          <textarea
-            className="input flex-1 min-h-[44px] max-h-[120px] rounded-[24px] py-2.5 px-4 resize-none leading-tight bg-[var(--color-surface)] border-none shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:ring-0 focus:outline-none text-[var(--color-text)] transition-colors"
-            placeholder="Type a message…"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(e as any); }
-            }}
-            rows={1}
-          />
+        <form 
+          onSubmit={sendMessage} 
+          className="flex items-end gap-2 border-t border-[var(--color-border-light)] px-3 py-2 bg-[var(--whatsapp-bg)]/95 backdrop-blur-sm shrink-0"
+          style={{ paddingBottom: "calc(8px + env(safe-area-inset-bottom, 0px))" }}
+        >
+          <div className="flex-1 relative flex items-center">
+            <textarea
+              className="chat-textarea w-full h-10 min-h-[40px] max-h-[120px] rounded-[20px] py-[9px] px-4 resize-none text-sm leading-[22px] bg-[var(--color-surface)] border border-[var(--color-border-light)] shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:border-[var(--color-primary)] focus:ring-0 focus:outline-none text-[var(--color-text)] transition-colors box-border block"
+              placeholder="Type a message…"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(e as any); }
+              }}
+              rows={1}
+            />
+          </div>
           <button
             type="submit"
             disabled={!text.trim() || sending}
-            className="btn-icon shrink-0 w-11 h-11 mb-0 flex items-center justify-center rounded-full transition-all active:scale-95 disabled:opacity-50 disabled:bg-gray-300 disabled:text-gray-500"
+            aria-label="Send message"
+            className="shrink-0 w-10 h-10 mb-0 flex items-center justify-center rounded-full transition-all active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs"
             style={{
-              backgroundColor: text.trim() ? "#00a884" : "#cbd5e1",
-              color: "white",
+              backgroundColor: text.trim() ? "#00a884" : "var(--color-border)",
+              color: text.trim() ? "white" : "var(--color-text-tertiary)",
             }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 ml-0.5">
