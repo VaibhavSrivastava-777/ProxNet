@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
+import { awardWalletCredits } from "@/lib/wallet";
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -35,6 +36,26 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Check if this is the user's first response to someone else's referral ask
+  let creditReward: { creditsAwarded: number; newBalance: number; message?: string } | null = null;
+  const { count: userMsgCount } = await supabase
+    .from("job_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("thread_id", threadId)
+    .eq("sender_id", user.id);
+
+  if (userMsgCount === 1) {
+    const { count: priorMsgCount } = await supabase
+      .from("job_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("thread_id", threadId)
+      .neq("sender_id", user.id);
+
+    if (priorMsgCount && priorMsgCount > 0) {
+      creditReward = await awardWalletCredits(user.id, "responded_referral_ask", threadId);
+    }
+  }
+
   // Get other participant to notify
   const { data: others } = await supabase
     .from("job_participants")
@@ -62,5 +83,10 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ message: msg });
+  return NextResponse.json({
+    message: msg,
+    creditsAwarded: creditReward?.creditsAwarded || 0,
+    newBalance: creditReward?.newBalance,
+    rewardMessage: creditReward?.message,
+  });
 }

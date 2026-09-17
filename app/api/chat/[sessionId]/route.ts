@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
+import { awardWalletCredits } from "@/lib/wallet";
 
 async function assertParticipant(sessionId: string, userId: string) {
   const supabase = createAdminClient();
@@ -136,6 +137,24 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Award credits to professional answering career question if applicable
+  try {
+    const { data: sessionData } = await supabase
+      .from("chat_sessions")
+      .select("question_id, questions(asker_id)")
+      .eq("id", sessionId)
+      .maybeSingle();
+
+    if (sessionData?.question_id) {
+      const askerId = (sessionData.questions as any)?.asker_id;
+      if (askerId && askerId !== user.id) {
+        await awardWalletCredits(user.id, "answered_career_question", sessionData.question_id);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to check question reward in chat:", err);
+  }
 
   // Notify the other participant
   try {

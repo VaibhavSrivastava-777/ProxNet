@@ -304,6 +304,54 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     }, 5000);
   };
 
+  // Fetch wallet balance and trigger low credits toast alert if balance < 10
+  const fetchWalletBalance = async () => {
+    try {
+      const res = await fetch("/api/profile");
+      if (res.ok) {
+        const data = await res.json();
+        const balance = typeof data.wallet === "number" ? data.wallet : 0;
+        setWalletBalance(balance);
+
+        // Toast message upon login if credits have fallen below 10 (session-deduped)
+        if (balance < 10) {
+          const warned = sessionStorage.getItem("proxnet_low_credits_login_warned");
+          if (!warned) {
+            sessionStorage.setItem("proxnet_low_credits_login_warned", "true");
+            setTimeout(() => {
+              triggerToast({
+                title: "⚡ Low Wallet Balance",
+                body: `You have ${balance} credit${balance === 1 ? "" : "s"} left. Enable notifications or share opportunities to earn more!`,
+                url: "/profile",
+              });
+            }, 1200);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch wallet balance:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (!session || typeof window === "undefined") return;
+    fetchWalletBalance();
+
+    const handleWalletUpdated = (e: Event) => {
+      const customDetail = (e as CustomEvent).detail;
+      if (customDetail && typeof customDetail.newBalance === "number") {
+        setWalletBalance(customDetail.newBalance);
+      } else {
+        fetchWalletBalance();
+      }
+    };
+
+    window.addEventListener("proxnet:wallet-updated", handleWalletUpdated);
+    return () => {
+      window.removeEventListener("proxnet:wallet-updated", handleWalletUpdated);
+    };
+  }, [session]);
+
   // Register SW and check permission on mount
   useEffect(() => {
     if (!session || typeof window === "undefined") {
@@ -314,11 +362,23 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     if ((window as any).AndroidBridge) {
       const registerNativeToken = async (token: string) => {
         try {
-          await fetch("/api/fcm/register", {
+          const regRes = await fetch("/api/fcm/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ token, platform: "android" }),
           });
+          if (regRes.ok) {
+            const regData = await regRes.json();
+            if (regData.creditsAwarded > 0) {
+              setWalletBalance(regData.newBalance);
+              triggerToast({
+                title: "🎉 Bonus Credits Earned!",
+                body: `+${regData.creditsAwarded} credits added to your wallet for enabling notifications!`,
+                url: "/profile",
+              });
+              window.dispatchEvent(new CustomEvent("proxnet:wallet-updated", { detail: { newBalance: regData.newBalance } }));
+            }
+          }
           console.log("FCM token registered natively for Android");
         } catch (e) {
           console.error("Native JS Bridge token registration failed:", e);
@@ -382,11 +442,23 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             serviceWorkerRegistration: registration
           });
           if (token) {
-            await fetch("/api/fcm/register", {
+            const regRes = await fetch("/api/fcm/register", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ token, platform: isIosUser ? "ios" : "web" }),
             });
+            if (regRes.ok) {
+              const regData = await regRes.json();
+              if (regData.creditsAwarded > 0) {
+                setWalletBalance(regData.newBalance);
+                triggerToast({
+                  title: "🎉 Bonus Credits Earned!",
+                  body: `+${regData.creditsAwarded} credits added to your wallet for enabling notifications!`,
+                  url: "/profile",
+                });
+                window.dispatchEvent(new CustomEvent("proxnet:wallet-updated", { detail: { newBalance: regData.newBalance } }));
+              }
+            }
           }
 
           // In foreground: listen to onMessage to prevent duplicate native notifications
@@ -595,11 +667,23 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       });
 
       if (token) {
-        await fetch("/api/fcm/register", {
+        const regRes = await fetch("/api/fcm/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token, platform: isIosUser ? "ios" : "web" }),
         });
+        if (regRes.ok) {
+          const regData = await regRes.json();
+          if (regData.creditsAwarded > 0) {
+            setWalletBalance(regData.newBalance);
+            triggerToast({
+              title: "🎉 Bonus Credits Earned!",
+              body: `+${regData.creditsAwarded} credits added to your wallet for enabling notifications!`,
+              url: "/profile",
+            });
+            window.dispatchEvent(new CustomEvent("proxnet:wallet-updated", { detail: { newBalance: regData.newBalance } }));
+          }
+        }
       }
     } catch (error) {
       console.error("Failed to subscribe to FCM push:", error);

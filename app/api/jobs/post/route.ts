@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { awardPoints } from "@/lib/award-points";
+import { awardWalletCredits } from "@/lib/wallet";
 
 function extractTop5Skills(skills: string): string {
   if (!skills) return "";
@@ -228,11 +229,17 @@ export async function POST(request: Request) {
 
   } catch (e) {
     console.error("AI Matchmaking failed:", e);
-    // Non-blocking: the post was still created successfully
   }
-  // ---
 
-  return NextResponse.json({ post: data });
+  // Award wallet credits for sharing a job opportunity
+  const creditReward = await awardWalletCredits(user.id, "shared_job_opportunity", data.id);
+
+  return NextResponse.json({
+    post: data,
+    creditsAwarded: creditReward.creditsAwarded,
+    newBalance: creditReward.newBalance,
+    rewardMessage: creditReward.message,
+  });
 }
 
 export async function PATCH(request: Request) {

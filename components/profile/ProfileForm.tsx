@@ -8,6 +8,7 @@ import type { User, UserVisibility } from "@/lib/types";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { isProfileIncomplete } from "@/lib/profile-validation";
 import { calculateTier } from "@/lib/network-score";
+import { RechargeModal } from "@/components/RechargeModal";
 
 /* ----------------------------------------------------------------
    Collapsible Section
@@ -201,6 +202,7 @@ export function ProfileForm({ initialUser }: Props) {
   const [fetchingGeoAddress, setFetchingGeoAddress] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "error" | "success" } | null>(null);
   const [tagInput, setTagInput] = useState("");
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
 
   useEffect(() => {
     if (toast) {
@@ -780,16 +782,30 @@ export function ProfileForm({ initialUser }: Props) {
 
       {/* Network Stats & Grow Nudge */}
       <div className="flex flex-col gap-3 mb-6 animate-fadeInUp">
-        {/* Follow Stats Grid */}
+        {/* Follow & Credits Stats Grid */}
         <div className="card p-4 bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-xl shadow-sm flex items-center justify-around text-center divide-x divide-[var(--color-border-light)]" style={{ display: "flex", flexDirection: "row" }}>
           <div className="flex-1">
             <div className="text-xl font-extrabold text-[var(--color-primary)]">{followStats.followingCount}</div>
             <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider mt-0.5">Following</div>
           </div>
-          <div className="flex-grow flex-shrink flex-basis-0">
+          <div className="flex-1">
             <div className="text-xl font-extrabold text-[var(--color-primary)]">{followStats.followerCount}</div>
             <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider mt-0.5">Followers</div>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowRechargeModal(true)}
+            className="flex-1 bg-transparent border-0 cursor-pointer hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors p-1"
+            title="Click to view or recharge wallet credits"
+          >
+            <div className="text-xl font-extrabold text-[var(--color-primary)] flex items-center justify-center gap-1">
+              <span>{user.wallet ?? 0}</span>
+              <span className="text-sm">⚡</span>
+            </div>
+            <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider mt-0.5">
+              Credits <span className="text-[var(--color-primary)] underline ml-0.5">Recharge</span>
+            </div>
+          </button>
         </div>
 
         {/* Grow Nudge Card */}
@@ -1168,7 +1184,14 @@ export function ProfileForm({ initialUser }: Props) {
                 {calculateTier(user.network_points || 0).name} Tier
               </div>
               <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-                You have accumulated <strong>{user.network_points || 0}</strong> network points.
+                You have accumulated <strong>{user.network_points || 0}</strong> network points and have <strong>{user.wallet ?? 0}</strong> active credits.
+                <button
+                  type="button"
+                  onClick={() => setShowRechargeModal(true)}
+                  className="ml-2 text-xs text-[var(--color-primary)] font-bold hover:underline bg-transparent border-none cursor-pointer p-0"
+                >
+                  View / Top-up &rarr;
+                </button>
               </div>
             </div>
           </div>
@@ -1492,6 +1515,8 @@ export function ProfileForm({ initialUser }: Props) {
                             if (rewardRes.ok) {
                               const rewardData = await rewardRes.json();
                               if (rewardData.success && rewardData.creditsAwarded > 0) {
+                                setUser((prev) => ({ ...prev, wallet: rewardData.newBalance }));
+                                window.dispatchEvent(new CustomEvent("proxnet:wallet-updated", { detail: { newBalance: rewardData.newBalance } }));
                                 setToast({ message: `🎉 Notifications enabled! ${rewardData.creditsAwarded} bonus credits added to your wallet.`, type: "success" });
                               } else {
                                 setToast({ message: "Notifications enabled successfully on this device!", type: "success" });
@@ -1904,6 +1929,13 @@ export function ProfileForm({ initialUser }: Props) {
           </button>
         </div>
       )}
+
+      {/* Recharge Modal */}
+      <RechargeModal
+        isOpen={showRechargeModal}
+        onClose={() => setShowRechargeModal(false)}
+        walletBalance={user.wallet ?? 0}
+      />
     </>
   );
 }

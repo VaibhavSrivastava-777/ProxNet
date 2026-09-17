@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUsersWithin2km } from "@/lib/notifications";
+import { awardWalletCredits } from "@/lib/wallet";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -130,5 +131,13 @@ export async function POST(request: Request) {
     }).catch(err => console.error("2km notification error for job post:", err));
   }
 
-  return NextResponse.json({ jobPost });
+  // Award wallet credits for sharing a job opportunity
+  const creditReward = await awardWalletCredits(user.id, "shared_job_opportunity", jobPost.id);
+
+  return NextResponse.json({
+    jobPost,
+    creditsAwarded: creditReward.creditsAwarded,
+    newBalance: creditReward.newBalance,
+    rewardMessage: creditReward.message,
+  });
 }

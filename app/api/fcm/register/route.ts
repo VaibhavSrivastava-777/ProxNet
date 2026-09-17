@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { awardWalletCredits } from "@/lib/wallet";
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -35,7 +36,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, data: data?.[0] });
+    // Automatically award push notification enable reward (5 credits) if not already claimed
+    const rewardResult = await awardWalletCredits(user.id, "push_notifications_enabled");
+
+    return NextResponse.json({
+      success: true,
+      data: data?.[0],
+      creditsAwarded: rewardResult.creditsAwarded,
+      newBalance: rewardResult.newBalance,
+      rewardMessage: rewardResult.message,
+    });
   } catch (err: any) {
     console.error("FCM registration API error:", err);
     return NextResponse.json({ error: err.message || "Failed to register FCM token" }, { status: 500 });

@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateAlias } from "@/lib/anonymize";
 import { sendNotification } from "@/lib/notifications";
+import { awardWalletCredits } from "@/lib/wallet";
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -68,6 +69,9 @@ export async function POST(request: Request) {
     .update({ status: "responded" })
     .eq("id", targetId);
 
+  // Award credits for answering a career question
+  const creditReward = await awardWalletCredits(user.id, "answered_career_question", questionId);
+
   // Notify the asker that a professional responded
   try {
     await sendNotification(askerId, {
@@ -83,5 +87,10 @@ export async function POST(request: Request) {
     console.error("Notification trigger error:", err);
   }
 
-  return NextResponse.json({ sessionId });
+  return NextResponse.json({
+    sessionId,
+    creditsAwarded: creditReward.creditsAwarded,
+    newBalance: creditReward.newBalance,
+    rewardMessage: creditReward.message,
+  });
 }
