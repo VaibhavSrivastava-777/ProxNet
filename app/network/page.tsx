@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { isOnboardingIncomplete } from "@/lib/profile-validation";
+import QAContentWrapper from "@/app/qa/QAContent";
 
 export default async function NetworkPage() {
   const user = await getCurrentUser();
@@ -13,5 +14,5 @@ export default async function NetworkPage() {
     redirect("/profile?onboarding=true");
   }
 
-  redirect("/qa?tab=network");
+  return <QAContentWrapper initialTab="/network" />;
 }

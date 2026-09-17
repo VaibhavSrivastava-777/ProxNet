@@ -41,7 +41,7 @@ export default async function HomePage({
       redirect("/profile?onboarding=true");
     }
 
-    redirect("/qa?tab=network");
+    redirect("/network");
   }
 
   return (

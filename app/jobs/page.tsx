@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { isOnboardingIncomplete } from "@/lib/profile-validation";
+import QAContentWrapper from "@/app/qa/QAContent";
 
 export default async function JobsPage() {
   const user = await getCurrentUser();
@@ -13,5 +14,5 @@ export default async function JobsPage() {
     redirect("/profile?onboarding=true");
   }
 
-  redirect("/qa?tab=jobs");
+  return <QAContentWrapper initialTab="/jobs" />;
 }

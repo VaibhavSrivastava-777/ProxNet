@@ -1,9 +1,7 @@
-export const unstable_instant = { prefetch: 'static', unstable_disableValidation: true };
-
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { LocalForumFeed } from "@/components/home/LocalForumFeed";
 import { isOnboardingIncomplete } from "@/lib/profile-validation";
+import QAContentWrapper from "@/app/qa/QAContent";
 
 export default async function ForumPage() {
   const user = await getCurrentUser();
@@ -16,5 +14,5 @@ export default async function ForumPage() {
     redirect("/profile?onboarding=true");
   }
 
-  redirect("/qa?tab=forum");
+  return <QAContentWrapper initialTab="/forum" />;
 }

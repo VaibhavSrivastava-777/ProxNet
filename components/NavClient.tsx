@@ -54,6 +54,31 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     else setTheme("light");
   };
 
+  const [currentTab, setCurrentTab] = useState<string>(pathname);
+
+  useEffect(() => {
+    setCurrentTab(pathname);
+  }, [pathname]);
+
+  useEffect(() => {
+    const handleTabChange = (e: Event) => {
+      const targetTab = (e as CustomEvent).detail;
+      if (targetTab) {
+        setCurrentTab(targetTab);
+      }
+    };
+    const handlePopState = () => {
+      setCurrentTab(window.location.pathname);
+    };
+
+    window.addEventListener("tabchange", handleTabChange);
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("tabchange", handleTabChange);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
   const navLinks = [
     { href: "/jobs", label: "Jobs", icon: BriefcaseIcon, dataTour: "nav-jobs" },
     { href: "/network", label: "Network", icon: MapPinIcon, dataTour: "nav-network" },
@@ -606,6 +631,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
     if (isShellRoute && ["/jobs", "/network", "/qa", "/forum"].includes(tabHref)) {
       e.preventDefault();
+      setCurrentTab(tabHref);
       window.dispatchEvent(new CustomEvent("tabchange", { detail: tabHref }));
       window.history.pushState(null, "", tabHref);
     }
@@ -869,7 +895,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             <nav className="flex h-full items-center">
               {session &&
                 navLinks.map((l) => {
-                  const active = pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href));
+                  const active = (currentTab || pathname) === l.href;
                   const hasUnreadChats = inAppNotifications.some(
                     (n) => !n.is_read && (n.url?.includes("/chat") || n.url === "/qa" || n.url === "/proxnet-ai")
                   );
@@ -1313,7 +1339,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
           style={{ height: "var(--bottom-nav-height)" }}
         >
           {navLinks.map((l) => {
-            const active = pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href));
+            const active = (currentTab || pathname) === l.href;
             const hasUnreadChats = inAppNotifications.some(
               (n) => !n.is_read && (n.url?.includes("/chat") || n.url === "/qa" || n.url === "/proxnet-ai")
             );

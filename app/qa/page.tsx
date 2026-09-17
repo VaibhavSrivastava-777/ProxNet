@@ -16,5 +16,5 @@ export default async function QAPage() {
     redirect("/profile?onboarding=true");
   }
 
-  return <QAContentWrapper />;
+  return <QAContentWrapper initialTab="/qa" />;
 }
