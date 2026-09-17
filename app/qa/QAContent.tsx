@@ -6,7 +6,7 @@ import { JobsClient } from "@/components/jobs/JobsClient";
 import { LocalForumFeed } from "@/components/home/LocalForumFeed";
 import { ProximityMap } from "@/components/map/ProximityMap";
 import { GrowClient } from "@/components/grow/GrowClient";
-import { TabValueTransition } from "@/components/common/TabValueTransition";
+import { TabValueTransition, isFirstTimeScreenOpening } from "@/components/common/TabValueTransition";
 import { useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -37,20 +37,12 @@ export function QAContent({ initialTab }: QAContentProps) {
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => new Set([getComputedInitialTab()]));
 
   // Screen-specific animated value proposition transition state
-  const [isTransitioning, setIsTransitioning] = useState<boolean>(true);
-  const isFirstMount = useRef(true);
+  const [isTransitioning, setIsTransitioning] = useState<boolean>(() => {
+    return isFirstTimeScreenOpening(getComputedInitialTab());
+  });
 
   const searchParams = useSearchParams();
   const router = useRouter();
-
-  // Initial transition dismissal
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsTransitioning(false);
-      isFirstMount.current = false;
-    }, 600);
-    return () => clearTimeout(timer);
-  }, []);
 
   // Update visited tabs whenever activeTab changes
   useEffect(() => {
@@ -78,10 +70,11 @@ export function QAContent({ initialTab }: QAContentProps) {
     const handleTabChange = (e: Event) => {
       const targetTab = (e as CustomEvent).detail;
       if (tabPaths.includes(targetTab) && targetTab !== activeTab) {
-        // If the target tab was not visited yet, show value transition briefly
-        if (!visitedTabs.has(targetTab)) {
+        // Only show 5-second value proposition on first-time screen opening by user
+        if (isFirstTimeScreenOpening(targetTab)) {
           setIsTransitioning(true);
-          setTimeout(() => setIsTransitioning(false), 500);
+        } else {
+          setIsTransitioning(false);
         }
         setActiveTab(targetTab);
       }
@@ -100,7 +93,7 @@ export function QAContent({ initialTab }: QAContentProps) {
       window.removeEventListener("tabchange", handleTabChange);
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [searchParams, activeTab, visitedTabs]);
+  }, [searchParams, activeTab]);
 
   // Deep-link check for direct targeting
   useEffect(() => {
@@ -117,11 +110,11 @@ export function QAContent({ initialTab }: QAContentProps) {
 
   return (
     <div className="w-full relative">
-      {/* ── Screen Load Animated Value Proposition & Logo ── */}
+      {/* ── Screen Load Animated Value Proposition & Logo (at least 5s on first-time screen opening) ── */}
       <TabValueTransition
         activeTab={activeTab}
         isLoading={isTransitioning}
-        minDisplayDurationMs={450}
+        minDisplayDurationMs={5000}
         onTransitionComplete={() => setIsTransitioning(false)}
       />
 
@@ -269,7 +262,7 @@ export default function QAContentWrapper({ initialTab }: { initialTab?: string }
         <TabValueTransition
           activeTab={initialTab || "/network"}
           isLoading={true}
-          minDisplayDurationMs={350}
+          minDisplayDurationMs={5000}
         />
       }
     >

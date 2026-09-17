@@ -78,6 +78,64 @@ async function main() {
   }
   console.log("✓ Test 3 Passed: Tab lazy mounting and in-memory persistence validated.");
 
+  // TEST 4: Validate 5-Second First-Time Screen Opening Logic
+  console.log("\n[Test 4] Validating 5-second first-time screen value proposition logic...");
+
+  // Mock localStorage for node environment
+  const store: Record<string, string> = {};
+  (global as any).window = {
+    localStorage: {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v; },
+      removeItem: (k: string) => { delete store[k]; },
+    },
+  };
+
+  const { isFirstTimeScreenOpening, markScreenOpeningSeen, resetScreenOpeningSeen } = await import("../components/common/TabValueTransition");
+
+  // Step 4A: On first opening of /jobs, it must return true
+  resetScreenOpeningSeen();
+  const firstTimeJobs = isFirstTimeScreenOpening("/jobs");
+  if (!firstTimeJobs) {
+    throw new Error("Test 4 Failed: isFirstTimeScreenOpening('/jobs') should be true on initial opening");
+  }
+  console.log("  ✓ First-time opening of /jobs correctly detected as true.");
+
+  // Step 4B: Mark /jobs as seen
+  markScreenOpeningSeen("/jobs");
+  const secondTimeJobs = isFirstTimeScreenOpening("/jobs");
+  if (secondTimeJobs) {
+    throw new Error("Test 4 Failed: isFirstTimeScreenOpening('/jobs') should be false on second opening");
+  }
+  console.log("  ✓ Second opening of /jobs correctly detected as false (no 5s delay).");
+
+  // Step 4C: Verify other tabs remain first-time until visited
+  if (!isFirstTimeScreenOpening("/network") || !isFirstTimeScreenOpening("/qa") || !isFirstTimeScreenOpening("/forum")) {
+    throw new Error("Test 4 Failed: Unvisited tabs should remain true for first-time opening");
+  }
+  console.log("  ✓ Other tabs (/network, /qa, /forum) correctly remain true until opened.");
+
+  // Step 4D: Static code assertion on QAContent.tsx and TabValueTransition.tsx
+  const qaContentCode = fs.readFileSync(path.join(process.cwd(), "app/qa/QAContent.tsx"), "utf-8");
+  if (!qaContentCode.includes("minDisplayDurationMs={5000}")) {
+    throw new Error("Test 4 Failed: QAContent.tsx does not specify minDisplayDurationMs={5000}");
+  }
+  if (!qaContentCode.includes("isFirstTimeScreenOpening")) {
+    throw new Error("Test 4 Failed: QAContent.tsx does not check isFirstTimeScreenOpening");
+  }
+  console.log("  ✓ QAContent.tsx enforces minDisplayDurationMs={5000} and checks isFirstTimeScreenOpening.");
+
+  const tabTransitionCode = fs.readFileSync(path.join(process.cwd(), "components/common/TabValueTransition.tsx"), "utf-8");
+  if (!tabTransitionCode.includes("minDisplayDurationMs = 5000")) {
+    throw new Error("Test 4 Failed: TabValueTransition.tsx default minDisplayDurationMs is not 5000");
+  }
+  if (!tabTransitionCode.includes("Math.max(5000")) {
+    throw new Error("Test 4 Failed: TabValueTransition.tsx does not enforce at least 5000ms duration");
+  }
+  console.log("  ✓ TabValueTransition.tsx enforces at least 5000ms display for first-time screen opening.");
+
+  console.log("✓ Test 4 Passed: 5-second first-time screen opening logic validated!");
+
   console.log("\n🎉 ALL TESTS PASSED SUCCESSFULLY!");
 }
 
