@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
