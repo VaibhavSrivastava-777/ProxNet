@@ -144,7 +144,10 @@ export async function sendNotification(
       notifType.startsWith("daily_engagement") ||
       notifType.startsWith("event_") ||
       notifType === "referral_network_nudge" ||
-      notifType === "referral_request";
+      notifType === "referral_request" ||
+      notifType === "job_referral_request" ||
+      notifType.includes("referral") ||
+      notifType === "colleague_message";
 
     // Dispatch email if user has no active FCM push tokens (crucial fallback), or for priority reminders
     if (!hasFcmTokens || isPriorityNotification) {

@@ -9,9 +9,5 @@ export default async function JobChatPage({ params }: { params: Promise<{ thread
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  return (
-    <div className="mx-auto max-w-2xl py-4 h-[calc(100vh-var(--nav-height))] flex flex-col">
-      <JobChatRoom threadId={threadId} userId={user.id} />
-    </div>
-  );
+  return <JobChatRoom threadId={threadId} userId={user.id} />;
 }

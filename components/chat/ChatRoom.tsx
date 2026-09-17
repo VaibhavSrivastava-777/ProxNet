@@ -53,6 +53,18 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
     }
     return [];
   });
+  const [initialLoading, setInitialLoading] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`chat_cache_${sessionId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed.messages) && parsed.messages.length > 0) return false;
+        }
+      } catch (e) {}
+    }
+    return true;
+  });
   const [myAlias, setMyAlias] = useState(() => {
     if (typeof window !== "undefined") {
       try {
@@ -162,55 +174,59 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
   }, [text]);
 
   const loadMessages = useCallback(async () => {
-    const res = await fetch(`/api/chat/${sessionId}`);
-    if (res.ok) {
-      const data = await res.json();
-      const newMsgs = data.messages ?? [];
-      
-      // Play incoming message ring if a new message from the other person arrives
-      if (newMsgs.length > lastKnownMessageCountRef.current) {
-        const latest = newMsgs[newMsgs.length - 1];
-        if (lastKnownMessageCountRef.current > 0 && latest && !latest.isOwn) {
-          try {
-            playNotificationSound("message");
-          } catch (e) {}
+    try {
+      const res = await fetch(`/api/chat/${sessionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        const newMsgs = data.messages ?? [];
+        
+        // Play incoming message ring if a new message from the other person arrives
+        if (newMsgs.length > lastKnownMessageCountRef.current) {
+          const latest = newMsgs[newMsgs.length - 1];
+          if (lastKnownMessageCountRef.current > 0 && latest && !latest.isOwn) {
+            try {
+              playNotificationSound("message");
+            } catch (e) {}
 
-          // Flash document tab title if the tab is hidden
-          if (typeof document !== "undefined" && document.hidden) {
-            const originalTitle = document.title;
-            let flashCount = 0;
-            const flashInterval = setInterval(() => {
-              flashCount++;
-              document.title = flashCount % 2 === 1 ? `💬 New message • ProxNet` : originalTitle;
-              if (flashCount >= 6) {
+            // Flash document tab title if the tab is hidden
+            if (typeof document !== "undefined" && document.hidden) {
+              const originalTitle = document.title;
+              let flashCount = 0;
+              const flashInterval = setInterval(() => {
+                flashCount++;
+                document.title = flashCount % 2 === 1 ? `💬 New message • ProxNet` : originalTitle;
+                if (flashCount >= 6) {
+                  clearInterval(flashInterval);
+                  document.title = originalTitle;
+                }
+              }, 1000);
+
+              const handleFocus = () => {
                 clearInterval(flashInterval);
                 document.title = originalTitle;
-              }
-            }, 1000);
-
-            const handleFocus = () => {
-              clearInterval(flashInterval);
-              document.title = originalTitle;
-              window.removeEventListener("focus", handleFocus);
-            };
-            window.addEventListener("focus", handleFocus, { once: true });
+                window.removeEventListener("focus", handleFocus);
+              };
+              window.addEventListener("focus", handleFocus, { once: true });
+            }
           }
+          lastKnownMessageCountRef.current = newMsgs.length;
         }
-        lastKnownMessageCountRef.current = newMsgs.length;
+
+        setMessages(newMsgs);
+        setMyAlias(data.myAlias ?? "");
+        setOtherAliasState(data.otherAlias ?? "");
+
+        // Instant cache for subsequent visits
+        try {
+          sessionStorage.setItem(`chat_cache_${sessionId}`, JSON.stringify({
+            messages: newMsgs,
+            myAlias: data.myAlias ?? "",
+            otherAlias: data.otherAlias ?? "",
+          }));
+        } catch (e) {}
       }
-
-      setMessages(newMsgs);
-      setMyAlias(data.myAlias ?? "");
-      setOtherAliasState(data.otherAlias ?? "");
-
-      // Instant cache for subsequent visits
-      try {
-        sessionStorage.setItem(`chat_cache_${sessionId}`, JSON.stringify({
-          messages: newMsgs,
-          myAlias: data.myAlias ?? "",
-          otherAlias: data.otherAlias ?? "",
-        }));
-      } catch (e) {}
+    } finally {
+      setInitialLoading(false);
     }
   }, [sessionId]);
 
@@ -450,8 +466,30 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto p-4 flex flex-col whatsapp-chat-bg"
       >
-        {messages.length === 0 ? (
-          /* Icebreaker empty state */
+        {initialLoading && messages.length === 0 ? (
+          <div className="flex-1 flex flex-col justify-end gap-3 p-4 animate-pulse">
+            <div className="flex items-start gap-2 max-w-[70%]">
+              <div className="w-8 h-8 rounded-full bg-[var(--color-border-light)] shrink-0" />
+              <div className="p-3 rounded-2xl rounded-bl-xs bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] space-y-2 w-48">
+                <div className="h-3 bg-[var(--color-border-light)] rounded w-full" />
+                <div className="h-3 bg-[var(--color-border-light)] rounded w-3/4" />
+              </div>
+            </div>
+            <div className="flex items-end justify-end gap-2 max-w-[70%] ml-auto">
+              <div className="p-3 rounded-2xl rounded-br-xs bg-[var(--color-primary)]/15 border border-[var(--color-primary)]/20 space-y-2 w-56">
+                <div className="h-3 bg-[var(--color-primary)]/30 rounded w-full" />
+                <div className="h-3 bg-[var(--color-primary)]/30 rounded w-2/3 ml-auto" />
+              </div>
+            </div>
+            <div className="flex items-start gap-2 max-w-[70%]">
+              <div className="w-8 h-8 rounded-full bg-[var(--color-border-light)] shrink-0" />
+              <div className="p-3 rounded-2xl rounded-bl-xs bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] space-y-2 w-40">
+                <div className="h-3 bg-[var(--color-border-light)] rounded w-4/5" />
+              </div>
+            </div>
+          </div>
+        ) : messages.length === 0 ? (
+          /* Icebreaker empty state ONLY after fetch confirms 0 messages */
           <div className="flex-1 flex flex-col items-center justify-center gap-4 animate-fadeIn">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-[var(--color-text-tertiary)] opacity-50">
               <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 9.75a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />

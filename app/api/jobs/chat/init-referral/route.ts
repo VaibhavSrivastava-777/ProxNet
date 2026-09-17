@@ -161,7 +161,11 @@ export async function POST(request: Request) {
         type: isSameCompany ? "colleague_message" : "referral_request",
         soundType: "message",
         sound: "default",
-        senderAlias: alias2
+        senderAlias: alias2,
+        forceEmail: true,
+        company,
+        jobTitle,
+        initialMessage: initialMsg,
       }
     });
   } catch (err) {

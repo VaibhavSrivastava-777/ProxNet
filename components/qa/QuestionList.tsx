@@ -206,7 +206,7 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [aiSearchSuggestions, setAiSearchSuggestions] = useState<any[]>([]);
   const [searchingAI, setSearchingAI] = useState(false);
-  const [filter2km, setFilter2km] = useState(true);
+  const [filter2km, setFilter2km] = useState(false);
   const [locationMode, setLocationMode] = useState<"home" | "office">("home");
   const [filtersExpanded, setFiltersExpanded] = useState(false);
 
@@ -461,17 +461,20 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
       return item.data.unread === true;
     }
     if (filter2km) {
-      if (item.data.distance === null || item.data.distance === undefined || item.data.distance > 2000) {
+      const isUnrespondedIncoming = item.type === "incoming" && item.data.status !== "responded";
+      if (isUnrespondedIncoming && (item.data.distance === null || item.data.distance === undefined || item.data.distance > 2000)) {
         return false;
       }
     }
     if (item.type === "asked") {
       const q = item.data;
-      return q.latest_message_body && q.latest_message_sender !== "asker";
+      const hasUnreadNotif = q.session_id ? notifications.some((n: any) => !n.is_read && n.url === `/chat/${q.session_id}`) : false;
+      return hasUnreadNotif || (q.latest_message_body && q.latest_message_sender !== "asker");
     } else {
       const q = item.data;
       const hasResponse = q.status === "responded";
-      return (!hasResponse) || (q.latest_message_body && q.latest_message_sender !== "responder");
+      const hasUnreadNotif = q.session_id ? notifications.some((n: any) => !n.is_read && n.url === `/chat/${q.session_id}`) : false;
+      return (!hasResponse) || hasUnreadNotif || (q.latest_message_body && q.latest_message_sender !== "responder");
     }
   }).length;
 
@@ -483,16 +486,21 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
       return true;
     }
     if (filter2km) {
-      if (item.data.distance === null || item.data.distance === undefined || item.data.distance > 2000) {
+      const isUnrespondedIncoming = item.type === "incoming" && item.data.status !== "responded";
+      if (isUnrespondedIncoming && (item.data.distance === null || item.data.distance === undefined || item.data.distance > 2000)) {
         return false;
       }
     }
     if (activeTab === "unread") {
       if (item.type === "asked") {
-        return item.data.latest_message_body && item.data.latest_message_sender !== "asker";
+        const q = item.data;
+        const hasUnreadNotif = q.session_id ? notifications.some((n: any) => !n.is_read && n.url === `/chat/${q.session_id}`) : false;
+        return hasUnreadNotif || (q.latest_message_body && q.latest_message_sender !== "asker");
       } else {
-        const hasResponse = item.data.status === "responded";
-        return (!hasResponse) || (item.data.latest_message_body && item.data.latest_message_sender !== "responder");
+        const q = item.data;
+        const hasResponse = q.status === "responded";
+        const hasUnreadNotif = q.session_id ? notifications.some((n: any) => !n.is_read && n.url === `/chat/${q.session_id}`) : false;
+        return (!hasResponse) || hasUnreadNotif || (q.latest_message_body && q.latest_message_sender !== "responder");
       }
     }
     return true;

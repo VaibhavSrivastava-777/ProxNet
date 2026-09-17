@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { formatDistanceToNow } from "date-fns";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { playNotificationSound } from "@/lib/sound";
+import { CompanyLogo } from "@/components/qa/QuestionList";
 
 function formatAbsoluteTime(ts: string): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -17,19 +17,90 @@ interface Props {
 
 export function JobChatRoom({ threadId, userId }: Props) {
   const [thread, setThread] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`job_chat_cache_${threadId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed.messages)) return parsed.messages;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [initialLoading, setInitialLoading] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem(`job_chat_cache_${threadId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed.messages) && parsed.messages.length > 0) return false;
+        }
+      } catch (e) {}
+    }
+    return true;
+  });
   const [myAlias, setMyAlias] = useState("");
   const [otherAlias, setOtherAlias] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [roleTitle, setRoleTitle] = useState("");
   const [myRevealAgreed, setMyRevealAgreed] = useState(false);
   const [otherRevealAgreed, setOtherRevealAgreed] = useState(false);
   const [otherContact, setOtherContact] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [revealing, setRevealing] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState("100dvh");
   
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const supabase = createBrowserClient();
+
+  // Manage visual viewport for native mobile keyboard handling
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+
+    const handleViewportChange = () => {
+      setViewportHeight(`${window.visualViewport!.height}px`);
+    };
+
+    window.visualViewport.addEventListener("resize", handleViewportChange);
+    window.visualViewport.addEventListener("scroll", handleViewportChange);
+    handleViewportChange();
+
+    return () => {
+      window.visualViewport!.removeEventListener("resize", handleViewportChange);
+      window.visualViewport!.removeEventListener("scroll", handleViewportChange);
+    };
+  }, []);
+
+  // Lock body scroll while in chat room
+  useEffect(() => {
+    const originalPadding = document.body.style.paddingBottom;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    
+    document.body.style.paddingBottom = "0px";
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.paddingBottom = originalPadding;
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, []);
+
+  // Auto-grow textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+    }
+  }, [input]);
 
   useEffect(() => {
     fetchData();
@@ -51,7 +122,7 @@ export function JobChatRoom({ threadId, userId }: Props) {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "job_threads", filter: `id=eq.${threadId}` },
         () => {
-          fetchData(); // refetch to get updated status and contact info
+          fetchData();
         }
       )
       .subscribe();
@@ -71,32 +142,68 @@ export function JobChatRoom({ threadId, userId }: Props) {
       if (res.ok) {
         const data = await res.json();
         setThread(data.thread);
-        setMessages(data.messages);
-        setMyAlias(data.myAlias);
-        setOtherAlias(data.otherAlias);
-        setMyRevealAgreed(data.myRevealAgreed);
-        setOtherRevealAgreed(data.otherRevealAgreed);
+        setMessages(data.messages || []);
+        setMyAlias(data.myAlias || "");
+        setOtherAlias(data.otherAlias || "");
+        setMyRevealAgreed(data.myRevealAgreed || false);
+        setOtherRevealAgreed(data.otherRevealAgreed || false);
         if (data.otherContact) {
           setOtherContact(data.otherContact);
         }
+
+        const postObj = Array.isArray(data.thread?.post) ? data.thread.post[0] : data.thread?.post;
+        if (postObj) {
+          setCompanyName(postObj.company || "");
+          setRoleTitle(postObj.role || "");
+        }
+
+        try {
+          sessionStorage.setItem(`job_chat_cache_${threadId}`, JSON.stringify({
+            messages: data.messages || [],
+            myAlias: data.myAlias || "",
+            otherAlias: data.otherAlias || "",
+          }));
+        } catch (e) {}
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setInitialLoading(false);
     }
   }
 
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSend(e?: React.FormEvent) {
+    if (e) e.preventDefault();
     if (!input.trim() || sending) return;
     setSending(true);
     
+    const textToSend = input.trim();
+    setInput("");
+
+    // Optimistic message append
+    const tempMsg = {
+      id: `temp-${Date.now()}`,
+      thread_id: threadId,
+      sender_id: userId,
+      body: textToSend,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+
     try {
-      await fetch("/api/jobs/chat/send", {
+      const res = await fetch("/api/jobs/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId, body: input }),
+        body: JSON.stringify({ threadId, body: textToSend }),
       });
-      setInput("");
+      if (!res.ok) {
+        // Revert on error
+        setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
+        setInput(textToSend);
+      }
+    } catch (err) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempMsg.id));
+      setInput(textToSend);
     } finally {
       setSending(false);
     }
@@ -115,7 +222,7 @@ export function JobChatRoom({ threadId, userId }: Props) {
         const data = await res.json();
         setMyRevealAgreed(true);
         if (data.allAgreed) {
-          fetchData(); // Get the new status
+          fetchData();
         }
       }
     } finally {
@@ -123,77 +230,131 @@ export function JobChatRoom({ threadId, userId }: Props) {
     }
   }
 
-  if (!thread) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <span className="spinner" />
-      </div>
-    );
-  }
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/jobs");
+    }
+  };
 
   return (
-    <div className="flex flex-col h-full bg-surface relative">
-      {/* Header */}
-      <div className="border-b border-border-light p-4 flex items-center gap-3 bg-surface sticky top-0 z-10">
-        <button onClick={() => router.push("/jobs")} className="btn-icon btn-ghost p-1 mr-1">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+    <div 
+      className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl bg-[var(--color-surface)] md:border-x border-[var(--color-border-light)] shadow-md flex flex-col overflow-hidden"
+      style={{ height: viewportHeight }}
+    >
+      {/* Native App Header Bar */}
+      <div 
+        className="flex items-center gap-3 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] px-4 py-3 shrink-0 z-20"
+        style={{ paddingTop: "calc(12px + env(safe-area-inset-top))" }}
+      >
+        <button
+          onClick={handleBack}
+          className="btn-icon text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] rounded-full p-1 cursor-pointer"
+          style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center" }}
+          aria-label="Back"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
         </button>
-        <div className="avatar avatar-sm bg-primary-subtle text-primary font-bold">
-          {otherAlias.charAt(0)}
-        </div>
-        <div>
-          <h3 className="text-body font-bold text-text">{otherAlias}</h3>
-          <p className="text-caption text-text-secondary">Job Referral Chat</p>
+
+        {companyName ? (
+          <CompanyLogo company={companyName} size={40} />
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0 border border-primary/20">
+            {otherAlias ? otherAlias.charAt(0).toUpperCase() : "🤝"}
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold truncate text-[var(--color-text)] m-0 leading-tight">
+              {otherAlias || "Referral Partner"}
+            </h3>
+            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 shrink-0">
+              Referral
+            </span>
+          </div>
+          <p className="text-[11px] text-[var(--color-text-secondary)] truncate m-0 mt-0.5">
+            {roleTitle ? `Role: ${roleTitle}` : "Job Referral Conversation"}
+          </p>
         </div>
       </div>
 
-      {/* Reveal Banner */}
-      {thread.status === "active" && !myRevealAgreed && (
-        <div className="bg-primary-subtle p-3 m-4 rounded-lg flex items-start gap-3 border border-primary/20">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-primary shrink-0 mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          <div className="flex-1">
-            <p className="text-sm text-text font-medium mb-1">Share Professional Identity?</p>
-            <p className="text-xs text-text-secondary mb-2">If you both agree, your LinkedIn profile (or email) will be revealed to each other to take this conversation forward.</p>
-            <button onClick={handleReveal} disabled={revealing} className="btn btn-primary btn-sm text-xs">
-              {revealing ? <span className="spinner-sm" /> : "I'm interested, reveal identity"}
-            </button>
+      {/* Compact Reveal Identity Banner */}
+      {thread && thread.status === "active" && !myRevealAgreed && (
+        <div className="mx-3 mt-2 p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-between gap-3 shrink-0 animate-fadeIn">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base shrink-0">🤝</span>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-purple-900 dark:text-purple-200 m-0 truncate">Ready to reveal identities?</p>
+              <p className="text-[11px] text-purple-700 dark:text-purple-300 m-0 truncate">Share LinkedIn / contact details when both agree</p>
+            </div>
           </div>
+          <button 
+            onClick={handleReveal} 
+            disabled={revealing} 
+            className="btn btn-xs btn-primary px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 cursor-pointer shadow-xs"
+          >
+            {revealing ? "Sharing..." : "Reveal Identity"}
+          </button>
         </div>
       )}
 
-      {thread.status === "reveal_pending" && myRevealAgreed && (
-        <div className="bg-surface-secondary p-3 m-4 rounded-lg flex items-center gap-3 border border-border">
+      {thread && thread.status === "reveal_pending" && myRevealAgreed && (
+        <div className="mx-3 mt-2 p-2.5 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex items-center gap-2 text-xs text-[var(--color-text-secondary)] shrink-0 animate-fadeIn">
           <span className="spinner-sm text-primary shrink-0" />
-          <p className="text-sm text-text-secondary">You agreed to reveal. Waiting for the other party...</p>
+          <span>You agreed to reveal. Waiting for the other party to accept...</span>
         </div>
       )}
 
-      {thread.status === "revealed" && (
-        <div className="bg-success/10 p-3 m-4 rounded-lg flex items-center gap-3 border border-success/30">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-success shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" /></svg>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-success-content">Identities Revealed!</p>
+      {thread && thread.status === "revealed" && (
+        <div className="mx-3 mt-2 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between gap-2 text-xs shrink-0 animate-fadeIn">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-emerald-600 dark:text-emerald-400 font-bold shrink-0">✅ Identities Revealed:</span>
             {otherContact && (
-              <p className="text-xs text-text mt-1">
-                Contact:{" "}
+              <span className="truncate text-emerald-800 dark:text-emerald-200 font-medium">
                 {otherContact.includes("linkedin.com") ? (
-                  <a href={otherContact} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                    {otherContact}
+                  <a href={otherContact} target="_blank" rel="noopener noreferrer" className="underline font-semibold text-primary">
+                    View LinkedIn Profile ↗
                   </a>
                 ) : (
-                  <strong>{otherContact}</strong>
+                  otherContact
                 )}
-              </p>
+              </span>
             )}
           </div>
         </div>
       )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 whatsapp-chat-bg">
-        {messages.length === 0 ? (
-          <div className="h-full flex items-center justify-center">
-            <p className="text-sm text-text-tertiary">No messages yet. Send a message to start!</p>
+      {/* Message Area */}
+      <div 
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto p-4 flex flex-col whatsapp-chat-bg gap-2"
+      >
+        {initialLoading && messages.length === 0 ? (
+          <div className="flex-1 flex flex-col justify-end gap-3 p-4 animate-pulse">
+            <div className="flex items-start gap-2 max-w-[70%]">
+              <div className="w-8 h-8 rounded-full bg-[var(--color-border-light)] shrink-0" />
+              <div className="p-3 rounded-2xl rounded-bl-xs bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] space-y-2 w-48">
+                <div className="h-3 bg-[var(--color-border-light)] rounded w-full" />
+                <div className="h-3 bg-[var(--color-border-light)] rounded w-3/4" />
+              </div>
+            </div>
+            <div className="flex items-end justify-end gap-2 max-w-[70%] ml-auto">
+              <div className="p-3 rounded-2xl rounded-br-xs bg-[var(--color-primary)]/15 border border-[var(--color-primary)]/20 space-y-2 w-56">
+                <div className="h-3 bg-[var(--color-primary)]/30 rounded w-full" />
+                <div className="h-3 bg-[var(--color-primary)]/30 rounded w-2/3 ml-auto" />
+              </div>
+            </div>
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center p-8">
+            <span className="text-3xl">🤝</span>
+            <p className="text-sm font-semibold text-[var(--color-text)] m-0">No messages yet</p>
+            <p className="text-xs text-[var(--color-text-secondary)] m-0">Send a warm pitch to get this referral conversation going!</p>
           </div>
         ) : (
           messages.map((m, idx) => {
@@ -202,46 +363,50 @@ export function JobChatRoom({ threadId, userId }: Props) {
 
             if (isSystem) {
               return (
-                <div key={idx} className="flex justify-center my-4">
-                  <div className="bg-surface-secondary px-3 py-1.5 rounded-full border border-border-light text-center">
-                    <p className="text-[10px] text-text-tertiary font-medium">{m.body}</p>
+                <div key={m.id || idx} className="flex justify-center my-2">
+                  <div className="bg-[var(--color-surface-secondary)] px-3 py-1 rounded-full border border-[var(--color-border-light)] text-center shadow-2xs">
+                    <p className="text-[10px] text-[var(--color-text-tertiary)] font-medium m-0">{m.body}</p>
                   </div>
                 </div>
               );
             }
 
-            const borderRadius = isMe ? "8px 8px 0px 8px" : "8px 8px 8px 0px";
+            const borderRadius = isMe ? "14px 14px 2px 14px" : "14px 14px 14px 2px";
+            const isPending = String(m.id).startsWith("temp-");
 
             return (
-              <div key={idx} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+              <div key={m.id || idx} className={`flex flex-col ${isMe ? "items-end ml-auto" : "items-start mr-auto"} max-w-[85%]`}>
                 <div
-                  className={`px-3 py-1.5 text-[15px] relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-[80%] ${
+                  className={`px-3.5 py-2 text-sm relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] ${
                     isMe
                       ? "bg-[var(--whatsapp-bubble-sent)] text-[var(--whatsapp-text)]"
                       : "bg-[var(--whatsapp-bubble-received)] text-[var(--whatsapp-text)]"
                   }`}
                   style={{
                     borderRadius,
-                    paddingRight: isMe ? "62px" : "48px",
+                    paddingRight: isMe ? "56px" : "46px",
                     paddingBottom: "8px",
                   }}
                 >
-                  <p className="whitespace-pre-wrap break-words m-0 leading-normal">{m.body}</p>
+                  <p className="whitespace-pre-wrap break-words m-0 leading-relaxed text-[13.5px]">{m.body}</p>
                   
-                  {/* WhatsApp-like Inline Timestamp */}
-                  <div className="absolute bottom-[3px] right-[7px] flex items-center gap-0.5 text-[9px] text-gray-500/80 dark:text-gray-400/60 select-none">
-                    <span>{formatAbsoluteTime(m.created_at)}</span>
+                  {/* Timestamp & checkmarks */}
+                  <div className="absolute bottom-[3px] right-[8px] flex items-center gap-1 text-[9.5px] text-gray-500/80 dark:text-gray-400/60 select-none">
+                    <span>{m.created_at ? formatAbsoluteTime(m.created_at) : ""}</span>
                     {isMe && (
                       <span className="flex items-center ml-0.5">
-                        {/* Double Blue Ticks */}
-                        <div className="relative w-4 h-3 flex items-center justify-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-0 top-0.5 w-3 h-3 text-[#53bdeb]">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                          </svg>
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-[3px] top-0.5 w-3 h-3 text-[#53bdeb]">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                          </svg>
-                        </div>
+                        {isPending ? (
+                          <span className="opacity-50">🕒</span>
+                        ) : (
+                          <div className="relative w-3.5 h-3 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-0 top-0.5 w-3 h-3 text-[#53bdeb]">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                            </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-[3px] top-0.5 w-3 h-3 text-[#53bdeb]">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                            </svg>
+                          </div>
+                        )}
                       </span>
                     )}
                   </div>
@@ -253,37 +418,42 @@ export function JobChatRoom({ threadId, userId }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <form onSubmit={handleSend} className="p-3 border-t border-border-light bg-[var(--whatsapp-bg)]/90 backdrop-blur-sm flex gap-2 items-end">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a message..."
-          className="input flex-1 min-h-[44px] max-h-32 rounded-[24px] py-2.5 px-4 resize-none leading-tight bg-[var(--color-surface)] border-none shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:ring-0 focus:outline-none text-[var(--color-text)] transition-colors"
-          rows={1}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSend(e);
-            }
-          }}
-        />
+      {/* Floating Bottom Input Bar */}
+      <form 
+        onSubmit={handleSend} 
+        className="flex items-end gap-2 border-t border-[var(--color-border-light)] p-2.5 bg-[var(--whatsapp-bg)]/90 backdrop-blur-sm shrink-0 z-20"
+        style={{ paddingBottom: "calc(10px + env(safe-area-inset-bottom))" }}
+      >
+        <div className="flex-1 relative">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type a message..."
+            className="input w-full min-h-[38px] max-h-[120px] rounded-[20px] py-2 px-4 resize-none leading-normal bg-[var(--color-surface)] border-none shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:ring-0 focus:outline-none text-[var(--color-text)] text-sm transition-colors"
+            rows={1}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+          />
+        </div>
         <button
           type="submit"
           disabled={!input.trim() || sending}
-          className="btn-icon shrink-0 w-11 h-11 mb-0 flex items-center justify-center rounded-full transition-all active:scale-95 disabled:opacity-50 disabled:bg-gray-300 disabled:text-gray-500"
+          className="btn-icon shrink-0 w-10 h-10 mb-0 flex items-center justify-center rounded-full transition-all active:scale-95 disabled:opacity-50 disabled:bg-gray-300 disabled:text-gray-500 cursor-pointer shadow-xs"
           style={{
             backgroundColor: input.trim() ? "#00a884" : "#cbd5e1",
             color: "white",
-            height: "44px",
-            width: "44px",
           }}
         >
           {sending ? (
             <span className="spinner-sm" style={{ borderTopColor: "white" }} />
           ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 ml-0.5">
-              <path d="M3.478 2.404a.75.75 0 00-.926.941l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 ml-0.5">
+              <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
             </svg>
           )}
         </button>

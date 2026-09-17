@@ -803,49 +803,42 @@ export function ProximityMap() {
       {/* ── 4. Chat/Question Dialog Modal with suggested prefill message ── */}
       {chatTarget && center && (
         <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-            padding: "1rem",
-          }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm animate-fadeIn"
           onClick={() => setChatTarget(null)}
         >
           <div
-            style={{ width: "100%", maxWidth: "500px", maxHeight: "90vh", overflowY: "auto" }}
+            className="bg-[var(--color-surface)] w-full sm:max-w-xl rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] flex flex-col max-h-[92dvh] overflow-hidden animate-slideUp sm:animate-scaleIn"
             onClick={(e) => e.stopPropagation()}
-            className="animate-scaleIn"
           >
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "-36px", marginRight: "12px", position: "relative", zIndex: 10 }}>
+            <div className="w-10 h-1 bg-[var(--color-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
+            <div className="flex justify-between items-center px-4 py-3 sm:px-5 sm:py-3.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50 shrink-0">
+              <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0">
+                Direct Message
+              </h3>
               <button
-                className="btn-icon btn-ghost"
                 onClick={() => setChatTarget(null)}
-                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border-light)" }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors border-none bg-transparent cursor-pointer"
+                aria-label="Close"
               >
                 ✕
               </button>
             </div>
-            <QuestionForm
-              defaultLat={center.lat}
-              defaultLng={center.lng}
-              defaultRadius={filter2km ? 2000 : 100000}
-              targetUser={{
-                id: chatTarget.id,
-                job_title: chatTarget.job_title,
-                company: chatTarget.company,
-              }}
-              initialMsg={getChatSuggestion(chatTarget)}
-              onPosted={() => {
-                setTimeout(() => setChatTarget(null), 1500);
-              }}
-            />
+            <div className="overflow-y-auto flex-1">
+              <QuestionForm
+                defaultLat={center.lat}
+                defaultLng={center.lng}
+                defaultRadius={filter2km ? 2000 : 100000}
+                targetUser={{
+                  id: chatTarget.id,
+                  job_title: chatTarget.job_title,
+                  company: chatTarget.company,
+                }}
+                initialMsg={getChatSuggestion(chatTarget)}
+                onPosted={() => {
+                  setTimeout(() => setChatTarget(null), 1500);
+                }}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -853,44 +846,37 @@ export function ProximityMap() {
       {/* Map Company Q&A Modal */}
       {selectedCompany && center && (
         <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-            padding: "1rem",
-          }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm animate-fadeIn"
           onClick={() => setSelectedCompany(null)}
         >
           <div
-            style={{ width: "100%", maxWidth: "500px", maxHeight: "90vh", overflowY: "auto" }}
+            className="bg-[var(--color-surface)] w-full sm:max-w-xl rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] flex flex-col max-h-[92dvh] overflow-hidden animate-slideUp sm:animate-scaleIn"
             onClick={(e) => e.stopPropagation()}
-            className="animate-scaleIn"
           >
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "-36px", marginRight: "12px", position: "relative", zIndex: 10 }}>
+            <div className="w-10 h-1 bg-[var(--color-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
+            <div className="flex justify-between items-center px-4 py-3 sm:px-5 sm:py-3.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50 shrink-0">
+              <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0">
+                Ask {selectedCompany} Peers
+              </h3>
               <button
-                className="btn-icon btn-ghost"
                 onClick={() => setSelectedCompany(null)}
-                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border-light)" }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors border-none bg-transparent cursor-pointer"
+                aria-label="Close"
               >
                 ✕
               </button>
             </div>
-            <QuestionForm
-              defaultLat={center.lat}
-              defaultLng={center.lng}
-              defaultRadius={filter2km ? 2000 : 100000}
-              fixedCompany={selectedCompany}
-              onPosted={() => {
-                setTimeout(() => setSelectedCompany(null), 1500);
-              }}
-            />
+            <div className="overflow-y-auto flex-1">
+              <QuestionForm
+                defaultLat={center.lat}
+                defaultLng={center.lng}
+                defaultRadius={filter2km ? 2000 : 100000}
+                fixedCompany={selectedCompany}
+                onPosted={() => {
+                  setTimeout(() => setSelectedCompany(null), 1500);
+                }}
+              />
+            </div>
           </div>
         </div>
       )}

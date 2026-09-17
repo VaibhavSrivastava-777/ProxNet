@@ -257,29 +257,31 @@ export function generateContextEmail(payload: EmailTemplatePayload): GeneratedEm
   }
 
   // 5. Referral Request / Colleague Message
-  else if (notifType === "referral_request" || notifType === "colleague_message") {
+  else if (notifType === "referral_request" || notifType === "job_referral_request" || notifType === "colleague_message") {
     category = "message";
     badgeText = "REFERRAL REQUEST";
     badgeColor = "#7c3aed";
     badgeBg = "#f5f3ff";
     heading = "Referral Request from a Colleague";
-    ctaLabel = "View Referral Request &rarr;";
+    ctaLabel = "View & Reply in Chat &rarr;";
     ctaUrl = actionUrl;
+
+    const pitchPreview = data?.initialMessage || body;
 
     bodyHtml = `
       <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 16px 0;">
-        A colleague or verified neighbor in your network reached out regarding a career opportunity at your company.
+        A verified professional in your ProxNet network has reached out for a referral at your company:
       </p>
-      <div style="background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px;">
-        <p style="font-size: 14px; color: #581c87; font-weight: 600; margin: 0 0 4px 0;">
+      <div style="background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+        <p style="font-size: 15px; color: #581c87; font-weight: 700; margin: 0 0 8px 0;">
           ${escapeHtml(title)}
         </p>
-        <p style="font-size: 14px; color: #6b21a8; margin: 0; line-height: 1.5;">
-          "${escapeHtml(body)}"
+        <p style="font-size: 14px; color: #4b164c; margin: 0; line-height: 1.6; white-space: pre-wrap;">
+          "${escapeHtml(pitchPreview)}"
         </p>
       </div>
-      <p style="font-size: 13px; color: #64748b; margin: 0;">
-        Providing internal referrals helps great local talent and builds your karma network score on ProxNet.
+      <p style="font-size: 13px; color: #64748b; margin: 0 0 16px 0;">
+        Providing internal referrals helps great local talent connect with your team and earns you network karma on ProxNet.
       </p>
     `;
   }

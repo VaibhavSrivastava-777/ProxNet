@@ -39,8 +39,10 @@ export async function GET() {
     const latestMessage = messages.length > 0 ? messages[0].body : "No messages yet";
     const latestMessageAt = messages.length > 0 ? messages[0].created_at : t.created_at;
 
-    const otherParticipant = t.job_participants.find((p: any) => p.user_id !== user.id);
+    const otherParticipant = t.job_participants?.find((p: any) => p.user_id !== user.id);
     const postObj = Array.isArray(t.post) ? t.post[0] : t.post;
+    const responderObj = Array.isArray(t.responder) ? t.responder[0] : t.responder;
+    const postCompany = postObj?.company || responderObj?.company || "";
 
     return {
       id: t.id,
@@ -49,7 +51,8 @@ export async function GET() {
       latestMessage,
       latestMessageAt,
       postType: postObj?.type,
-      postRole: postObj?.role
+      postRole: postObj?.role || responderObj?.role,
+      postCompany,
     };
   });
 

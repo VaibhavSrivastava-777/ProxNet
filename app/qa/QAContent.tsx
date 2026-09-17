@@ -133,23 +133,46 @@ export function QAContent() {
         <div className="mx-auto max-w-4xl p-3 md:p-4 animate-fadeIn flex flex-col gap-[0.75rem] pb-[2rem]">
           
           {formOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-              <div className="bg-[var(--color-surface)] w-full max-w-2xl rounded-xl shadow-xl border border-[var(--color-border)] flex flex-col h-[85vh] max-h-[800px] animate-scaleIn">
-                <div className="flex justify-between items-center p-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] shrink-0">
-                  <h3 className="text-h3 m-0 flex items-center gap-2 text-[var(--color-text)]">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--color-accent)]">
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                      <line x1="12" y1="17" x2="12.01" y2="17" />
+            <div
+              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm animate-fadeIn"
+              onClick={() => setFormOpen(false)}
+            >
+              <div
+                className="bg-[var(--color-surface)] w-full sm:max-w-xl rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] flex flex-col max-h-[92dvh] overflow-hidden animate-slideUp sm:animate-scaleIn"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Mobile Grab Handle */}
+                <div className="w-10 h-1 bg-[var(--color-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
+
+                <div className="flex justify-between items-center px-4 py-3 sm:px-5 sm:py-3.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50 shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-[var(--color-primary)]/10 text-[var(--color-primary)] flex items-center justify-center shrink-0">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0 leading-tight">
+                        {directTarget ? "Direct Message" : "Start a Conversation"}
+                      </h3>
+                      <p className="text-[11px] text-[var(--color-text-secondary)] m-0 leading-none mt-0.5">
+                        {directTarget ? `Private chat with ${directTarget.job_title}` : "Reach verified tech professionals nearby"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setFormOpen(false)}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors border-none bg-transparent cursor-pointer"
+                    aria-label="Close"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
-                    Ask a Question
-                  </h3>
-                  <button onClick={() => setFormOpen(false)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
                   </button>
                 </div>
-                
-                <div className="p-0 overflow-y-auto flex-1 flex flex-col">
+
+                <div className="overflow-y-auto flex-1 overscroll-contain">
                   <QuestionForm
                     targetUser={directTarget || undefined}
                     onPosted={() => {
