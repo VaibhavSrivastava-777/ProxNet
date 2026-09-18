@@ -37,6 +37,14 @@ function getReasonToEngage(myProfile: any, targetPerson: any): { reason: string;
     };
   }
 
+  // 1.5 Shared Institute / Alumni Network
+  if (myProfile?.institute_name && targetPerson?.institute_name && myProfile.institute_name.toLowerCase() === targetPerson.institute_name.toLowerCase()) {
+    return {
+      reason: `Both of you are alumni of ${targetPerson.institute_name}`,
+      category: "education"
+    };
+  }
+
   // 2. Educational Institute / Alumni Network (strict word-boundary regex only)
   const educationKeywords = [
     { code: "iim", label: "IIM" },
@@ -723,6 +731,11 @@ export function ProximityMap() {
                   <span className="text-[11px] text-[var(--color-text-tertiary)] mt-0.5 truncate">
                     {selectedPerson.job_title}
                   </span>
+                  {selectedPerson.institute_name && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full w-fit mt-1">
+                      🎓 {selectedPerson.institute_name}
+                    </span>
+                  )}
                 </div>
               </div>
               <button 

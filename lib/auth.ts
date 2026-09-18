@@ -45,7 +45,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "development-secret-key-for-nextauth-verification",
   callbacks: {
-    async signIn({ account, user }) {
+    async signIn({ account, user, profile }) {
       const isCredentials = account?.provider === "credentials";
       const sub = isCredentials ? user?.id : account?.providerAccountId;
       if (!sub) return false;
@@ -66,13 +66,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         headline?: string | null;
         profileUrl?: string | null;
       };
+
+      const prof = profile as Record<string, any> | undefined;
+      const linkedinProfileUrl =
+        u.profileUrl ||
+        (prof?.vanityName ? `https://www.linkedin.com/in/${prof.vanityName}` : null) ||
+        (prof?.sub && account?.provider === "linkedin" && !/^\d+$/.test(prof.sub)
+          ? `https://www.linkedin.com/in/${prof.sub}`
+          : null);
+
+      const picture = u.image || prof?.picture || null;
+      const headline = u.headline || prof?.headline || null;
+
       const dbUser = await upsertOAuthUser({
         sub: sub,
-        email: u.email ?? null,
-        name: u.name ?? null,
-        picture: u.image ?? null,
-        linkedinProfileUrl: u.profileUrl ?? null,
-        headline: u.headline ?? null,
+        email: u.email || prof?.email || null,
+        name: u.name || prof?.name || null,
+        picture: picture,
+        linkedinProfileUrl: linkedinProfileUrl,
+        headline: headline,
         referrerCode,
       });
       return !!dbUser;

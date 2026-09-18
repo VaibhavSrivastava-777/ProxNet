@@ -53,6 +53,18 @@ export async function GET(request: Request) {
   
   const followingIds = new Set((following ?? []).map((f) => f.following_id));
 
+  // Fetch affiliations for all users
+  const { data: affiliations } = await supabase
+    .from("user_institute_affiliations")
+    .select("user_id, institute:institutes(name, short_code)");
+
+  const affiliationMap = new Map<string, string>();
+  for (const aff of (affiliations ?? []) as any[]) {
+    if (aff.user_id && aff.institute?.name && !affiliationMap.has(aff.user_id)) {
+      affiliationMap.set(aff.user_id, aff.institute.short_code || aff.institute.name);
+    }
+  }
+
   const nearbyPeople: any[] = [];
 
   for (const u of (users ?? []) as User[]) {
@@ -101,6 +113,7 @@ export async function GET(request: Request) {
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
         distance: minDistance === Infinity ? null : minDistance,
         is_followed: followingIds.has(u.id),
+        institute_name: affiliationMap.get(u.id) ?? null,
       });
     }
   }

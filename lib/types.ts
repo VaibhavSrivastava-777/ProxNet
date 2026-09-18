@@ -93,3 +93,26 @@ export interface CompanyCluster {
   lng: number;
   titles?: Record<string, number>;
 }
+
+export interface Institute {
+  id: string;
+  name: string;
+  short_code: string | null;
+  verified_domains: string[];
+  logo_url: string | null;
+  category: "iit" | "iim" | "nit" | "bits" | "iiit" | "university" | "other" | string;
+  created_at: string;
+}
+
+export interface UserInstituteAffiliation {
+  id: string;
+  user_id: string;
+  institute_id: string;
+  degree: string | null;
+  batch_year: number | null;
+  verification_status: "verified_domain" | "verified_manual" | "unverified";
+  verified_at: string | null;
+  created_at: string;
+  institute?: Institute;
+}
+

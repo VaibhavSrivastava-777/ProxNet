@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import { LocationAutocomplete } from "@/components/map/LocationAutocomplete";
-import type { User, UserVisibility } from "@/lib/types";
+import type { User, UserVisibility, Institute, UserInstituteAffiliation } from "@/lib/types";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { isProfileIncomplete } from "@/lib/profile-validation";
 import { calculateTier } from "@/lib/network-score";
@@ -204,36 +204,47 @@ export function ProfileForm({ initialUser }: Props) {
   const [tagInput, setTagInput] = useState("");
   const [showRechargeModal, setShowRechargeModal] = useState(false);
 
+  const [institutes, setInstitutes] = useState<Institute[]>([]);
+  const [affiliations, setAffiliations] = useState<UserInstituteAffiliation[]>([]);
+  const [loadingAffiliations, setLoadingAffiliations] = useState(false);
+  const [showAddAffiliation, setShowAddAffiliation] = useState(false);
+  const [selectedInstituteId, setSelectedInstituteId] = useState("");
+  const [affiliationDegree, setAffiliationDegree] = useState("");
+  const [affiliationBatchYear, setAffiliationBatchYear] = useState("");
+  const [savingAffiliation, setSavingAffiliation] = useState(false);
+
   useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => {
-        setToast(null);
-      }, 6000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
+    // Load institutes directory
+    fetch("/api/institutes")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.institutes) setInstitutes(data.institutes);
+      })
+      .catch(() => {});
 
-  const showName = !initialUser.full_name?.trim();
-  const showEmail = !initialUser.email?.trim();
-  const showCompany = !initialUser.company?.trim();
-  const showJobTitle = !initialUser.job_title?.trim();
-  const showPhoto = !initialUser.profile_photo_url?.trim();
-  const showLinkedIn = !initialUser.linkedin_profile_url?.trim();
-  const showHomeLocation = initialUser.home_lat == null || initialUser.home_lng == null;
+    // Load user affiliations
+    setLoadingAffiliations(true);
+    fetch("/api/profile/affiliations")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.affiliations) setAffiliations(data.affiliations);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingAffiliations(false));
+  }, []);
 
-  const hasMissingFields =
-    showName ||
-    showEmail ||
-    showPhoto ||
-    showLinkedIn ||
-    showHomeLocation;
+  const showName = !user.full_name?.trim();
+  const showEmail = !user.email?.trim();
+  const showHomeLocation = user.home_lat == null || user.home_lng == null;
+
+  const hasMissingFields = showName || showEmail || showHomeLocation;
   const [dismissedModal, setDismissedModal] = useState(false);
   const showModal = hasMissingFields && !dismissedModal;
 
   useEffect(() => {
-    // If onboarding modal is shown and home location is not set, request coordinates & format name
-    if (showModal && user.home_lat == null && user.home_lng == null) {
-      if (navigator.geolocation) {
+    // Automatically detect current GPS location and set as Home if not yet set
+    if (user.home_lat == null && user.home_lng == null) {
+      if (typeof window !== "undefined" && navigator.geolocation) {
         setFetchingGeoAddress(true);
         navigator.geolocation.getCurrentPosition(
           async (position) => {
@@ -246,6 +257,7 @@ export function ProfileForm({ initialUser }: Props) {
               home_lng: lng,
             }));
 
+            let resolvedAddress = "";
             const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
             if (apiKey) {
               try {
@@ -253,30 +265,45 @@ export function ProfileForm({ initialUser }: Props) {
                 if (res.ok) {
                   const data = await res.json();
                   if (data.results && data.results.length > 0) {
-                    const formatted = data.results[0].formatted_address;
-                    setUser((prev) => ({
-                      ...prev,
-                      home_name: formatted,
-                    }));
+                    resolvedAddress = data.results[0].formatted_address;
                   }
                 }
               } catch (err) {
                 console.error("Google reverse geocode failed:", err);
-              } finally {
-                setFetchingGeoAddress(false);
               }
-            } else {
-              setFetchingGeoAddress(false);
             }
+
+            if (!resolvedAddress) {
+              try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                if (res.ok) {
+                  const data = await res.json();
+                  resolvedAddress = data.display_name || [data.address?.suburb, data.address?.city, data.address?.state].filter(Boolean).join(", ");
+                }
+              } catch (err) {
+                console.warn("Nominatim reverse geocode failed:", err);
+              }
+            }
+
+            if (!resolvedAddress) {
+              resolvedAddress = `Current Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+            }
+
+            setUser((prev) => ({
+              ...prev,
+              home_name: prev.home_name?.trim() ? prev.home_name : resolvedAddress,
+            }));
+            setFetchingGeoAddress(false);
           },
           (err) => {
             console.warn("Geolocation request failed or denied:", err);
             setFetchingGeoAddress(false);
-          }
+          },
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
         );
       }
     }
-  }, [showModal]);
+  }, [user.home_lat, user.home_lng]);
 
   useEffect(() => {
     if (searchParams && searchParams.get("prompt") === "resume") {
@@ -342,6 +369,80 @@ export function ProfileForm({ initialUser }: Props) {
       });
     } finally {
       setFetchingLinkedInDetails(false);
+    }
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  // Auto-parse LinkedIn profile on load if URL is present but company or title is missing
+  useEffect(() => {
+    if (user.linkedin_profile_url && (!user.company?.trim() || !user.job_title?.trim())) {
+      handleLinkedInBlur(user.linkedin_profile_url);
+    }
+  }, [user.linkedin_profile_url]);
+
+  const handleAddAffiliation = async () => {
+    if (!selectedInstituteId) return;
+    setSavingAffiliation(true);
+    try {
+      const res = await fetch("/api/profile/affiliations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          institute_id: selectedInstituteId,
+          degree: affiliationDegree || null,
+          batch_year: affiliationBatchYear ? Number(affiliationBatchYear) : null,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.affiliation) {
+          setAffiliations((prev) => {
+            const filtered = prev.filter((a) => a.id !== data.affiliation.id);
+            return [data.affiliation, ...filtered];
+          });
+          setShowAddAffiliation(false);
+          setSelectedInstituteId("");
+          setAffiliationDegree("");
+          setAffiliationBatchYear("");
+          setToast({
+            message: data.affiliation.verification_status === "verified_domain"
+              ? "✅ Institute affiliation added and auto-verified!"
+              : "Institute affiliation added successfully.",
+            type: "success",
+          });
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Failed to add affiliation");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error adding affiliation");
+    } finally {
+      setSavingAffiliation(false);
+    }
+  };
+
+  const handleDeleteAffiliation = async (id: string) => {
+    if (!confirm("Are you sure you want to remove this institute affiliation?")) return;
+    try {
+      const res = await fetch(`/api/profile/affiliations?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setAffiliations((prev) => prev.filter((a) => a.id !== id));
+        setToast({ message: "Affiliation removed.", type: "success" });
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -425,22 +526,16 @@ export function ProfileForm({ initialUser }: Props) {
 
   const isNameValid = !!user.full_name?.trim();
   const isEmailValid = !!user.email?.trim();
-  const isPhotoValid = !!user.profile_photo_url?.trim();
-  const isLinkedInValid = !!user.linkedin_profile_url?.trim();
   const isHomeLocationValid = user.home_lat != null && user.home_lng != null;
 
   const missingFields: string[] = [];
   if (!isNameValid) missingFields.push("Full Name");
   if (!isEmailValid) missingFields.push("Email Address");
   if (!isHomeLocationValid) missingFields.push("Home Location");
-  if (!isLinkedInValid) missingFields.push("LinkedIn Link");
-  if (!isPhotoValid) missingFields.push("Avatar Photo");
 
   const canSubmit =
     isNameValid &&
     isEmailValid &&
-    isPhotoValid &&
-    isLinkedInValid &&
     isHomeLocationValid &&
     !aliasError;
 
@@ -775,6 +870,29 @@ export function ProfileForm({ initialUser }: Props) {
               <p className="text-caption" style={{ marginTop: 2 }}>
                 {user.email}
               </p>
+            )}
+            {affiliations.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {affiliations.map((aff) => {
+                  const isVerified = aff.verification_status === "verified_domain";
+                  return (
+                    <span
+                      key={aff.id}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full"
+                      style={{
+                        backgroundColor: isVerified ? "var(--color-success-bg, rgba(16, 185, 129, 0.15))" : "var(--color-surface-secondary)",
+                        color: isVerified ? "var(--color-success, #059669)" : "var(--color-primary)",
+                        border: `1px solid ${isVerified ? "rgba(16, 185, 129, 0.3)" : "var(--color-border-light)"}`,
+                      }}
+                      title={isVerified ? "Verified Alumni via institutional email" : "Claimed Alumni affiliation"}
+                    >
+                      🎓 {aff.institute?.name || "Institute"}
+                      {aff.batch_year ? ` '${String(aff.batch_year).slice(-2)}` : ""}
+                      {isVerified ? " ✓" : ""}
+                    </span>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
@@ -1163,6 +1281,170 @@ export function ProfileForm({ initialUser }: Props) {
               }
             />
           </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* ---- Section: Institute & Alumni Network ---- */}
+      <CollapsibleSection
+        icon={<span className="text-base">🎓</span>}
+        title="Institute & Alumni Network"
+        defaultOpen={affiliations.length > 0}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed">
+            Connect with peers and alumni from your alma mater. Signing in or linking an official institute email (e.g. <span className="font-semibold text-[var(--color-text)]">@iitk.ac.in</span>) automatically verifies your alumni badge.
+          </p>
+
+          {/* Affiliations List */}
+          {loadingAffiliations ? (
+            <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)] py-2">
+              <span className="spinner spinner-sm" /> Loading affiliations...
+            </div>
+          ) : affiliations.length === 0 ? (
+            <div className="p-3.5 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-center">
+              <p className="text-xs text-[var(--color-text-secondary)] m-0">
+                No institute affiliations added yet. Claim your alma mater to unlock the alumni network!
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {affiliations.map((aff) => {
+                const isVerified = aff.verification_status === "verified_domain";
+                return (
+                  <div
+                    key={aff.id}
+                    className="flex items-center justify-between p-3 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-sm"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold flex items-center justify-center text-xs shrink-0">
+                        {aff.institute?.short_code || "🎓"}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-semibold text-xs text-[var(--color-text)] m-0">
+                            {aff.institute?.name || "Institute"}
+                          </h4>
+                          <span
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: isVerified ? "var(--color-success-bg, rgba(16, 185, 129, 0.15))" : "var(--color-surface-secondary)",
+                              color: isVerified ? "var(--color-success, #059669)" : "var(--color-primary)",
+                              border: `1px solid ${isVerified ? "rgba(16, 185, 129, 0.3)" : "var(--color-border-light)"}`,
+                            }}
+                          >
+                            {isVerified ? "✅ Verified Alumni" : "🔵 Claimed Alumni"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[var(--color-text-secondary)] m-0 mt-0.5">
+                          {aff.degree || "Alumnus"} {aff.batch_year ? `• Class of ${aff.batch_year}` : ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteAffiliation(aff.id)}
+                      className="text-[var(--color-text-tertiary)] hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer border-none bg-transparent"
+                      title="Remove affiliation"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Add Affiliation Form Toggle */}
+          {!showAddAffiliation ? (
+            <button
+              type="button"
+              onClick={() => setShowAddAffiliation(true)}
+              className="btn btn-secondary btn-sm self-start flex items-center gap-1.5 cursor-pointer text-xs"
+            >
+              <span>+ Add Institute Affiliation</span>
+            </button>
+          ) : (
+            <div className="p-4 rounded-xl border border-[var(--color-primary)]/30 bg-[var(--color-surface-secondary)] flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[var(--color-primary)]">Add Institute Affiliation</span>
+                <button
+                  type="button"
+                  onClick={() => setShowAddAffiliation(false)}
+                  className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] border-none bg-transparent cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <div>
+                <label className="label text-[11px] mb-1 font-semibold">Select Institute *</label>
+                <select
+                  className="input w-full text-xs"
+                  value={selectedInstituteId}
+                  onChange={(e) => setSelectedInstituteId(e.target.value)}
+                >
+                  <option value="">-- Choose your college or institute --</option>
+                  {institutes.map((inst) => (
+                    <option key={inst.id} value={inst.id}>
+                      {inst.name} ({inst.short_code || inst.category.toUpperCase()})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="label text-[11px] mb-1 font-semibold">Degree / Program</label>
+                  <input
+                    className="input w-full text-xs"
+                    value={affiliationDegree}
+                    onChange={(e) => setAffiliationDegree(e.target.value)}
+                    placeholder="e.g. B.Tech Computer Science, MBA"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1 font-semibold">Graduation / Batch Year</label>
+                  <input
+                    type="number"
+                    min="1960"
+                    max="2035"
+                    className="input w-full text-xs"
+                    value={affiliationBatchYear}
+                    onChange={(e) => setAffiliationBatchYear(e.target.value)}
+                    placeholder="e.g. 2020"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAddAffiliation(false)}
+                  className="btn btn-secondary btn-sm text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!selectedInstituteId || savingAffiliation}
+                  onClick={handleAddAffiliation}
+                  className="btn btn-primary btn-sm text-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  {savingAffiliation ? (
+                    <>
+                      <span className="spinner spinner-sm" /> Saving...
+                    </>
+                  ) : (
+                    "Save Affiliation ✓"
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </CollapsibleSection>
 
@@ -1724,55 +2006,31 @@ export function ProfileForm({ initialUser }: Props) {
                 </div>
               </div>
               
-              {/* Profile & Links Section (if photo or linkedin is missing) */}
-              {(showPhoto || showLinkedIn) && (
-                <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-4">
-                  <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5">
-                    🔗 Profile & Links
-                  </h4>
-                  {showLinkedIn && (
-                    <div>
-                      <label className="label font-semibold text-xs mb-1 flex items-center justify-between">
-                        <span>LinkedIn Profile URL <span className="text-red-500">*</span></span>
-                        {fetchingLinkedInDetails && <span className="text-[10px] text-[var(--color-primary)] animate-pulse">Parsing URL details...</span>}
-                      </label>
-                      <div className="flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden focus-within:ring-2 focus-within:ring-[var(--color-primary)]" style={showErrors && !linkedinHandle?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}>
-                        <span className="bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] text-xs font-semibold px-3 flex items-center border-r border-[var(--color-border-light)] select-none shrink-0">
-                          https://www.linkedin.com/in/
-                        </span>
-                        <input
-                          className="w-full bg-transparent px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none"
-                          value={linkedinHandle}
-                          placeholder="VaibhavSrivastava777"
-                          onChange={(e) => handleLinkedInInputChange(e.target.value)}
-                          onBlur={() => {
-                            if (linkedinHandle) {
-                              handleLinkedInBlur(`https://www.linkedin.com/in/${linkedinHandle}`);
-                            }
-                          }}
-                        />
-                      </div>
-                      {showErrors && !user.linkedin_profile_url?.trim() && (
-                        <p className="text-xs text-red-500 mt-1">LinkedIn profile URL is required</p>
-                      )}
-                    </div>
-                  )}
-                  {showPhoto && (
-                    <div>
-                      <label className="label font-semibold text-xs mb-1">Profile Photo URL <span className="text-red-500">*</span></label>
-                      <input
-                        className="input w-full"
-                        style={showErrors && !user.profile_photo_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-                        value={user.profile_photo_url ?? ""}
-                        placeholder="https://example.com/photo.jpg"
-                        required
-                        onChange={(e) => setUser({ ...user, profile_photo_url: e.target.value })}
-                      />
-                      {showErrors && !user.profile_photo_url?.trim() && (
-                        <p className="text-xs text-red-500 mt-1">Profile photo URL is required</p>
-                      )}
-                    </div>
-                  )}
+              {/* Optional LinkedIn Import */}
+              {!user.linkedin_profile_url?.trim() && (
+                <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-2.5 bg-[var(--color-surface)]">
+                  <label className="label font-semibold text-xs flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      🔗 LinkedIn Profile <span className="text-[11px] font-normal text-[var(--color-text-secondary)]">(Optional - auto-fills company & title)</span>
+                    </span>
+                    {fetchingLinkedInDetails && <span className="text-[10px] text-[var(--color-primary)] animate-pulse">Auto-detecting details...</span>}
+                  </label>
+                  <div className="flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden focus-within:ring-2 focus-within:ring-[var(--color-primary)]">
+                    <span className="bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] text-xs font-semibold px-3 flex items-center border-r border-[var(--color-border-light)] select-none shrink-0">
+                      https://www.linkedin.com/in/
+                    </span>
+                    <input
+                      className="w-full bg-transparent px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none"
+                      value={linkedinHandle}
+                      placeholder="username"
+                      onChange={(e) => handleLinkedInInputChange(e.target.value)}
+                      onBlur={() => {
+                        if (linkedinHandle) {
+                          handleLinkedInBlur(`https://www.linkedin.com/in/${linkedinHandle}`);
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1801,67 +2059,63 @@ export function ProfileForm({ initialUser }: Props) {
                 </div>
               )}
 
-              {/* Location Settings Section (if home location is missing) */}
-              {showHomeLocation && (
-                <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-4">
-                  <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5">
-                    📍 Location Settings
+              {/* Location Settings Section */}
+              <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5 m-0">
+                    📍 Home Location
                   </h4>
-                  <p className="text-xs text-[var(--color-text-secondary)]">
-                    Provide your Home location to appear on the local proximity map. <span className="text-red-500">*</span>
-                  </p>
-                  
-                  {/* Home Location */}
-                  <div className="border border-[var(--color-border-light)]/60 rounded-lg p-3 flex flex-col gap-3">
-                    <h5 className="font-semibold text-xs text-[var(--color-primary)] flex items-center gap-1">
-                      🏠 Home Location {fetchingGeoAddress && <span className="text-[10px] text-[var(--color-primary)] animate-pulse font-normal">(Auto-fetching coordinates...)</span>}
-                    </h5>
-                    <div>
-                      <label className="label text-[11px] mb-1">Area / Apartment Complex Name</label>
-                      <LocationAutocomplete
-                        className="input w-full text-sm py-1.5"
-                        style={showErrors && !user.home_name?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-                        value={user.home_name ?? ""}
-                        placeholder="e.g. L&T South City"
-                        onChange={(val) => setUser({ ...user, home_name: val })}
-                        onSelect={({ name, lat, lng }) =>
-                          setUser({
-                            ...user,
-                            home_name: name,
-                            home_lat: lat,
-                            home_lng: lng,
-                          })
-                        }
-                      />
-                      {showErrors && !user.home_name?.trim() && (
-                        <p className="text-xs text-red-500 mt-1">Home location name is required</p>
-                      )}
+                  {user.home_lat != null && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                      ✓ Auto-detected
+                    </span>
+                  )}
+                </div>
+
+                {fetchingGeoAddress && (
+                  <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center gap-2.5 text-xs text-[var(--color-primary)] animate-pulse">
+                    <span className="spinner spinner-sm" /> Auto-detecting your current location for Home tab...
+                  </div>
+                )}
+
+                {user.home_lat != null && (
+                  <div className="p-2.5 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex items-center gap-2">
+                    <span className="text-base">🏠</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-[var(--color-text)] m-0 truncate">
+                        {user.home_name || "Current Location"}
+                      </p>
+                      <p className="text-[10px] text-[var(--color-text-secondary)] m-0">
+                        {user.home_lat.toFixed(4)}, {user.home_lng?.toFixed(4)}
+                      </p>
                     </div>
-                    <LocationPicker
-                      legend="Pin Home Position"
-                      lat={user.home_lat?.toString() ?? ""}
-                      lng={user.home_lng?.toString() ?? ""}
-                      defaultShowMap={false}
-                      onChange={(home_lat, home_lng) =>
+                  </div>
+                )}
+
+                {(!user.home_lat || showErrors) && (
+                  <div>
+                    <label className="label text-[11px] mb-1">Search Area / Apartment Complex Name</label>
+                    <LocationAutocomplete
+                      className="input w-full text-sm py-1.5"
+                      style={showErrors && !user.home_name?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
+                      value={user.home_name ?? ""}
+                      placeholder="e.g. L&T South City"
+                      onChange={(val) => setUser({ ...user, home_name: val })}
+                      onSelect={({ name, lat, lng }) =>
                         setUser({
                           ...user,
-                          home_lat: home_lat ? Number(home_lat) : null,
-                          home_lng: home_lng ? Number(home_lng) : null,
+                          home_name: name,
+                          home_lat: lat,
+                          home_lng: lng,
                         })
                       }
                     />
-                    {user.home_lat ? (
-                      <span className="text-[11px] text-[var(--color-success)] font-medium flex items-center gap-1">
-                        ✓ Home Coordinates Set ({user.home_lat.toFixed(4)}, {user.home_lng?.toFixed(4)})
-                      </span>
-                    ) : (
-                      showErrors && (
-                        <p className="text-xs text-red-500 mt-1">Please select and place a pin for your Home location</p>
-                      )
+                    {showErrors && !user.home_lat && (
+                      <p className="text-xs text-red-500 mt-1">Please allow GPS location or search for your neighborhood</p>
                     )}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
             </div>
 

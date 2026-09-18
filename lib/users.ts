@@ -1,5 +1,7 @@
 import { createAdminClient } from "./supabase/admin";
 import { normalizeLinkedInUrl } from "./linkedin/normalize-url";
+import { parseLinkedInHeadline } from "./linkedin/parse-headline";
+import { autoVerifyByEmail } from "./institutes";
 import { isSupabaseConfigured } from "./supabase/is-configured";
 import { awardPoints } from "./award-points";
 import type { User, UserVisibility } from "./types";
@@ -114,6 +116,7 @@ export async function upsertOAuthUser(params: {
 }) {
   const supabase = createAdminClient();
   const normalizedUrl = normalizeLinkedInUrl(params.linkedinProfileUrl);
+  const { company: parsedCompany, title: parsedTitle } = parseLinkedInHeadline(params.headline);
 
   let existing =
     (await findUserByLinkedInSub(params.sub)) ??
@@ -128,10 +131,11 @@ export async function upsertOAuthUser(params: {
       updated_at: now,
     };
     if (params.email) updates.email = params.email;
-    if (params.name) updates.full_name = params.name;
-    if (params.picture) updates.profile_photo_url = params.picture;
-    if (normalizedUrl) updates.linkedin_profile_url = normalizedUrl;
-    if (params.headline) updates.job_title = params.headline;
+    if (params.name && (!existing.full_name || existing.full_name === "LinkedIn User")) updates.full_name = params.name;
+    if (params.picture && !existing.profile_photo_url) updates.profile_photo_url = params.picture;
+    if (normalizedUrl && !existing.linkedin_profile_url) updates.linkedin_profile_url = normalizedUrl;
+    if (parsedCompany && !existing.company) updates.company = parsedCompany;
+    if ((parsedTitle || params.headline) && !existing.job_title) updates.job_title = parsedTitle || params.headline;
     if (existing.source === "admin") {
       updates.source = "admin";
     }
@@ -159,6 +163,14 @@ export async function upsertOAuthUser(params: {
       .single();
     if (error) throw error;
     await claimAnonymousRsvps(existing.id);
+
+    // Auto-verify institute affiliation if email matches institute domain
+    if (data.email) {
+      autoVerifyByEmail(data.id, data.email).catch((e) =>
+        console.error("Failed to auto-verify institute on user update:", e)
+      );
+    }
+
     return data as User;
   }
 
@@ -195,7 +207,8 @@ export async function upsertOAuthUser(params: {
       full_name: params.name ?? "LinkedIn User",
       profile_photo_url: params.picture ?? null,
       linkedin_profile_url: normalizedUrl,
-      job_title: params.headline ?? null,
+      company: parsedCompany ?? null,
+      job_title: parsedTitle ?? params.headline ?? null,
       source: "oauth",
       visibility: defaultVisibility,
       active_location: "home",
@@ -211,6 +224,13 @@ export async function upsertOAuthUser(params: {
   if (error) throw error;
 
   await claimAnonymousRsvps(data.id);
+
+  // Auto-verify institute affiliation if email matches institute domain
+  if (data.email) {
+    autoVerifyByEmail(data.id, data.email).catch((e) =>
+      console.error("Failed to auto-verify institute on user signup:", e)
+    );
+  }
 
   // Post-signup: award points to the inviter & update invite_events
   if (invitedBy && data) {
