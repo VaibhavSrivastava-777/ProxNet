@@ -27,13 +27,15 @@ export function MicroStatusBeacon({
   const [selectedActivity, setSelectedActivity] = useState<"chai" | "walk" | "sports" | "quick_chat">("chai");
   const [note, setNote] = useState("");
   const [durationMins, setDurationMins] = useState(45);
+  const [isCustomDuration, setIsCustomDuration] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
   const [closing, setClosing] = useState(false);
 
   const fetchBeacons = async () => {
     try {
+      // Use generous 50km radius so neighborhood and metro area broadcasts are visible to all users
       const url = (userLat != null && userLng != null)
-        ? `/api/micro-status?lat=${userLat}&lng=${userLng}&radius=3000`
+        ? `/api/micro-status?lat=${userLat}&lng=${userLng}&radius=50000`
         : `/api/micro-status`;
       const res = await fetch(url);
       if (res.ok) {
@@ -139,69 +141,127 @@ export function MicroStatusBeacon({
     return Math.max(1, Math.round(diff / 60000));
   };
 
+  const getTimeTheme = (expiresAt: string, totalMins: number = 45) => {
+    const rem = getRemainingMins(expiresAt);
+    const pct = Math.max(0, Math.min(1, rem / Math.max(5, totalMins)));
+    if (pct > 0.6) {
+      return {
+        border: "border-emerald-500/80 shadow-emerald-500/20",
+        bg: "bg-gradient-to-r from-emerald-500/20 via-teal-500/10 to-[var(--color-surface)]",
+        badge: "bg-emerald-500/25 text-emerald-800 dark:text-emerald-200 border-emerald-500/40",
+        dot: "bg-emerald-500",
+        ping: "bg-emerald-400",
+        bar: "bg-emerald-500",
+        pct,
+      };
+    }
+    if (pct > 0.3) {
+      return {
+        border: "border-amber-500/80 shadow-amber-500/20",
+        bg: "bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-[var(--color-surface)]",
+        badge: "bg-amber-500/25 text-amber-800 dark:text-amber-200 border-amber-500/40",
+        dot: "bg-amber-500",
+        ping: "bg-amber-400",
+        bar: "bg-amber-500",
+        pct,
+      };
+    }
+    if (pct > 0.15) {
+      return {
+        border: "border-orange-500/85 shadow-orange-500/25",
+        bg: "bg-gradient-to-r from-orange-500/20 via-amber-500/10 to-[var(--color-surface)]",
+        badge: "bg-orange-500/25 text-orange-800 dark:text-orange-200 border-orange-500/40",
+        dot: "bg-orange-500",
+        ping: "bg-orange-400",
+        bar: "bg-orange-500",
+        pct,
+      };
+    }
+    return {
+      border: "border-rose-500/90 shadow-rose-500/35 animate-pulse",
+      bg: "bg-gradient-to-r from-rose-500/25 via-red-500/15 to-[var(--color-surface)]",
+      badge: "bg-rose-500/30 text-rose-800 dark:text-rose-200 border-rose-500/50 animate-pulse",
+      dot: "bg-rose-500",
+      ping: "bg-rose-400",
+      bar: "bg-rose-500",
+      pct,
+    };
+  };
+
   const myTitle = myBeacon?.user?.job_title || userProfile?.job_title || "Professional";
   const myCompany = myBeacon?.user?.company || userProfile?.company || "Nearby Company";
+  const myTheme = myBeacon ? getTimeTheme(myBeacon.expires_at, myBeacon.duration_mins || 45) : null;
 
   return (
     <>
       {/* Floating Beacon Action Bar */}
       <div className="flex flex-col gap-2">
-        {/* Active Personal Beacon Banner */}
-        {myBeacon ? (
-          <div className="flex items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-[var(--color-surface)] border-2 border-amber-500/50 text-[var(--color-text)] shadow-lg backdrop-blur-md animate-fadeIn">
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="relative flex h-3.5 w-3.5 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-80" />
-                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-500 shadow-sm" />
-              </span>
-              <div className="flex flex-col min-w-0">
-                <div className="text-xs font-extrabold flex items-center gap-1.5 flex-wrap">
-                  <span className="text-base">{activityMeta[myBeacon.activity]?.icon}</span>
-                  <span className="text-amber-900 dark:text-amber-100">
-                    Your {activityMeta[myBeacon.activity]?.label} broadcast is live
-                  </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-500/40 animate-pulse shrink-0">
-                    ⏳ {getRemainingMins(myBeacon.expires_at)}m remaining
-                  </span>
-                </div>
-                
-                {/* Designation @ Company Display */}
-                <div className="text-xs font-semibold text-[var(--color-text)] mt-1 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30">
-                    Broadcasting as
-                  </span>
-                  <span className="font-extrabold text-amber-900 dark:text-amber-200">
-                    {myTitle} @ {myCompany}
-                  </span>
-                </div>
-
-                {myBeacon.note && (
-                  <div className="text-[11px] text-amber-800 dark:text-amber-300 italic truncate max-w-[320px] mt-0.5 flex items-center gap-1 font-medium">
-                    <span>📍</span> &quot;{myBeacon.note}&quot;
-                  </div>
-                )}
-              </div>
+        {/* Active Personal Beacon Banner with dynamic boundary color indicating reducing time */}
+        {myBeacon && myTheme ? (
+          <div className={`relative overflow-hidden flex flex-col gap-2 p-3.5 sm:p-4 rounded-2xl ${myTheme.bg} border-2 ${myTheme.border} text-[var(--color-text)] shadow-lg backdrop-blur-md transition-all duration-700 animate-fadeIn`}>
+            {/* Top time-reduction depletion bar */}
+            <div className="w-full h-1 bg-[var(--color-border)]/30 rounded-full overflow-hidden -mt-1 mb-1">
+              <div
+                className={`h-full ${myTheme.bar} transition-all duration-1000 ease-linear`}
+                style={{ width: `${Math.round(myTheme.pct * 100)}%` }}
+              />
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleCloseBeacon}
-                disabled={closing}
-                className="btn btn-sm bg-red-500/15 hover:bg-red-500/25 text-red-600 dark:text-red-400 border border-red-500/30 font-bold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 shrink-0 shadow-xs hover:scale-105"
-                title="Stop and end this broadcast anytime"
-              >
-                {closing ? (
-                  <>
-                    <span className="spinner-sm" /> Stopping...
-                  </>
-                ) : (
-                  <>
-                    <span>🛑</span>
-                    <span>Stop Broadcast</span>
-                  </>
-                )}
-              </button>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="relative flex h-3.5 w-3.5 shrink-0">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${myTheme.ping} opacity-80`} />
+                  <span className={`relative inline-flex rounded-full h-3.5 w-3.5 ${myTheme.dot} shadow-sm`} />
+                </span>
+                <div className="flex flex-col min-w-0">
+                  <div className="text-xs font-extrabold flex items-center gap-1.5 flex-wrap">
+                    <span className="text-base">{activityMeta[myBeacon.activity]?.icon}</span>
+                    <span>
+                      Your {activityMeta[myBeacon.activity]?.label} broadcast is live
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${myTheme.badge} shrink-0`}>
+                      ⏳ {getRemainingMins(myBeacon.expires_at)}m remaining
+                    </span>
+                  </div>
+                  
+                  {/* Designation @ Company Display */}
+                  <div className="text-xs font-semibold text-[var(--color-text)] mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30">
+                      Broadcasting as
+                    </span>
+                    <span className="font-extrabold text-[var(--color-text)]">
+                      {myTitle} @ {myCompany}
+                    </span>
+                  </div>
+
+                  {myBeacon.note && (
+                    <div className="text-[11px] text-[var(--color-text-secondary)] italic truncate max-w-[320px] mt-0.5 flex items-center gap-1 font-medium">
+                      <span>📍</span> &quot;{myBeacon.note}&quot;
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCloseBeacon}
+                  disabled={closing}
+                  className="btn btn-sm bg-red-500/15 hover:bg-red-500/25 text-red-600 dark:text-red-400 border border-red-500/30 font-bold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 shrink-0 shadow-xs hover:scale-105"
+                  title="Stop and end this broadcast anytime"
+                >
+                  {closing ? (
+                    <>
+                      <span className="spinner-sm" /> Stopping...
+                    </>
+                  ) : (
+                    <>
+                      <span>🛑</span>
+                      <span>Stop Broadcast</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         ) : (
@@ -213,6 +273,24 @@ export function MicroStatusBeacon({
             <span className="text-base">☕</span>
             <span>Down for Chai / Walk? (Set Broadcast Beacon)</span>
           </button>
+        )}
+
+        {/* Live Neighbor Broadcast Alert when viewer does not have active broadcast */}
+        {!myBeacon && beacons.length > 0 && (
+          <div className="flex items-center justify-between gap-2.5 p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-emerald-500/10 to-transparent border border-amber-500/30 text-xs shadow-xs animate-fadeIn">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+              </span>
+              <span className="font-bold text-[var(--color-text)] truncate">
+                ⚡ {beacons.length} neighbor{beacons.length > 1 ? "s" : ""} broadcasting live nearby
+              </span>
+            </div>
+            <span className="text-[11px] font-extrabold text-amber-700 dark:text-amber-300 shrink-0">
+              Pinned on Network list &darr;
+            </span>
+          </div>
         )}
       </div>
 
@@ -268,10 +346,15 @@ export function MicroStatusBeacon({
                 </p>
 
                 {/* Profile Preview */}
-                <div className="p-2.5 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border)] mb-3 flex items-center gap-2 text-xs">
-                  <span>👤</span>
-                  <span className="text-[var(--color-text-secondary)]">Visible to neighbors as:</span>
-                  <strong className="text-[var(--color-text)] truncate">{myTitle} @ {myCompany}</strong>
+                <div className="p-3 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border)] mb-3 flex flex-col gap-1 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🛡️</span>
+                    <span className="text-[var(--color-text-secondary)]">Visible to neighbors as:</span>
+                    <strong className="text-[var(--color-text)] truncate">{myTitle} @ {myCompany}</strong>
+                  </div>
+                  <span className="text-[11px] text-[var(--color-text-tertiary)] italic pl-6">
+                    (Your real name is completely anonymous and will never be shown on broadcasts)
+                  </span>
                 </div>
 
                 <form onSubmit={handleBroadcast} className="flex flex-col gap-4">
@@ -319,22 +402,70 @@ export function MicroStatusBeacon({
                   {/* Duration Selector */}
                   <div>
                     <label className="label text-xs font-semibold mb-1 block">Active Duration</label>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 mb-2">
                       {[30, 45, 60].map((mins) => (
                         <button
                           key={mins}
                           type="button"
-                          onClick={() => setDurationMins(mins)}
-                          className={`flex-1 py-1.5 rounded-lg border text-xs font-medium cursor-pointer ${
-                            durationMins === mins
-                              ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
-                              : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border-[var(--color-border)]"
+                          onClick={() => {
+                            setDurationMins(mins);
+                            setIsCustomDuration(false);
+                          }}
+                          className={`flex-1 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
+                            !isCustomDuration && durationMins === mins
+                              ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)] font-bold shadow-xs"
+                              : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:border-[var(--color-primary)]"
                           }`}
                         >
-                          {mins} mins
+                          {mins}m
                         </button>
                       ))}
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomDuration(true)}
+                        className={`flex-1 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-all flex items-center justify-center gap-1 ${
+                          isCustomDuration
+                            ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)] font-bold shadow-xs"
+                            : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:border-[var(--color-primary)]"
+                        }`}
+                      >
+                        <span>⏱️</span>
+                        <span>Custom</span>
+                      </button>
                     </div>
+
+                    {isCustomDuration && (
+                      <div className="p-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-primary)]/40 flex flex-col gap-2 animate-fadeIn">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={5}
+                            max={180}
+                            value={durationMins}
+                            onChange={(e) => setDurationMins(Math.min(180, Math.max(5, Number(e.target.value) || 5)))}
+                            className="input text-xs font-bold w-24 py-1 px-2.5"
+                          />
+                          <span className="text-xs font-semibold text-[var(--color-text-secondary)]">minutes (5 - 180 mins)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] text-[var(--color-text-tertiary)]">Quick picks:</span>
+                          {[15, 20, 90, 120].map((quickMins) => (
+                            <button
+                              key={quickMins}
+                              type="button"
+                              onClick={() => setDurationMins(quickMins)}
+                              className={`text-[11px] px-2 py-0.5 rounded-md border cursor-pointer font-medium ${
+                                durationMins === quickMins
+                                  ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                                  : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border-[var(--color-border)]"
+                              }`}
+                            >
+                              {quickMins}m
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Submit */}

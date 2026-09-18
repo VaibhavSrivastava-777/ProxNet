@@ -69,9 +69,10 @@ export async function GET(request: Request) {
       lng: beaconLng ?? 0,
       created_at: rawBeacon.created_at || now.toISOString(),
       expires_at: rawBeacon.expires_at,
+      duration_mins: rawBeacon.duration_mins || 45,
       user: {
         id: u.id,
-        full_name: u.full_name || rawBeacon.user_name || "Neighbor",
+        full_name: "Community Neighbor", // Anonymize broadcaster identity for other users
         company: u.company || rawBeacon.company || "Nearby Company",
         job_title: u.job_title || rawBeacon.job_title || "Professional",
         profile_photo_url: u.profile_photo_url || rawBeacon.profile_photo_url || null,
@@ -101,9 +102,10 @@ export async function GET(request: Request) {
         lng: rawMy.lng != null ? Number(rawMy.lng) : (currentUser.home_lng ? Number(currentUser.home_lng) : 0),
         created_at: rawMy.created_at || now.toISOString(),
         expires_at: rawMy.expires_at,
+        duration_mins: rawMy.duration_mins || 45,
         user: {
           id: currentUser.id,
-          full_name: currentUser.full_name || rawMy.user_name || "Neighbor",
+          full_name: "You",
           company: currentUser.company || rawMy.company || "Nearby Company",
           job_title: currentUser.job_title || rawMy.job_title || "Professional",
           profile_photo_url: currentUser.profile_photo_url || rawMy.profile_photo_url || null,
@@ -126,7 +128,8 @@ export async function POST(request: Request) {
   const body = await request.json();
   const activity = body.activity || "chai";
   const note = body.note ? String(body.note).trim() : null;
-  const durationMins = Math.min(Math.max(Number(body.duration_mins) || 45, 15), 180);
+  // Allow custom durations from 5 minutes to 180 minutes
+  const durationMins = Math.min(Math.max(Number(body.duration_mins) || 45, 5), 180);
   const lat = body.lat != null ? Number(body.lat) : user.home_lat;
   const lng = body.lng != null ? Number(body.lng) : user.home_lng;
 

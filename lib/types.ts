@@ -130,6 +130,7 @@ export interface MicroStatus {
   lng: number;
   created_at: string;
   expires_at: string;
+  duration_mins?: number;
   user?: Partial<User>;
 }
 

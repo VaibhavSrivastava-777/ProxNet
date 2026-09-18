@@ -305,8 +305,8 @@ export function ProximityMap() {
       if (b.user_id && b.user_id !== profile?.id && !existingIds.has(b.user_id)) {
         extraBroadcasters.push({
           id: b.user_id,
-          full_name: b.user?.full_name || "Neighbor",
-          anonymous_name: b.user?.full_name || "Neighbor",
+          full_name: "Community Neighbor",
+          anonymous_name: "Community Neighbor",
           company: b.user?.company || "Nearby Company",
           job_title: b.user?.job_title || "Professional",
           profile_photo_url: b.user?.profile_photo_url || null,
@@ -320,9 +320,11 @@ export function ProximityMap() {
       // Current user's live broadcast is ALWAYS at the absolute top of the list!
       if (a.is_me) return -1;
       if (b.is_me) return 1;
-      const aHas = activeBeaconMap.has(a.id) ? 1 : 0;
-      const bHas = activeBeaconMap.has(b.id) ? 1 : 0;
-      return bHas - aHas;
+      const aHas = activeBeaconMap.has(a.id);
+      const bHas = activeBeaconMap.has(b.id);
+      if (aHas && !bHas) return -1;
+      if (!aHas && bHas) return 1;
+      return 0;
     });
   }, [filteredPeople, activeBeacons, activeBeaconMap, profile]);
 
@@ -705,7 +707,7 @@ export function ProximityMap() {
                 <div className="skeleton h-16 rounded-xl w-full opacity-40" />
               </div>
             </div>
-          ) : filteredPeople.length === 0 ? (
+          ) : sortedPeople.length === 0 ? (
             <div className="card p-8 text-center border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/50 rounded-xl">
               {companyParam && (
                 <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-semibold text-xs mb-4">
@@ -754,6 +756,7 @@ export function ProximityMap() {
                   note: profile.profile_digest.active_beacon.note || null,
                   created_at: profile.profile_digest.active_beacon.created_at || new Date().toISOString(),
                   expires_at: profile.profile_digest.active_beacon.expires_at,
+                  duration_mins: profile.profile_digest.active_beacon.duration_mins || 45,
                   user: {
                     id: profile.id,
                     full_name: profile.full_name || profile.profile_digest.active_beacon.user_name || "You",
@@ -763,41 +766,96 @@ export function ProximityMap() {
                 } : null);
 
                 const remainingMins = userBeacon ? Math.max(1, Math.round((new Date(userBeacon.expires_at).getTime() - Date.now()) / 60000)) : null;
+                const totalMins = userBeacon?.duration_mins || 45;
+                const pctRemaining = (remainingMins != null && totalMins > 0) ? Math.max(0, Math.min(1, remainingMins / totalMins)) : 1;
 
                 if (userBeacon) {
                   const activityIcon = userBeacon.activity === "chai" ? "☕" : userBeacon.activity === "walk" ? "🚶" : userBeacon.activity === "sports" ? "🏸" : "💬";
                   const activityLabel = userBeacon.activity === "chai" ? "15-min Chai Beacon" : userBeacon.activity === "walk" ? "Walk & Talk Beacon" : userBeacon.activity === "sports" ? "Badminton / Sports" : "Quick Catch-up";
-                  const broadcasterName = isMe ? (profile?.full_name ? `${profile.full_name} (You)` : "You") : (userBeacon.user?.full_name || p.full_name || p.anonymous_name || "Neighbor");
+                  
+                  // Never mention real names on broadcasts (anonymize broadcaster identity):
                   const broadcasterTitle = (isMe ? (profile?.job_title || userBeacon.user?.job_title) : (userBeacon.user?.job_title || p.job_title || "Professional"))?.trim() || "Professional";
                   const broadcasterCompany = (isMe ? (profile?.company || userBeacon.user?.company) : (userBeacon.user?.company || p.company || "Nearby Company"))?.trim() || "Nearby Company";
-                  const designationAtCompany = `${broadcasterTitle} @ ${broadcasterCompany}`;
+
+                  // Dynamic boundary & color theme according to elapsed/reducing time:
+                  const timeTheme = (() => {
+                    if (pctRemaining > 0.6) {
+                      return {
+                        border: isMe ? "border-emerald-500/90 shadow-emerald-500/20" : "border-emerald-500/80 shadow-emerald-500/15",
+                        bg: "bg-gradient-to-r from-emerald-500/15 via-teal-500/5 to-[var(--color-surface)] dark:from-emerald-950/40 dark:via-teal-950/20",
+                        badge: "bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 border-emerald-500/30",
+                        dot: "bg-emerald-500",
+                        ping: "bg-emerald-400",
+                        bar: "bg-emerald-500",
+                        label: "text-emerald-700 dark:text-emerald-300",
+                        btn: "from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700",
+                      };
+                    }
+                    if (pctRemaining > 0.3) {
+                      return {
+                        border: isMe ? "border-amber-500/90 shadow-amber-500/20" : "border-amber-500/80 shadow-amber-500/15",
+                        bg: "bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-[var(--color-surface)] dark:from-amber-950/40 dark:via-amber-950/20",
+                        badge: "bg-amber-500/20 text-amber-800 dark:text-amber-200 border-amber-500/30",
+                        dot: "bg-amber-500",
+                        ping: "bg-amber-400",
+                        bar: "bg-amber-500",
+                        label: "text-amber-700 dark:text-amber-300",
+                        btn: "from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700",
+                      };
+                    }
+                    if (pctRemaining > 0.15) {
+                      return {
+                        border: isMe ? "border-orange-500/95 shadow-orange-500/25" : "border-orange-500/85 shadow-orange-500/20",
+                        bg: "bg-gradient-to-r from-orange-500/20 via-amber-500/10 to-[var(--color-surface)] dark:from-orange-950/40 dark:via-orange-950/20",
+                        badge: "bg-orange-500/20 text-orange-800 dark:text-orange-200 border-orange-500/30",
+                        dot: "bg-orange-500",
+                        ping: "bg-orange-400",
+                        bar: "bg-orange-500",
+                        label: "text-orange-700 dark:text-orange-300",
+                        btn: "from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700",
+                      };
+                    }
+                    return {
+                      border: "border-rose-500/90 shadow-rose-500/35 animate-pulse",
+                      bg: "bg-gradient-to-r from-rose-500/25 via-red-500/15 to-[var(--color-surface)] dark:from-rose-950/50 dark:via-red-950/30",
+                      badge: "bg-rose-500/30 text-rose-800 dark:text-rose-200 border-rose-500/50 animate-pulse",
+                      dot: "bg-rose-500",
+                      ping: "bg-rose-400",
+                      bar: "bg-rose-500",
+                      label: "text-rose-700 dark:text-rose-300",
+                      btn: "from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700",
+                    };
+                  })();
 
                   return (
                     <div
                       key={p.id}
                       ref={isLast ? lastElementRef : null}
                       onClick={() => !isMe && setSelectedPerson(p)}
-                      className={`card p-3.5 sm:p-4 rounded-2xl border-2 ${
-                        isMe ? "border-red-500/60 bg-gradient-to-r from-red-500/10 via-amber-500/10 to-[var(--color-surface)] shadow-red-500/10" : "border-amber-500/60 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-[var(--color-surface)] dark:from-amber-950/40 dark:via-amber-900/15 shadow-amber-500/10 hover:border-amber-500"
-                      } shadow-md transition-all cursor-pointer flex flex-col gap-2.5 animate-fadeIn`}
+                      className={`relative overflow-hidden card p-3.5 sm:p-4 rounded-2xl border-2 ${timeTheme.border} ${timeTheme.bg} shadow-md transition-all duration-700 cursor-pointer flex flex-col gap-2.5 animate-fadeIn`}
                     >
-                      {/* Broadcast status header with pulsing radar + live time-lapse animation + designation@company */}
-                      <div className="flex items-center justify-between gap-2 border-b border-amber-500/20 pb-2">
+                      {/* Top time-reduction depletion bar */}
+                      <div className="w-full h-1 bg-[var(--color-border)]/30 rounded-full overflow-hidden -mt-1 mb-0.5">
+                        <div
+                          className={`h-full ${timeTheme.bar} transition-all duration-1000 ease-linear rounded-full`}
+                          style={{ width: `${Math.round(pctRemaining * 100)}%` }}
+                        />
+                      </div>
+
+                      {/* Broadcast status header with pulsing radar + countdown badge */}
+                      <div className="flex items-center justify-between gap-2 border-b border-[var(--color-border)]/40 pb-2">
                         <div className="flex items-center gap-2 flex-wrap min-w-0">
                           <span className="relative flex h-2.5 w-2.5 shrink-0">
-                            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isMe ? "bg-red-400" : "bg-amber-400"} opacity-80`} />
-                            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isMe ? "bg-red-500" : "bg-amber-500"}`} />
+                            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${timeTheme.ping} opacity-80`} />
+                            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${timeTheme.dot}`} />
                           </span>
-                          <span className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 shrink-0">
+                          <span className={`text-xs font-bold ${timeTheme.label} flex items-center gap-1.5 shrink-0`}>
                             <span>{activityIcon}</span>
                             <span>{isMe ? "Your Live Broadcast" : activityLabel}</span>
                           </span>
-                          <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-900 dark:text-amber-100 border border-amber-500/40 truncate max-w-[260px] sm:max-w-none">
-                            {designationAtCompany}
-                          </span>
                         </div>
 
-                        <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[11px] font-bold border border-amber-500/30 shrink-0">
+                        <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full ${timeTheme.badge} text-[11px] font-bold border shrink-0`}>
                           <span className="animate-pulse">⏳</span>
                           <span>{remainingMins}m left</span>
                         </div>
@@ -810,23 +868,23 @@ export function ProximityMap() {
                           <div className="flex flex-col min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-sm font-extrabold text-[var(--color-text)] truncate">
-                                {broadcasterName}
+                                {isMe ? "Your Live Broadcast" : "Community Neighbor"}
                               </span>
-                              <span className="text-xs font-extrabold text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md truncate">
-                                {designationAtCompany}
-                              </span>
-                              <span className={`text-[10px] font-bold ${isMe ? "text-red-700 dark:text-red-300 bg-red-500/20 border-red-500/30" : "text-amber-700 dark:text-amber-300 bg-amber-500/20 border-amber-500/30"} border px-1.5 py-0.2 rounded-md uppercase tracking-wider`}>
-                                {isMe ? "Active Beacon" : "Broadcast"}
+                              <span className={`text-[10px] font-bold ${isMe ? "text-red-700 dark:text-red-300 bg-red-500/20 border-red-500/30" : timeTheme.badge} border px-1.5 py-0.2 rounded-md uppercase tracking-wider`}>
+                                {isMe ? "Active" : "Live Beacon"}
                               </span>
                             </div>
-                            <div className="text-xs font-semibold text-[var(--color-text)] mt-0.5 flex items-center gap-1.5 truncate">
+
+                            {/* Stated ONCE: clean & prominent designation @ company */}
+                            <div className="text-xs font-bold mt-1 flex items-center gap-1.5 truncate">
                               <span>💼</span>
-                              <span className="font-bold text-[var(--color-text)]">{broadcasterTitle}</span>
-                              <span className="text-[var(--color-text-secondary)] font-normal">at</span>
-                              <span className="font-bold text-[var(--color-text)]">{broadcasterCompany}</span>
+                              <span className="font-extrabold text-[var(--color-text)]">{broadcasterTitle}</span>
+                              <span className="text-[var(--color-text-secondary)] font-normal">@</span>
+                              <span className="font-extrabold text-[var(--color-text)]">{broadcasterCompany}</span>
                             </div>
+
                             {userBeacon.note && (
-                              <span className="text-[11px] text-amber-700 dark:text-amber-300 italic truncate mt-0.5 flex items-center gap-1 font-medium">
+                              <span className="text-[11px] text-[var(--color-text-secondary)] italic truncate mt-0.5 flex items-center gap-1 font-medium">
                                 <span>📍</span> &quot;{userBeacon.note}&quot;
                               </span>
                             )}
@@ -872,12 +930,12 @@ export function ProximityMap() {
                                 e.stopPropagation();
                                 openDirectChat({
                                   id: p.id,
-                                  anonymous_name: broadcasterName,
+                                  anonymous_name: "Community Neighbor",
                                   company: broadcasterCompany,
                                   job_title: broadcasterTitle,
                                 });
                               }}
-                              className="btn btn-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl border-0 shadow-sm flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105 shrink-0"
+                              className={`btn btn-sm bg-gradient-to-r ${timeTheme.btn} text-white font-bold text-xs px-3.5 py-2 rounded-xl border-0 shadow-sm flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105 shrink-0`}
                             >
                               <span>{activityIcon}</span>
                               <span>Join {userBeacon.activity === "chai" ? "Chai" : userBeacon.activity === "walk" ? "Walk" : "Meet"}</span>
