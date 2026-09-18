@@ -31,17 +31,23 @@ export function MicroStatusBeacon({
   const [closing, setClosing] = useState(false);
 
   const fetchBeacons = async () => {
-    if (userLat == null || userLng == null) return;
     try {
-      const res = await fetch(`/api/micro-status?lat=${userLat}&lng=${userLng}&radius=3000`);
+      const url = (userLat != null && userLng != null)
+        ? `/api/micro-status?lat=${userLat}&lng=${userLng}&radius=3000`
+        : `/api/micro-status`;
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         const list: MicroStatus[] = data.beacons || [];
         setBeacons(list);
         onBeaconsChange?.(list);
-        if (currentUserId) {
+        if (data.my_beacon) {
+          setMyBeacon(data.my_beacon);
+        } else if (currentUserId) {
           const mine = list.find((b) => b.user_id === currentUserId);
           setMyBeacon(mine || null);
+        } else {
+          setMyBeacon(null);
         }
       }
     } catch (e) {
@@ -52,13 +58,18 @@ export function MicroStatusBeacon({
   useEffect(() => {
     fetchBeacons();
     const interval = setInterval(fetchBeacons, 20000); // refresh every 20s
-    return () => clearInterval(interval);
+    const handleUpdate = () => fetchBeacons();
+    window.addEventListener("proxnet_beacon_updated", handleUpdate);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("proxnet_beacon_updated", handleUpdate);
+    };
   }, [userLat, userLng, currentUserId]);
 
   const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
     if (myBeacon) {
-      alert("You already have an active broadcast in motion. Please close your current broadcast before starting a new one.");
+      alert("You already have an active broadcast in motion. Please stop your current broadcast before starting a new one.");
       return;
     }
     if (userLat == null || userLng == null) {
@@ -84,6 +95,7 @@ export function MicroStatusBeacon({
         setShowBroadcastModal(false);
         setNote("");
         fetchBeacons();
+        window.dispatchEvent(new CustomEvent("proxnet_beacon_updated"));
       } else {
         const err = await res.json().catch(() => ({}));
         alert(err.error || "Failed to broadcast beacon");
@@ -103,12 +115,13 @@ export function MicroStatusBeacon({
         setMyBeacon(null);
         setShowBroadcastModal(false);
         fetchBeacons();
+        window.dispatchEvent(new CustomEvent("proxnet_beacon_updated"));
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err.error || "Failed to close broadcast");
+        alert(err.error || "Failed to stop broadcast");
       }
     } catch (err) {
-      console.error("Failed to close beacon:", err);
+      console.error("Failed to stop beacon:", err);
     } finally {
       setClosing(false);
     }
@@ -176,16 +189,16 @@ export function MicroStatusBeacon({
                 onClick={handleCloseBeacon}
                 disabled={closing}
                 className="btn btn-sm bg-red-500/15 hover:bg-red-500/25 text-red-600 dark:text-red-400 border border-red-500/30 font-bold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 shrink-0 shadow-xs hover:scale-105"
-                title="Close and end this broadcast anytime"
+                title="Stop and end this broadcast anytime"
               >
                 {closing ? (
                   <>
-                    <span className="spinner-sm" /> Closing...
+                    <span className="spinner-sm" /> Stopping...
                   </>
                 ) : (
                   <>
                     <span>🛑</span>
-                    <span>Close Broadcast</span>
+                    <span>Stop Broadcast</span>
                   </>
                 )}
               </button>
@@ -245,7 +258,7 @@ export function MicroStatusBeacon({
                   className="btn btn-sm bg-red-500 hover:bg-red-600 text-white font-bold text-xs py-2 rounded-xl border-0 shadow-sm cursor-pointer flex items-center justify-center gap-2 mt-2"
                 >
                   {closing ? <span className="spinner-sm" /> : <span>🛑</span>}
-                  <span>Close Current Broadcast First</span>
+                  <span>Stop Current Broadcast First</span>
                 </button>
               </div>
             ) : (

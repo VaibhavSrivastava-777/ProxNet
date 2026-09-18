@@ -139,6 +139,7 @@ export function ProximityMap() {
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
   const [chatTarget, setChatTarget] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
+  const [stoppingBroadcast, setStoppingBroadcast] = useState(false);
   
   // Pagination
   const [displayLimit, setDisplayLimit] = useState(20);
@@ -152,6 +153,20 @@ export function ProximityMap() {
       }
     });
     if (node) observer.current.observe(node);
+  }, []);
+
+  // Listen for beacon state changes to immediately re-fetch profile & beacons
+  useEffect(() => {
+    const handleBeaconUpdate = () => {
+      fetch("/api/profile")
+        .then((r) => r.json())
+        .then((data) => {
+          setProfile(data);
+          try { sessionStorage.setItem("proxnet_profile_cache", JSON.stringify(data)); } catch (e) {}
+        });
+    };
+    window.addEventListener("proxnet_beacon_updated", handleBeaconUpdate);
+    return () => window.removeEventListener("proxnet_beacon_updated", handleBeaconUpdate);
   }, []);
 
   // Typewriter animated search placeholder
@@ -266,13 +281,33 @@ export function ProximityMap() {
     const existingIds = new Set(filteredPeople.map((p: any) => p.id));
     const extraBroadcasters: any[] = [];
 
+    // If the current user has an active broadcast, PIN IT AT THE VERY TOP OF THE NETWORK LIST!
+    const myRawBeacon = profile?.profile_digest?.active_beacon;
+    const hasMyActiveBeacon = profile?.id && (
+      activeBeaconMap.has(profile.id) ||
+      (myRawBeacon?.expires_at && new Date(myRawBeacon.expires_at).getTime() > Date.now())
+    );
+
+    if (hasMyActiveBeacon && profile?.id) {
+      extraBroadcasters.push({
+        id: profile.id,
+        full_name: profile.full_name || "You",
+        anonymous_name: profile.full_name || "You",
+        company: profile.company || myRawBeacon?.company || "Nearby Company",
+        job_title: profile.job_title || myRawBeacon?.job_title || "Professional",
+        profile_photo_url: profile.profile_photo_url || null,
+        distance: 0,
+        is_me: true,
+      });
+    }
+
     for (const b of activeBeacons) {
       if (b.user_id && b.user_id !== profile?.id && !existingIds.has(b.user_id)) {
         extraBroadcasters.push({
           id: b.user_id,
           full_name: b.user?.full_name || "Neighbor",
           anonymous_name: b.user?.full_name || "Neighbor",
-          company: b.user?.company || "Local Member",
+          company: b.user?.company || "Nearby Company",
           job_title: b.user?.job_title || "Professional",
           profile_photo_url: b.user?.profile_photo_url || null,
           distance: 1000,
@@ -282,11 +317,14 @@ export function ProximityMap() {
 
     const combined = [...extraBroadcasters, ...filteredPeople];
     return combined.sort((a: any, b: any) => {
+      // Current user's live broadcast is ALWAYS at the absolute top of the list!
+      if (a.is_me) return -1;
+      if (b.is_me) return 1;
       const aHas = activeBeaconMap.has(a.id) ? 1 : 0;
       const bHas = activeBeaconMap.has(b.id) ? 1 : 0;
       return bHas - aHas;
     });
-  }, [filteredPeople, activeBeacons, activeBeaconMap, profile?.id]);
+  }, [filteredPeople, activeBeacons, activeBeaconMap, profile]);
 
   const isInitializing = !profile || !center;
   const loading = isInitializing || clustersLoading || peopleLoading || (!peopleData && !localError);
@@ -707,34 +745,52 @@ export function ProximityMap() {
               </div>
               {sortedPeople.slice(0, displayLimit).map((p: any, index: number) => {
                 const isLast = index === Math.min(sortedPeople.length, displayLimit) - 1;
-                const beacon = activeBeaconMap.get(p.id);
-                const remainingMins = beacon ? Math.max(1, Math.round((new Date(beacon.expires_at).getTime() - Date.now()) / 60000)) : null;
+                const isMe = Boolean(p.is_me || (profile?.id && p.id === profile.id));
+                const rawBeacon = activeBeaconMap.get(p.id);
+                const userBeacon = rawBeacon || (isMe && profile?.profile_digest?.active_beacon ? {
+                  id: profile.profile_digest.active_beacon.id || `beacon-${profile.id}`,
+                  user_id: profile.id,
+                  activity: profile.profile_digest.active_beacon.activity || "chai",
+                  note: profile.profile_digest.active_beacon.note || null,
+                  created_at: profile.profile_digest.active_beacon.created_at || new Date().toISOString(),
+                  expires_at: profile.profile_digest.active_beacon.expires_at,
+                  user: {
+                    id: profile.id,
+                    full_name: profile.full_name || profile.profile_digest.active_beacon.user_name || "You",
+                    company: profile.company || profile.profile_digest.active_beacon.company || "Nearby Company",
+                    job_title: profile.job_title || profile.profile_digest.active_beacon.job_title || "Professional",
+                  }
+                } : null);
 
-                if (beacon) {
-                  const activityIcon = beacon.activity === "chai" ? "☕" : beacon.activity === "walk" ? "🚶" : beacon.activity === "sports" ? "🏸" : "💬";
-                  const activityLabel = beacon.activity === "chai" ? "15-min Chai Beacon" : beacon.activity === "walk" ? "Walk & Talk Beacon" : beacon.activity === "sports" ? "Badminton / Sports" : "Quick Catch-up";
-                  const broadcasterName = beacon.user?.full_name || p.full_name || p.anonymous_name || "Neighbor";
-                  const broadcasterTitle = (beacon.user?.job_title || p.job_title || "Professional").trim();
-                  const broadcasterCompany = (beacon.user?.company || p.company || "Nearby Company").trim();
+                const remainingMins = userBeacon ? Math.max(1, Math.round((new Date(userBeacon.expires_at).getTime() - Date.now()) / 60000)) : null;
+
+                if (userBeacon) {
+                  const activityIcon = userBeacon.activity === "chai" ? "☕" : userBeacon.activity === "walk" ? "🚶" : userBeacon.activity === "sports" ? "🏸" : "💬";
+                  const activityLabel = userBeacon.activity === "chai" ? "15-min Chai Beacon" : userBeacon.activity === "walk" ? "Walk & Talk Beacon" : userBeacon.activity === "sports" ? "Badminton / Sports" : "Quick Catch-up";
+                  const broadcasterName = isMe ? (profile?.full_name ? `${profile.full_name} (You)` : "You") : (userBeacon.user?.full_name || p.full_name || p.anonymous_name || "Neighbor");
+                  const broadcasterTitle = (isMe ? (profile?.job_title || userBeacon.user?.job_title) : (userBeacon.user?.job_title || p.job_title || "Professional"))?.trim() || "Professional";
+                  const broadcasterCompany = (isMe ? (profile?.company || userBeacon.user?.company) : (userBeacon.user?.company || p.company || "Nearby Company"))?.trim() || "Nearby Company";
                   const designationAtCompany = `${broadcasterTitle} @ ${broadcasterCompany}`;
 
                   return (
                     <div
                       key={p.id}
                       ref={isLast ? lastElementRef : null}
-                      onClick={() => setSelectedPerson(p)}
-                      className="card p-3.5 sm:p-4 rounded-2xl border-2 border-amber-500/60 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-[var(--color-surface)] dark:from-amber-950/40 dark:via-amber-900/15 shadow-md shadow-amber-500/10 hover:border-amber-500 transition-all cursor-pointer flex flex-col gap-2.5 animate-fadeIn"
+                      onClick={() => !isMe && setSelectedPerson(p)}
+                      className={`card p-3.5 sm:p-4 rounded-2xl border-2 ${
+                        isMe ? "border-red-500/60 bg-gradient-to-r from-red-500/10 via-amber-500/10 to-[var(--color-surface)] shadow-red-500/10" : "border-amber-500/60 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-[var(--color-surface)] dark:from-amber-950/40 dark:via-amber-900/15 shadow-amber-500/10 hover:border-amber-500"
+                      } shadow-md transition-all cursor-pointer flex flex-col gap-2.5 animate-fadeIn`}
                     >
                       {/* Broadcast status header with pulsing radar + live time-lapse animation + designation@company */}
                       <div className="flex items-center justify-between gap-2 border-b border-amber-500/20 pb-2">
                         <div className="flex items-center gap-2 flex-wrap min-w-0">
                           <span className="relative flex h-2.5 w-2.5 shrink-0">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-80" />
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isMe ? "bg-red-400" : "bg-amber-400"} opacity-80`} />
+                            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isMe ? "bg-red-500" : "bg-amber-500"}`} />
                           </span>
                           <span className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 shrink-0">
                             <span>{activityIcon}</span>
-                            <span>{activityLabel}</span>
+                            <span>{isMe ? "Your Live Broadcast" : activityLabel}</span>
                           </span>
                           <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-900 dark:text-amber-100 border border-amber-500/40 truncate max-w-[260px] sm:max-w-none">
                             {designationAtCompany}
@@ -747,7 +803,7 @@ export function ProximityMap() {
                         </div>
                       </div>
 
-                      {/* Main card row: profile info + Join action button */}
+                      {/* Main card row: profile info + action button */}
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <CompanyLogo company={broadcasterCompany} size={42} />
@@ -759,8 +815,8 @@ export function ProximityMap() {
                               <span className="text-xs font-extrabold text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md truncate">
                                 {designationAtCompany}
                               </span>
-                              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.2 rounded-md uppercase tracking-wider">
-                                Broadcast
+                              <span className={`text-[10px] font-bold ${isMe ? "text-red-700 dark:text-red-300 bg-red-500/20 border-red-500/30" : "text-amber-700 dark:text-amber-300 bg-amber-500/20 border-amber-500/30"} border px-1.5 py-0.2 rounded-md uppercase tracking-wider`}>
+                                {isMe ? "Active Beacon" : "Broadcast"}
                               </span>
                             </div>
                             <div className="text-xs font-semibold text-[var(--color-text)] mt-0.5 flex items-center gap-1.5 truncate">
@@ -769,12 +825,12 @@ export function ProximityMap() {
                               <span className="text-[var(--color-text-secondary)] font-normal">at</span>
                               <span className="font-bold text-[var(--color-text)]">{broadcasterCompany}</span>
                             </div>
-                            {beacon.note && (
+                            {userBeacon.note && (
                               <span className="text-[11px] text-amber-700 dark:text-amber-300 italic truncate mt-0.5 flex items-center gap-1 font-medium">
-                                <span>📍</span> &quot;{beacon.note}&quot;
+                                <span>📍</span> &quot;{userBeacon.note}&quot;
                               </span>
                             )}
-                            {p.distance !== null && p.distance !== undefined && (
+                            {!isMe && p.distance !== null && p.distance !== undefined && (
                               <span className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5">
                                 📍 {p.distance >= 1000 ? `${(p.distance / 1000).toFixed(1)} km` : `${Math.round(p.distance)} m`} away
                               </span>
@@ -783,21 +839,50 @@ export function ProximityMap() {
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openDirectChat({
-                                id: p.id,
-                                anonymous_name: broadcasterName,
-                                company: broadcasterCompany,
-                                job_title: broadcasterTitle,
-                              });
-                            }}
-                            className="btn btn-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl border-0 shadow-sm flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105 shrink-0"
-                          >
-                            <span>{activityIcon}</span>
-                            <span>Join {beacon.activity === "chai" ? "Chai" : beacon.activity === "walk" ? "Walk" : "Meet"}</span>
-                          </button>
+                          {isMe ? (
+                            <button
+                              type="button"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                setStoppingBroadcast(true);
+                                try {
+                                  const res = await fetch("/api/micro-status", { method: "DELETE" });
+                                  if (res.ok) {
+                                    window.dispatchEvent(new CustomEvent("proxnet_beacon_updated"));
+                                  } else {
+                                    alert("Failed to stop broadcast");
+                                  }
+                                } catch (err) {
+                                  console.error("Failed to stop broadcast:", err);
+                                } finally {
+                                  setStoppingBroadcast(false);
+                                }
+                              }}
+                              disabled={stoppingBroadcast}
+                              className="btn btn-sm bg-red-500 hover:bg-red-600 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl border-0 shadow-md flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105 shrink-0"
+                              title="Stop your current broadcast"
+                            >
+                              {stoppingBroadcast ? <span className="spinner-sm" /> : <span>🛑</span>}
+                              <span>Stop Broadcast</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDirectChat({
+                                  id: p.id,
+                                  anonymous_name: broadcasterName,
+                                  company: broadcasterCompany,
+                                  job_title: broadcasterTitle,
+                                });
+                              }}
+                              className="btn btn-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl border-0 shadow-sm flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105 shrink-0"
+                            >
+                              <span>{activityIcon}</span>
+                              <span>Join {userBeacon.activity === "chai" ? "Chai" : userBeacon.activity === "walk" ? "Walk" : "Meet"}</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -134,18 +134,14 @@ export async function GET(request: Request) {
       job_title,
       profile_photo_url,
       visibility,
-      help_offers,
-      tinkering_with,
-      ask_me_about,
-      quick_chat_preference,
-      society_name,
+      profile_digest,
       home_name
     `)
     .eq("is_active", true)
     .eq("is_blocked", false);
 
   if (queryName) {
-    query = query.or(`society_name.ilike.%${queryName}%,home_name.ilike.%${queryName}%`);
+    query = query.or(`home_name.ilike.%${queryName}%,profile_digest->>society_name.ilike.%${queryName}%`);
   }
 
   let { data: users, error } = await query.limit(100);
@@ -154,7 +150,7 @@ export async function GET(request: Request) {
     console.warn("Retrying society users query with core columns:", error.message);
     let fallbackQuery = supabase
       .from("users")
-      .select("id, full_name, company, job_title, profile_photo_url, visibility, tags, home_name")
+      .select("id, full_name, company, job_title, profile_photo_url, visibility, tags, home_name, profile_digest")
       .eq("is_active", true)
       .eq("is_blocked", false);
 
@@ -230,8 +226,11 @@ export async function GET(request: Request) {
     }
 
     // Help offers
-    if (Array.isArray(u.help_offers)) {
-      for (const h of u.help_offers) {
+    const userObj = u as any;
+    const digest = userObj.profile_digest || {};
+    const helpOffers = userObj.help_offers || digest.help_offers || [];
+    if (Array.isArray(helpOffers)) {
+      for (const h of helpOffers) {
         helpCounts[h] = (helpCounts[h] || 0) + 1;
       }
     }
@@ -280,18 +279,21 @@ export async function GET(request: Request) {
 
   // Format members respecting visibility
   const members = userList.map((u) => {
-    const vis = u.visibility || { showCompany: true, showTitle: true, showPhoto: false };
+    const userObj = u as any;
+    const vis = userObj.visibility || { showCompany: true, showTitle: true, showPhoto: false };
+    const digest = userObj.profile_digest || {};
     return {
-      id: u.id,
-      full_name: u.full_name || "Neighbor",
-      company: vis.showCompany ? u.company : null,
-      job_title: vis.showTitle ? u.job_title : null,
-      profile_photo_url: vis.showPhoto ? u.profile_photo_url : null,
-      help_offers: u.help_offers || [],
-      tinkering_with: u.tinkering_with || [],
-      ask_me_about: u.ask_me_about || [],
-      quick_chat_preference: u.quick_chat_preference || "chai",
-      institute_affiliation: userAffiliationMap[u.id] || null,
+      id: userObj.id,
+      full_name: userObj.full_name || "Neighbor",
+      company: vis.showCompany ? userObj.company : null,
+      job_title: vis.showTitle ? userObj.job_title : null,
+      profile_photo_url: vis.showPhoto ? userObj.profile_photo_url : null,
+      help_offers: userObj.help_offers || digest.help_offers || [],
+      tinkering_with: userObj.tinkering_with || digest.tinkering_with || [],
+      ask_me_about: userObj.ask_me_about || digest.ask_me_about || [],
+      quick_chat_preference: userObj.quick_chat_preference || digest.quick_chat_preference || "chai",
+      society_name: userObj.society_name || digest.society_name || userObj.home_name || null,
+      institute_affiliation: userAffiliationMap[userObj.id] || null,
     };
   });
 

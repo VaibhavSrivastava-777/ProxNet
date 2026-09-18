@@ -39,7 +39,15 @@ async function reverseGeocode(lat: number, lng: number): Promise<string | null> 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  return NextResponse.json(user);
+  const digest = (user as any).profile_digest || {};
+  return NextResponse.json({
+    ...user,
+    help_offers: user.help_offers || digest.help_offers || [],
+    tinkering_with: user.tinkering_with || digest.tinkering_with || [],
+    ask_me_about: user.ask_me_about || digest.ask_me_about || [],
+    quick_chat_preference: user.quick_chat_preference || digest.quick_chat_preference || "chai",
+    society_name: user.society_name || digest.society_name || null,
+  });
 }
 
 export async function PATCH(request: Request) {
@@ -63,6 +71,8 @@ export async function PATCH(request: Request) {
   }
   const supabase = createAdminClient();
 
+  const { data: currentUser } = await supabase.from("users").select("*").eq("id", user.id).single();
+
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
@@ -78,15 +88,19 @@ export async function PATCH(request: Request) {
   if (body.resume_text !== undefined) updates.resume_text = body.resume_text;
   if (body.profile_photo_url !== undefined) updates.profile_photo_url = body.profile_photo_url;
   if (body.tags !== undefined && Array.isArray(body.tags)) updates.tags = body.tags;
-  if (body.help_offers !== undefined && Array.isArray(body.help_offers)) updates.help_offers = body.help_offers;
-  if (body.tinkering_with !== undefined && Array.isArray(body.tinkering_with)) updates.tinkering_with = body.tinkering_with;
-  if (body.ask_me_about !== undefined && Array.isArray(body.ask_me_about)) updates.ask_me_about = body.ask_me_about;
-  if (body.quick_chat_preference !== undefined) updates.quick_chat_preference = body.quick_chat_preference;
-  if (body.society_name !== undefined) updates.society_name = body.society_name;
+
+  // Persist humble scrapbook attributes inside profile_digest (JSONB) to ensure zero schema cache errors
+  const profileDigest = { ...(currentUser?.profile_digest || {}) };
+  if (body.help_offers !== undefined && Array.isArray(body.help_offers)) profileDigest.help_offers = body.help_offers;
+  if (body.tinkering_with !== undefined && Array.isArray(body.tinkering_with)) profileDigest.tinkering_with = body.tinkering_with;
+  if (body.ask_me_about !== undefined && Array.isArray(body.ask_me_about)) profileDigest.ask_me_about = body.ask_me_about;
+  if (body.quick_chat_preference !== undefined) profileDigest.quick_chat_preference = body.quick_chat_preference;
+  if (body.society_name !== undefined) profileDigest.society_name = body.society_name;
+  updates.profile_digest = profileDigest;
+
   if (body.linkedin_profile_url !== undefined) {
     updates.linkedin_profile_url = normalizeLinkedInUrl(body.linkedin_profile_url);
   }
-  const { data: currentUser } = await supabase.from("users").select("*").eq("id", user.id).single();
 
   const homeLat = body.home_lat !== undefined ? body.home_lat : currentUser?.home_lat;
   const homeLng = body.home_lng !== undefined ? body.home_lng : currentUser?.home_lng;
@@ -184,7 +198,16 @@ export async function PATCH(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const isIncompleteNow = isProfileIncomplete(data);
+  const responseData = {
+    ...data,
+    help_offers: profileDigest.help_offers || [],
+    tinkering_with: profileDigest.tinkering_with || [],
+    ask_me_about: profileDigest.ask_me_about || [],
+    quick_chat_preference: profileDigest.quick_chat_preference || "chai",
+    society_name: profileDigest.society_name || null,
+  };
+
+  const isIncompleteNow = isProfileIncomplete(responseData);
   if (wasIncomplete && !isIncompleteNow) {
     // Note: We don't await this so it doesn't block the API response
     initiateWelcomeMessage(user.id).catch(err => {
@@ -192,5 +215,5 @@ export async function PATCH(request: Request) {
     });
   }
 
-  return NextResponse.json(data);
+  return NextResponse.json(responseData);
 }

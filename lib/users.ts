@@ -26,6 +26,19 @@ const defaultVisibility: UserVisibility = {
   showPhoto: false,
 };
 
+export function hydrateUserScrapbook(user: any): User | null {
+  if (!user) return null;
+  const digest = user.profile_digest || {};
+  return {
+    ...user,
+    help_offers: user.help_offers || digest.help_offers || [],
+    tinkering_with: user.tinkering_with || digest.tinkering_with || [],
+    ask_me_about: user.ask_me_about || digest.ask_me_about || [],
+    quick_chat_preference: user.quick_chat_preference || digest.quick_chat_preference || "chai",
+    society_name: user.society_name || digest.society_name || null,
+  } as User;
+}
+
 export async function findUserByLinkedInSub(sub: string) {
   if (!isSupabaseConfigured()) {
     if (sub === "admin-system") return ensureAdminUser();
@@ -34,7 +47,7 @@ export async function findUserByLinkedInSub(sub: string) {
   }
   const supabase = createAdminClient();
   const { data } = await supabase.from("users").select("*").eq("linkedin_sub", sub).maybeSingle();
-  return data as User | null;
+  return hydrateUserScrapbook(data);
 }
 
 export async function findUserByLinkedInUrl(url: string) {
@@ -46,7 +59,7 @@ export async function findUserByLinkedInUrl(url: string) {
     .select("*")
     .eq("linkedin_profile_url", normalized)
     .maybeSingle();
-  return data as User | null;
+  return hydrateUserScrapbook(data);
 }
 
 export async function findUserByEmail(email: string) {
@@ -56,13 +69,13 @@ export async function findUserByEmail(email: string) {
     .select("*")
     .ilike("email", email)
     .maybeSingle();
-  return data as User | null;
+  return hydrateUserScrapbook(data);
 }
 
 export async function findUserById(id: string) {
   const supabase = createAdminClient();
   const { data } = await supabase.from("users").select("*").eq("id", id).maybeSingle();
-  return data as User | null;
+  return hydrateUserScrapbook(data);
 }
 
 async function claimAnonymousRsvps(userId: string) {

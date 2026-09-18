@@ -86,7 +86,35 @@ export async function GET(request: Request) {
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 
-  return NextResponse.json({ beacons: activeBeacons });
+  // Check if current user has an active broadcast
+  let myBeacon: MicroStatus | null = null;
+  const currentUser = await getCurrentUser();
+  if (currentUser) {
+    const rawMy = (currentUser as any).profile_digest?.active_beacon;
+    if (rawMy && rawMy.expires_at && new Date(rawMy.expires_at).getTime() > now.getTime()) {
+      myBeacon = {
+        id: rawMy.id || `beacon-${currentUser.id}`,
+        user_id: currentUser.id,
+        activity: rawMy.activity || "chai",
+        note: rawMy.note || null,
+        lat: rawMy.lat != null ? Number(rawMy.lat) : (currentUser.home_lat ? Number(currentUser.home_lat) : 0),
+        lng: rawMy.lng != null ? Number(rawMy.lng) : (currentUser.home_lng ? Number(currentUser.home_lng) : 0),
+        created_at: rawMy.created_at || now.toISOString(),
+        expires_at: rawMy.expires_at,
+        user: {
+          id: currentUser.id,
+          full_name: currentUser.full_name || rawMy.user_name || "Neighbor",
+          company: currentUser.company || rawMy.company || "Nearby Company",
+          job_title: currentUser.job_title || rawMy.job_title || "Professional",
+          profile_photo_url: currentUser.profile_photo_url || rawMy.profile_photo_url || null,
+          society_name: currentUser.society_name || null,
+          quick_chat_preference: currentUser.quick_chat_preference || "chai",
+        },
+      };
+    }
+  }
+
+  return NextResponse.json({ beacons: activeBeacons, my_beacon: myBeacon });
 }
 
 export async function POST(request: Request) {
