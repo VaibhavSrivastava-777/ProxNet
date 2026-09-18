@@ -130,9 +130,37 @@ export function SuggestedJobs() {
   const [pitchModalJob, setPitchModalJob] = useState<{ job: SuggestedJob; group: CompanyGroup } | null>(null);
   // New: Target Company Manager Modal
   const [showTargetCompanyModal, setShowTargetCompanyModal] = useState(false);
-  // New: Save job toast
+  // Save job feedback & state tracking
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [savedJobKeys, setSavedJobKeys] = useState<Set<string>>(new Set());
+  const [savingJobId, setSavingJobId] = useState<string | null>(null);
   const router = useRouter();
+
+  const fetchSavedApplications = useCallback(async () => {
+    try {
+      const res = await fetch("/api/jobs/applications");
+      if (res.ok) {
+        const data = await res.json();
+        const keys = new Set<string>();
+        for (const app of data.applications || []) {
+          if (app.job_id) keys.add(`id:${app.job_id}`);
+          if (app.company && app.job_title) {
+            keys.add(`text:${app.company.toLowerCase().trim()}:::${app.job_title.toLowerCase().trim()}`);
+          }
+        }
+        setSavedJobKeys(keys);
+      }
+    } catch (e) {
+      console.error("Failed to load saved jobs:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSavedApplications();
+    const onUpdated = () => fetchSavedApplications();
+    window.addEventListener("job_application_updated", onUpdated);
+    return () => window.removeEventListener("job_application_updated", onUpdated);
+  }, [fetchSavedApplications]);
 
   const loadData = useCallback(async () => {
     try {
@@ -511,6 +539,17 @@ export function SuggestedJobs() {
 
   // Helper: save job to pipeline
   const handleSaveJob = async (job: SuggestedJob, company: string) => {
+    const idKey = job.id ? `id:${job.id}` : null;
+    const textKey = `text:${company.toLowerCase().trim()}:::${job.title.toLowerCase().trim()}`;
+    const alreadySaved = (idKey && savedJobKeys.has(idKey)) || savedJobKeys.has(textKey);
+
+    if (alreadySaved) {
+      setSaveToast(`Already saved "${job.title}" to your pipeline`);
+      setTimeout(() => setSaveToast(null), 2500);
+      return;
+    }
+
+    setSavingJobId(job.id);
     try {
       const res = await fetch("/api/jobs/applications", {
         method: "POST",
@@ -524,15 +563,28 @@ export function SuggestedJobs() {
           matchScore: job.score || job.matchRate || null,
         }),
       });
-      if (res.ok) {
+
+      if (res.ok || res.status === 409) {
+        setSavedJobKeys((prev) => {
+          const next = new Set(prev);
+          if (idKey) next.add(idKey);
+          next.add(textKey);
+          return next;
+        });
         setSaveToast(`🔖 Saved "${job.title}" to your pipeline`);
         setTimeout(() => setSaveToast(null), 3000);
-      } else if (res.status === 409) {
-        setSaveToast(`Already saved "${job.title}"`);
-        setTimeout(() => setSaveToast(null), 2000);
+        window.dispatchEvent(new CustomEvent("job_application_updated"));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setSaveToast(`❌ Could not save: ${data.error || "Please log in or try again"}`);
+        setTimeout(() => setSaveToast(null), 4000);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to save job:", e);
+      setSaveToast(`❌ Failed to save: ${e.message || "Network error"}`);
+      setTimeout(() => setSaveToast(null), 3000);
+    } finally {
+      setSavingJobId(null);
     }
   };
 
@@ -952,6 +1004,11 @@ export function SuggestedJobs() {
                 ⚠️ {errorMsg}
               </div>
             )}
+            {saveToast && (
+              <div className="p-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold animate-fadeInUp flex items-center gap-1.5">
+                <span>{saveToast}</span>
+              </div>
+            )}
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               {[...activeCompanyModal.jobs]
                 .sort((a, b) => {
@@ -1105,15 +1162,48 @@ export function SuggestedJobs() {
                                 </button>
 
                                 {/* Save Button */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleSaveJob(job, activeCompanyModal.company)}
-                                  className="btn btn-sm bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border)] text-center text-xs font-semibold py-2 flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
-                                  title="Save to your pipeline"
-                                >
-                                  <span>🔖</span>
-                                  <span>Save</span>
-                                </button>
+                                {(() => {
+                                  const idKey = job.id ? `id:${job.id}` : null;
+                                  const textKey = `text:${activeCompanyModal.company.toLowerCase().trim()}:::${job.title.toLowerCase().trim()}`;
+                                  const isSaved = (idKey && savedJobKeys.has(idKey)) || savedJobKeys.has(textKey);
+                                  const isSaving = savingJobId === job.id;
+
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveJob(job, activeCompanyModal.company)}
+                                      disabled={isSaving || isSaved}
+                                      className={`btn btn-sm text-center text-xs font-semibold py-2 flex items-center justify-center gap-1.5 shadow-2xs transition-all ${
+                                        isSaved
+                                          ? "bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 cursor-default"
+                                          : isSaving
+                                          ? "bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] opacity-75 cursor-wait"
+                                          : "bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border)] cursor-pointer"
+                                      }`}
+                                      title={isSaved ? "Saved to your pipeline" : "Save to your pipeline"}
+                                    >
+                                      {isSaving ? (
+                                        <>
+                                          <svg className="animate-spin h-3.5 w-3.5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                          </svg>
+                                          <span>Saving...</span>
+                                        </>
+                                      ) : isSaved ? (
+                                        <>
+                                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
+                                          <span className="text-emerald-700 dark:text-emerald-300 font-bold">Saved</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span>🔖</span>
+                                          <span>Save</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  );
+                                })()}
                               </div>
 
                               {cleanDirectUrl ? (

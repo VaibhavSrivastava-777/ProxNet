@@ -246,3 +246,42 @@ export async function discoverAts(companyName: string): Promise<{ provider: stri
   return null;
 }
 
+/**
+ * Detect ATS provider and board identifier directly from a user-supplied career URL.
+ * Supports Greenhouse, Lever, Ashby, SmartRecruiters, Workday, and Amazon.
+ */
+export function detectAtsFromUrl(url: string | null | undefined): { provider: string; board: string } | null {
+  if (!url) return null;
+  const clean = url.trim();
+
+  // Greenhouse (boards.greenhouse.io/<board>, job-boards.greenhouse.io/<board>, or greenhouse.io/embed/job_board?for=<board>)
+  const ghMatch = clean.match(/(?:boards|job-boards)\.greenhouse\.io\/(?:embed\/job_board\?for=)?([^/?#]+)/i) ||
+                  clean.match(/greenhouse\.io\/(?:embed\/job_board\?for=)([^/?#&]+)/i);
+  if (ghMatch) return { provider: "greenhouse", board: ghMatch[1] };
+
+  // Lever (jobs.lever.co/<board>)
+  const leverMatch = clean.match(/jobs\.lever\.co\/([^/?#]+)/i);
+  if (leverMatch) return { provider: "lever", board: leverMatch[1] };
+
+  // Ashby (jobs.ashbyhq.com/<board>)
+  const ashbyMatch = clean.match(/jobs\.ashbyhq\.com\/([^/?#]+)/i);
+  if (ashbyMatch) return { provider: "ashby", board: ashbyMatch[1] };
+
+  // SmartRecruiters (careers.smartrecruiters.com/<board> or jobs.smartrecruiters.com/<board>)
+  const srMatch = clean.match(/(?:careers|jobs)\.smartrecruiters\.com\/([^/?#]+)/i);
+  if (srMatch) return { provider: "smartrecruiters", board: srMatch[1] };
+
+  // Workday (e.g. *.myworkdayjobs.com)
+  if (clean.includes("myworkdayjobs.com")) {
+    return { provider: "workday", board: clean };
+  }
+
+  // Amazon
+  if (clean.includes("amazon.jobs")) {
+    return { provider: "amazon", board: clean };
+  }
+
+  return null;
+}
+
+

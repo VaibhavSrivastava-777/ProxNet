@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { discoverAts } from "@/lib/ats-discovery";
+import { discoverAts, detectAtsFromUrl } from "@/lib/ats-discovery";
 import { STRATEGIES } from "@/lib/scrape-strategies";
 
 export async function GET() {
@@ -239,102 +239,149 @@ export async function POST(request: Request) {
   let provider = "custom";
   let boardTokenOrUrl = careers_url || `https://careers.google.com/jobs/results/?q=${encodeURIComponent(cleanName)}`;
 
-  const discovered = await discoverAts(cleanName);
-  if (discovered) {
-    provider = discovered.provider;
-    boardTokenOrUrl = discovered.board;
-  } else {
-    const { data: existingConfig } = await supabase
-      .from("company_ats_config")
-      .select("*")
-      .ilike("company_name", cleanName)
-      .single();
-
-    if (existingConfig) {
-      provider = existingConfig.provider;
-      boardTokenOrUrl = existingConfig.board_token_or_url || boardTokenOrUrl;
-    } else if (careers_url) {
-      provider = "custom";
-      boardTokenOrUrl = careers_url;
+  // Priority 1: Check if user provided an explicit careers URL that matches a known ATS pattern
+  if (careers_url) {
+    const urlDetected = detectAtsFromUrl(careers_url);
+    if (urlDetected) {
+      provider = urlDetected.provider;
+      boardTokenOrUrl = urlDetected.board;
     }
   }
 
-  // Save newly discovered config as pending
+  // Priority 2: If not detected from URL, probe known boards or database
+  if (provider === "custom") {
+    const discovered = await discoverAts(cleanName);
+    if (discovered) {
+      provider = discovered.provider;
+      boardTokenOrUrl = discovered.board;
+    } else {
+      const { data: existingConfig } = await supabase
+        .from("company_ats_config")
+        .select("*")
+        .ilike("company_name", cleanName)
+        .single();
+
+      if (existingConfig) {
+        provider = existingConfig.provider;
+        boardTokenOrUrl = existingConfig.board_token_or_url || boardTokenOrUrl;
+      } else if (careers_url) {
+        provider = "custom";
+        boardTokenOrUrl = careers_url;
+      }
+    }
+  }
+
+  // Save config state (company_ats_config schema: id, company_name, provider, board_token_or_url, scrape_notes, total_jobs_found, last_scraped_at)
   await supabase.from("company_ats_config").upsert({
     company_name: cleanName,
     provider,
     board_token_or_url: boardTokenOrUrl,
-    scrape_status: "pending",
+    scrape_notes: "status: scraping in progress",
     last_scraped_at: new Date().toISOString(),
   }, { onConflict: "company_name" });
 
-  // 3. Submit background scraping job (non-blocking)
-  backgroundScrapeTargetCompany(
-    cleanName,
-    provider,
-    boardTokenOrUrl,
-    user.id,
-    userProfile.job_title,
-    userProfile.company
-  ).catch(err => console.error("Background task error:", err));
+  // 3. Execute Real-Time Scraping with a safety timeout wrapper (12 seconds)
+  let scrapeResult: { scraped: number; saved: number; error?: string } = { scraped: 0, saved: 0 };
+  try {
+    const scrapePromise = scrapeTargetCompany(
+      cleanName,
+      provider,
+      boardTokenOrUrl,
+      user.id,
+      userProfile.job_title,
+      userProfile.company
+    );
+    const timeoutPromise = new Promise<{ scraped: number; saved: number; error: string }>((resolve) =>
+      setTimeout(() => resolve({ scraped: 0, saved: 0, error: "timeout" }), 12000)
+    );
+    scrapeResult = await Promise.race([scrapePromise, timeoutPromise]);
+  } catch (err: any) {
+    console.error("Real-time scrape execution error:", err);
+    scrapeResult = { scraped: 0, saved: 0, error: err.message };
+  }
 
   return NextResponse.json({
     success: true,
     company_name: cleanName,
     ats_provider: provider,
     board_url: boardTokenOrUrl,
-    scrape_status: "pending",
-    message: `Scraping job submitted for ${cleanName} in background. Listings will subsequently appear on your Jobs tab.`,
+    jobs_scraped: scrapeResult.scraped,
+    jobs_saved: scrapeResult.saved,
+    scrape_error: scrapeResult.error || null,
+    message: scrapeResult.scraped > 0
+      ? `Real-time scrape complete: Found ${scrapeResult.scraped} active openings (${scrapeResult.saved} saved) for ${cleanName}!`
+      : `Target company ${cleanName} recorded (${provider}). ${scrapeResult.error ? `Scraper returned: ${scrapeResult.error}` : "0 jobs found on portal."}`,
     targetCompanies: profileDigest.target_companies,
   });
 }
 
-async function backgroundScrapeTargetCompany(
+async function scrapeTargetCompany(
   cleanName: string,
   provider: string,
   boardTokenOrUrl: string,
   userId: string,
   userJobTitle?: string,
   userCompany?: string
-) {
+): Promise<{ scraped: number; saved: number; error?: string }> {
   const supabase = createAdminClient();
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
   const strategy = STRATEGIES[provider] || STRATEGIES["custom"];
-  if (!strategy || !boardTokenOrUrl) return;
+  if (!strategy || !boardTokenOrUrl) {
+    return { scraped: 0, saved: 0, error: "No valid scraping strategy or URL" };
+  }
 
   try {
-    console.log(`[BACKGROUND SCRAPE SUBMITTED] Starting scrape for ${cleanName} (${provider})...`);
-
+    console.log(`[REALTIME SCRAPE START] ${cleanName} (${provider}) token/url: ${boardTokenOrUrl}`);
     const scrapedJobs = await strategy(boardTokenOrUrl, cleanName);
+    console.log(`[REALTIME SCRAPE RAW] ${cleanName}: ${scrapedJobs?.length || 0} listings discovered.`);
+
+    if (!scrapedJobs || scrapedJobs.length === 0) {
+      await supabase.from("company_ats_config").upsert({
+        company_name: cleanName,
+        provider,
+        board_token_or_url: boardTokenOrUrl,
+        total_jobs_found: 0,
+        scrape_notes: "status: 0 listings returned by portal",
+        last_scraped_at: new Date().toISOString(),
+      }, { onConflict: "company_name" });
+      return { scraped: 0, saved: 0 };
+    }
+
+    // Limit to top 35 active listings for real-time responsiveness
+    const toProcess = scrapedJobs.filter(j => j.title && j.title.trim().length >= 3).slice(0, 35);
     let savedCount = 0;
 
-    for (const j of scrapedJobs) {
-      if (!j.title || j.title.length < 3) continue;
-
-      let embedding = null;
-      if (OPENAI_KEY) {
-        const textToEmbed = `Company: ${cleanName}\nTitle: ${j.title}\nLocation: ${j.location || "Remote"}\nDescription: ${(j.description || j.title).slice(0, 1000)}`;
-        try {
-          const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${OPENAI_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              input: textToEmbed,
-              model: "text-embedding-3-small",
-            }),
-          });
-          if (oaiRes.ok) {
-            const oaiData = await oaiRes.json();
-            embedding = oaiData.data[0]?.embedding || null;
-          }
-        } catch (e) {
-          console.error("Embedding generation error:", e);
+    // Batch generate embeddings via OpenAI in a single call if available
+    let embeddings: (number[] | null)[] = [];
+    if (OPENAI_KEY && toProcess.length > 0) {
+      try {
+        const textsToEmbed = toProcess.map(j =>
+          `Company: ${cleanName}\nTitle: ${j.title}\nLocation: ${j.location || "Remote"}\nDescription: ${(j.description || j.title).slice(0, 1000)}`
+        );
+        const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${OPENAI_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            input: textsToEmbed,
+            model: "text-embedding-3-small",
+          }),
+        });
+        if (oaiRes.ok) {
+          const oaiData = await oaiRes.json();
+          embeddings = (oaiData.data || []).map((item: any) => item.embedding || null);
         }
+      } catch (embErr) {
+        console.error("Batch embedding error for target company:", embErr);
       }
+    }
+
+    for (let i = 0; i < toProcess.length; i++) {
+      const j = toProcess[i];
+      const embedding = embeddings[i] || null;
 
       const { error: insertErr } = await supabase.from("scraped_jobs").upsert({
         company: cleanName,
@@ -343,14 +390,16 @@ async function backgroundScrapeTargetCompany(
         url: j.url || boardTokenOrUrl,
         posted_at: j.posted_at || new Date().toISOString(),
         description: j.description || j.title,
-        source: j.source || provider,
-        contact_id: userId,
-        contact_alias: userJobTitle ? `${userJobTitle} @ ${userCompany || cleanName}` : "ProxNet Professional",
+        ats_source: j.source || provider,
         embedding,
         created_at: new Date().toISOString(),
       }, { onConflict: "url" });
 
-      if (!insertErr) savedCount++;
+      if (insertErr) {
+        console.error("scraped_jobs insert error:", insertErr.message);
+      } else {
+        savedCount++;
+      }
     }
 
     await supabase.from("company_ats_config").upsert({
@@ -358,21 +407,22 @@ async function backgroundScrapeTargetCompany(
       provider,
       board_token_or_url: boardTokenOrUrl,
       total_jobs_found: scrapedJobs.length,
-      scrape_status: "success",
+      scrape_notes: `status: success (${scrapedJobs.length} raw, ${savedCount} saved)`,
       last_scraped_at: new Date().toISOString(),
     }, { onConflict: "company_name" });
 
-    console.log(`[BACKGROUND SCRAPE FINISHED] ${cleanName}: ${scrapedJobs.length} pulled, ${savedCount} saved.`);
+    console.log(`[REALTIME SCRAPE COMPLETE] ${cleanName}: ${scrapedJobs.length} pulled, ${savedCount} stored.`);
+    return { scraped: scrapedJobs.length, saved: savedCount };
   } catch (scrapeErr: any) {
-    console.error(`[BACKGROUND SCRAPE ERROR] ${cleanName}:`, scrapeErr.message);
+    console.error(`[REALTIME SCRAPE ERROR] ${cleanName}:`, scrapeErr.message);
     await supabase.from("company_ats_config").upsert({
       company_name: cleanName,
       provider,
       board_token_or_url: boardTokenOrUrl,
-      scrape_status: "failed",
-      scrape_notes: scrapeErr.message,
+      scrape_notes: `status: failed - ${scrapeErr.message}`,
       last_scraped_at: new Date().toISOString(),
     }, { onConflict: "company_name" });
+    return { scraped: 0, saved: 0, error: scrapeErr.message };
   }
 }
 

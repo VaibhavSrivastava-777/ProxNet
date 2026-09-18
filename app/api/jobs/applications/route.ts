@@ -52,42 +52,81 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
 
-  const { data, error } = await supabase
-    .from("job_applications")
-    .upsert(
-      {
-        user_id: user.id,
-        job_id: jobId || null,
-        company,
-        job_title: jobTitle,
+  // Check for existing application by job_id or company + jobTitle
+  let existing: { id: string; stage: string } | null = null;
+  if (jobId) {
+    const { data } = await supabase
+      .from("job_applications")
+      .select("id, stage")
+      .eq("user_id", user.id)
+      .eq("job_id", jobId)
+      .maybeSingle();
+    if (data) existing = data;
+  }
+  if (!existing && company && jobTitle) {
+    const { data } = await supabase
+      .from("job_applications")
+      .select("id, stage")
+      .eq("user_id", user.id)
+      .ilike("company", company.trim())
+      .ilike("job_title", jobTitle.trim())
+      .maybeSingle();
+    if (data) existing = data;
+  }
+
+  if (existing) {
+    const { data: updated, error: updateErr } = await supabase
+      .from("job_applications")
+      .update({
+        company: company.trim(),
+        job_title: jobTitle.trim(),
         job_url: jobUrl || null,
-        stage: stage || "saved",
-        match_score: matchScore || null,
-        notes: notes || null,
+        stage: stage || existing.stage || "saved",
+        match_score: matchScore !== undefined ? matchScore : null,
+        notes: notes !== undefined ? notes : null,
         referral_thread_id: referralThreadId || null,
         applied_at: stage === "applied" ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,job_id" }
-    )
+      })
+      .eq("id", existing.id)
+      .select()
+      .single();
+
+    if (updateErr) {
+      return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    }
+    return NextResponse.json({ success: true, application: updated, alreadySaved: true });
+  }
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from("job_applications")
+    .insert({
+      user_id: user.id,
+      job_id: jobId || null,
+      company: company.trim(),
+      job_title: jobTitle.trim(),
+      job_url: jobUrl || null,
+      stage: stage || "saved",
+      match_score: matchScore || null,
+      notes: notes || null,
+      referral_thread_id: referralThreadId || null,
+      applied_at: stage === "applied" ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
     .select()
     .single();
 
-  if (error) {
-    if (error.code === "42P01" || error.message?.includes("does not exist")) {
+  if (insertErr) {
+    if (insertErr.code === "42P01" || insertErr.message?.includes("does not exist")) {
       return NextResponse.json(
         { error: "Application tracking table not yet provisioned. Run migration 20260917_job_application_tracker.sql.", tableMissing: true },
         { status: 503 }
       );
     }
-    // If unique constraint fails (no job_id), do a regular insert
-    if (error.code === "23505" || error.message?.includes("duplicate")) {
-      return NextResponse.json({ error: "Job already saved" }, { status: 409 });
-    }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: insertErr.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, application: data });
+  return NextResponse.json({ success: true, application: inserted, created: true });
 }
 
 // PATCH: Update an application's stage or notes

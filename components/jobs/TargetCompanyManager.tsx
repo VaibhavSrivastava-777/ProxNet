@@ -96,8 +96,12 @@ export function TargetCompanyManager({ onCompaniesChanged }: TargetCompanyManage
       if (res.ok && data.success) {
         setNewCompany("");
         setCareerUrl("");
+        const count = data.jobs_scraped ?? 0;
+        const saved = data.jobs_saved ?? count;
         setMessage({
-          text: `⚡ Scraping job submitted in background for ${companyToAdd} (${data.ats_provider})! Matched job listings will appear on your Jobs tab shortly.`,
+          text: count > 0
+            ? `⚡ Successfully scraped ${count} active opening${count > 1 ? "s" : ""} (${saved} saved) for ${companyToAdd} (${data.ats_provider}) in real-time!`
+            : `⚡ ${companyToAdd} added (${data.ats_provider}). ${data.message || ""}`,
           type: "success",
         });
         await fetchTargets();

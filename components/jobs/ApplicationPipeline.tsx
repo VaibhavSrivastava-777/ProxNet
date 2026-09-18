@@ -56,6 +56,9 @@ export const ApplicationPipeline: React.FC<ApplicationPipelineProps> = ({ onRefr
 
   useEffect(() => {
     fetchApplications();
+    const handleUpdate = () => fetchApplications();
+    window.addEventListener("job_application_updated", handleUpdate);
+    return () => window.removeEventListener("job_application_updated", handleUpdate);
   }, [fetchApplications]);
 
   const updateStage = async (id: string, newStage: JobApplication["stage"]) => {
