@@ -8,6 +8,7 @@ interface MicroStatusBeaconProps {
   userLat?: number | null;
   userLng?: number | null;
   onJoinBeacon?: (beacon: MicroStatus) => void;
+  onBeaconsChange?: (beacons: MicroStatus[]) => void;
 }
 
 export function MicroStatusBeacon({
@@ -15,6 +16,7 @@ export function MicroStatusBeacon({
   userLat,
   userLng,
   onJoinBeacon,
+  onBeaconsChange,
 }: MicroStatusBeaconProps) {
   const [beacons, setBeacons] = useState<MicroStatus[]>([]);
   const [loading, setLoading] = useState(false);
@@ -33,6 +35,7 @@ export function MicroStatusBeacon({
         const data = await res.json();
         const list: MicroStatus[] = data.beacons || [];
         setBeacons(list);
+        onBeaconsChange?.(list);
         if (currentUserId) {
           const mine = list.find((b) => b.user_id === currentUserId);
           setMyBeacon(mine || null);
@@ -45,7 +48,7 @@ export function MicroStatusBeacon({
 
   useEffect(() => {
     fetchBeacons();
-    const interval = setInterval(fetchBeacons, 30000); // refresh every 30s
+    const interval = setInterval(fetchBeacons, 20000); // refresh every 20s
     return () => clearInterval(interval);
   }, [userLat, userLng, currentUserId]);
 
@@ -102,7 +105,10 @@ export function MicroStatusBeacon({
     quick_chat: { icon: "💬", label: "Quick Catch-up" },
   };
 
-  const otherBeacons = beacons.filter((b) => b.user_id !== currentUserId);
+  const getRemainingMins = (expiresAt: string) => {
+    const diff = new Date(expiresAt).getTime() - Date.now();
+    return Math.max(1, Math.round(diff / 60000));
+  };
 
   return (
     <>
@@ -117,12 +123,15 @@ export function MicroStatusBeacon({
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500" />
               </span>
               <div>
-                <div className="text-xs font-bold flex items-center gap-1">
+                <div className="text-xs font-bold flex items-center gap-1.5 flex-wrap">
                   <span>{activityMeta[myBeacon.activity]?.icon}</span>
                   <span>Your {activityMeta[myBeacon.activity]?.label} beacon is live</span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 animate-pulse">
+                    ⏳ {getRemainingMins(myBeacon.expires_at)}m left
+                  </span>
                 </div>
                 {myBeacon.note && (
-                  <div className="text-[11px] text-[var(--color-text-secondary)] truncate max-w-[200px]">
+                  <div className="text-[11px] text-[var(--color-text-secondary)] truncate max-w-[240px] mt-0.5">
                     &quot;{myBeacon.note}&quot;
                   </div>
                 )}
@@ -146,31 +155,6 @@ export function MicroStatusBeacon({
             <span>☕</span>
             <span>Down for Chai? (Set Beacon)</span>
           </button>
-        )}
-
-        {/* Nearby Neighbor Beacons Strip */}
-        {otherBeacons.length > 0 && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            {otherBeacons.map((b) => (
-              <div
-                key={b.id}
-                onClick={() => onJoinBeacon?.(b)}
-                className="shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--color-surface)] border border-emerald-500/30 text-xs shadow-sm hover:bg-emerald-500/10 cursor-pointer transition-colors"
-              >
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                </span>
-                <span className="font-semibold text-[var(--color-text)]">
-                  {b.user?.full_name || "Neighbor"}
-                </span>
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                  {activityMeta[b.activity]?.icon} {activityMeta[b.activity]?.label}
-                </span>
-                <span className="text-[10px] text-[var(--color-text-tertiary)]">&rarr;</span>
-              </div>
-            ))}
-          </div>
         )}
       </div>
 

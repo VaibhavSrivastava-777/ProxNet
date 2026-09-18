@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { isPastEvent } from "@/lib/date";
-import type { CompanyCluster } from "@/lib/types";
+import type { CompanyCluster, MicroStatus } from "@/lib/types";
 import { QuestionForm } from "@/components/qa/QuestionForm";
 import useSWR, { mutate } from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -248,6 +248,46 @@ export function ProximityMap() {
       (p.profile_digest?.skills && p.profile_digest.skills.some((s: string) => s.toLowerCase().includes(qFilter)))
     );
   }
+
+  // Live active beacons tracking
+  const [activeBeacons, setActiveBeacons] = useState<MicroStatus[]>([]);
+
+  // Create a map of active beacons by user_id
+  const activeBeaconMap = useMemo(() => {
+    const map = new Map<string, MicroStatus>();
+    for (const b of activeBeacons) {
+      if (b.user_id) map.set(b.user_id, b);
+    }
+    return map;
+  }, [activeBeacons]);
+
+  // Sort people so anyone broadcasting a beacon appears at the very top of the network list!
+  const sortedPeople = useMemo(() => {
+    const existingIds = new Set(filteredPeople.map((p: any) => p.id));
+    const extraBroadcasters: any[] = [];
+
+    for (const b of activeBeacons) {
+      if (b.user_id && b.user_id !== profile?.id && !existingIds.has(b.user_id)) {
+        extraBroadcasters.push({
+          id: b.user_id,
+          full_name: b.user?.full_name || "Neighbor",
+          anonymous_name: b.user?.full_name || "Neighbor",
+          company: b.user?.company || "Local Member",
+          job_title: b.user?.job_title || "Professional",
+          profile_photo_url: b.user?.profile_photo_url || null,
+          distance: 1000,
+        });
+      }
+    }
+
+    const combined = [...extraBroadcasters, ...filteredPeople];
+    return combined.sort((a: any, b: any) => {
+      const aHas = activeBeaconMap.has(a.id) ? 1 : 0;
+      const bHas = activeBeaconMap.has(b.id) ? 1 : 0;
+      return bHas - aHas;
+    });
+  }, [filteredPeople, activeBeacons, activeBeaconMap, profile?.id]);
+
   const isInitializing = !profile || !center;
   const loading = isInitializing || clustersLoading || peopleLoading || (!peopleData && !localError);
   const error = localError;
@@ -565,6 +605,7 @@ export function ProximityMap() {
         currentUserId={profile?.id}
         userLat={center?.lat ?? (profile?.home_lat ? Number(profile.home_lat) : null)}
         userLng={center?.lng ?? (profile?.home_lng ? Number(profile.home_lng) : null)}
+        onBeaconsChange={setActiveBeacons}
         onJoinBeacon={(beacon) => {
           if (beacon.user_id) {
             openDirectChat({
@@ -660,57 +701,141 @@ export function ProximityMap() {
               )}
               <div className="flex items-center justify-between px-2 py-1">
                 <span className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">
-                  {filteredPeople.length} Professionals Found
+                  {sortedPeople.length} Professionals Found
                 </span>
               </div>
-              {filteredPeople.slice(0, displayLimit).map((p: any, index: number) => {
-                const isLast = index === Math.min(filteredPeople.length, displayLimit) - 1;
-                return (
-              <div
-                key={p.id}
-                ref={isLast ? lastElementRef : null}
-                onClick={() => setSelectedPerson(p)}
-                className="card p-3 sm:p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)] transition-all cursor-pointer flex items-center justify-between gap-4"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <CompanyLogo company={p.company} size={40} />
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-bold text-[var(--color-text)] truncate">
-                      {p.company}
-                    </span>
-                    <span className="text-xs text-[var(--color-text-secondary)] font-medium truncate mt-0.5">
-                      {p.job_title}
-                    </span>
-                    {p.distance !== null && p.distance !== undefined ? (
-                      <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1">
-                        📍 {p.distance >= 1000 ? `${(p.distance / 1000).toFixed(1)} km` : `${Math.round(p.distance)} m`} away
-                      </span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full inline-block mt-1 font-semibold animate-pulse" style={{ color: "var(--color-warning)", backgroundColor: "var(--color-warning-bg, rgba(245, 158, 11, 0.1))", border: "1px solid rgba(245, 158, 11, 0.2)", width: "fit-content" }}>
-                        ⚠️ Location not specified
-                      </span>
-                    )}
-                  </div>
-                </div>
+              {sortedPeople.slice(0, displayLimit).map((p: any, index: number) => {
+                const isLast = index === Math.min(sortedPeople.length, displayLimit) - 1;
+                const beacon = activeBeaconMap.get(p.id);
+                const remainingMins = beacon ? Math.max(1, Math.round((new Date(beacon.expires_at).getTime() - Date.now()) / 60000)) : null;
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={(e) => handleFollowToggle(e, p)}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border cursor-pointer transition-colors ${p.is_followed ? 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)] border-[var(--color-primary)]/20' : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]'}`}
+                if (beacon) {
+                  const activityIcon = beacon.activity === "chai" ? "☕" : beacon.activity === "walk" ? "🚶" : beacon.activity === "sports" ? "🏸" : "💬";
+                  const activityLabel = beacon.activity === "chai" ? "15-min Chai Beacon" : beacon.activity === "walk" ? "Walk & Talk Beacon" : beacon.activity === "sports" ? "Badminton / Sports" : "Quick Catch-up";
+
+                  return (
+                    <div
+                      key={p.id}
+                      ref={isLast ? lastElementRef : null}
+                      onClick={() => setSelectedPerson(p)}
+                      className="card p-3.5 sm:p-4 rounded-2xl border-2 border-amber-500/60 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-[var(--color-surface)] dark:from-amber-950/40 dark:via-amber-900/15 shadow-md shadow-amber-500/10 hover:border-amber-500 transition-all cursor-pointer flex flex-col gap-2.5 animate-fadeIn"
+                    >
+                      {/* Broadcast status header with pulsing radar + live time-lapse animation */}
+                      <div className="flex items-center justify-between gap-2 border-b border-amber-500/20 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="relative flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-80" />
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                          </span>
+                          <span className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                            <span>{activityIcon}</span>
+                            <span>{activityLabel}</span>
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[11px] font-bold border border-amber-500/30">
+                          <span className="animate-pulse">⏳</span>
+                          <span>{remainingMins}m left</span>
+                        </div>
+                      </div>
+
+                      {/* Main card row: profile info + Join action button */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <CompanyLogo company={p.company} size={42} />
+                          <div className="flex flex-col min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-[var(--color-text)] truncate">
+                                {p.full_name || p.anonymous_name || p.company}
+                              </span>
+                              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.2 rounded-md">
+                                Broadcast
+                              </span>
+                            </div>
+                            <span className="text-xs text-[var(--color-text-secondary)] font-medium truncate mt-0.5">
+                              {p.job_title} @ {p.company}
+                            </span>
+                            {beacon.note && (
+                              <span className="text-[11px] text-amber-700 dark:text-amber-300 italic truncate mt-0.5 flex items-center gap-1 font-medium">
+                                <span>📍</span> &quot;{beacon.note}&quot;
+                              </span>
+                            )}
+                            {p.distance !== null && p.distance !== undefined && (
+                              <span className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5">
+                                📍 {p.distance >= 1000 ? `${(p.distance / 1000).toFixed(1)} km` : `${Math.round(p.distance)} m`} away
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDirectChat({
+                                id: p.id,
+                                anonymous_name: p.full_name || p.anonymous_name || "Neighbor",
+                                company: p.company || "Neighbor",
+                                job_title: p.job_title || "Professional",
+                              });
+                            }}
+                            className="btn btn-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl border-0 shadow-sm flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105 shrink-0"
+                          >
+                            <span>{activityIcon}</span>
+                            <span>Join {beacon.activity === "chai" ? "Chai" : beacon.activity === "walk" ? "Walk" : "Meet"}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={p.id}
+                    ref={isLast ? lastElementRef : null}
+                    onClick={() => setSelectedPerson(p)}
+                    className="card p-3 sm:p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)] transition-all cursor-pointer flex items-center justify-between gap-4"
                   >
-                    {p.is_followed ? "Following" : "Follow"}
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); openDirectChat(p); }}
-                    className="btn-icon btn-ghost text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)]/50 rounded-lg flex items-center justify-center p-2 border-0 bg-transparent shrink-0"
-                    title="Send Message"
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                  </button>
-                </div>
-              </div>
-              );
-            })}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <CompanyLogo company={p.company} size={40} />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-bold text-[var(--color-text)] truncate">
+                          {p.company}
+                        </span>
+                        <span className="text-xs text-[var(--color-text-secondary)] font-medium truncate mt-0.5">
+                          {p.job_title}
+                        </span>
+                        {p.distance !== null && p.distance !== undefined ? (
+                          <span className="text-[10px] text-[var(--color-text-tertiary)] mt-1">
+                            📍 {p.distance >= 1000 ? `${(p.distance / 1000).toFixed(1)} km` : `${Math.round(p.distance)} m`} away
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full inline-block mt-1 font-semibold animate-pulse" style={{ color: "var(--color-warning)", backgroundColor: "var(--color-warning-bg, rgba(245, 158, 11, 0.1))", border: "1px solid rgba(245, 158, 11, 0.2)", width: "fit-content" }}>
+                            ⚠️ Location not specified
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={(e) => handleFollowToggle(e, p)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border cursor-pointer transition-colors ${p.is_followed ? 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)] border-[var(--color-primary)]/20' : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]'}`}
+                      >
+                        {p.is_followed ? "Following" : "Follow"}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openDirectChat(p); }}
+                        className="btn-icon btn-ghost text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)]/50 rounded-lg flex items-center justify-center p-2 border-0 bg-transparent shrink-0"
+                        title="Send Message"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </>
           )}
         </div>

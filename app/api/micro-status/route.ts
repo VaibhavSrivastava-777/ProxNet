@@ -1,115 +1,92 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isSupabaseConfigured } from "@/lib/supabase/is-configured";
+import { haversineDistanceMeters } from "@/lib/geo/haversine";
 import type { MicroStatus } from "@/lib/types";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const latParam = searchParams.get("lat");
   const lngParam = searchParams.get("lng");
-  const radiusMeters = Number(searchParams.get("radius")) || 3000;
-
-  if (!isSupabaseConfigured()) {
-    // Return mock active beacons for local dev
-    const now = new Date();
-    const expires = new Date(now.getTime() + 35 * 60000).toISOString();
-    const mockBeacons: MicroStatus[] = [
-      {
-        id: "beacon-1",
-        user_id: "user-101",
-        activity: "chai",
-        note: "At Third Wave Coffee / clubhouse",
-        lat: latParam ? Number(latParam) + 0.002 : 12.9716,
-        lng: lngParam ? Number(lngParam) + 0.003 : 77.5946,
-        created_at: now.toISOString(),
-        expires_at: expires,
-        user: {
-          id: "user-101",
-          full_name: "Karan Gupta",
-          company: "Zerodha",
-          job_title: "Tech Lead",
-          profile_photo_url: null,
-          society_name: "Prestige Falcon City",
-        },
-      },
-      {
-        id: "beacon-2",
-        user_id: "user-102",
-        activity: "walk",
-        note: "Evening walk on outer track",
-        lat: latParam ? Number(latParam) - 0.001 : 12.9710,
-        lng: lngParam ? Number(lngParam) - 0.002 : 77.5940,
-        created_at: now.toISOString(),
-        expires_at: expires,
-        user: {
-          id: "user-102",
-          full_name: "Neha Sharma",
-          company: "Microsoft",
-          job_title: "Product Designer",
-          profile_photo_url: null,
-          society_name: "Prestige Falcon City",
-        },
-      },
-    ];
-    return NextResponse.json({ beacons: mockBeacons });
-  }
+  const radiusMeters = Number(searchParams.get("radius")) || 50000; // default 50km
+  const lat = latParam ? Number(latParam) : null;
+  const lng = lngParam ? Number(lngParam) : null;
 
   const supabase = createAdminClient();
-  const now = new Date().toISOString();
+  const now = new Date();
 
-  // Query unexpired beacons with poster profile info
-  const { data: beacons, error } = await supabase
-    .from("micro_status")
+  // Query users that have an active_beacon set in their profile_digest
+  const { data: usersWithBeacon, error } = await supabase
+    .from("users")
     .select(`
       id,
-      user_id,
-      activity,
-      note,
-      lat,
-      lng,
-      created_at,
-      expires_at,
-      user:users!micro_status_user_id_fkey (
-        id,
-        full_name,
-        company,
-        job_title,
-        profile_photo_url,
-        society_name,
-        quick_chat_preference
-      )
+      full_name,
+      company,
+      job_title,
+      profile_photo_url,
+      society_name,
+      quick_chat_preference,
+      home_lat,
+      home_lng,
+      profile_digest
     `)
-    .gt("expires_at", now)
-    .order("created_at", { ascending: false })
-    .limit(50);
+    .not("profile_digest->active_beacon", "is", null);
 
-  if (error) {
-    console.warn("Micro-status query fallback:", error.message);
-    const mockExpires = new Date(Date.now() + 40 * 60000).toISOString();
-    return NextResponse.json({
-      beacons: [
-        {
-          id: "local-beacon-sample",
-          user_id: "local-user-sample",
-          activity: "chai",
-          note: "Clubhouse coffee corner",
-          lat: latParam ? Number(latParam) + 0.001 : 12.8912,
-          lng: lngParam ? Number(lngParam) + 0.001 : 77.5643,
-          created_at: new Date().toISOString(),
-          expires_at: mockExpires,
-          user: {
-            id: "local-user-sample",
-            full_name: "Community Neighbor",
-            company: "Tech Enterprise",
-            job_title: "Senior SDE",
-          },
-        },
-      ],
+  if (error || !usersWithBeacon) {
+    console.warn("Micro-status fetch error:", error?.message);
+    return NextResponse.json({ beacons: [] });
+  }
+
+  const activeBeacons: MicroStatus[] = [];
+
+  for (const u of usersWithBeacon) {
+    const rawBeacon = u.profile_digest?.active_beacon;
+    if (!rawBeacon || !rawBeacon.expires_at) continue;
+
+    const expiresDate = new Date(rawBeacon.expires_at);
+    // Filter out expired beacons
+    if (expiresDate.getTime() <= now.getTime()) {
+      continue;
+    }
+
+    const beaconLat = rawBeacon.lat != null ? Number(rawBeacon.lat) : (u.home_lat ? Number(u.home_lat) : null);
+    const beaconLng = rawBeacon.lng != null ? Number(rawBeacon.lng) : (u.home_lng ? Number(u.home_lng) : null);
+
+    // Optional proximity filter if coordinates provided
+    if (lat != null && lng != null && beaconLat != null && beaconLng != null) {
+      const dist = haversineDistanceMeters(lat, lng, beaconLat, beaconLng);
+      if (dist > radiusMeters) {
+        continue;
+      }
+    }
+
+    activeBeacons.push({
+      id: rawBeacon.id || `beacon-${u.id}`,
+      user_id: u.id,
+      activity: rawBeacon.activity || "chai",
+      note: rawBeacon.note || null,
+      lat: beaconLat ?? 0,
+      lng: beaconLng ?? 0,
+      created_at: rawBeacon.created_at || now.toISOString(),
+      expires_at: rawBeacon.expires_at,
+      user: {
+        id: u.id,
+        full_name: u.full_name || "Neighbor",
+        company: u.company || "Professional",
+        job_title: u.job_title || "Member",
+        profile_photo_url: u.profile_photo_url || null,
+        society_name: u.society_name || null,
+        quick_chat_preference: u.quick_chat_preference || "chai",
+      },
     });
   }
 
-  return NextResponse.json({ beacons: beacons || [] });
+  // Sort latest first
+  activeBeacons.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  return NextResponse.json({ beacons: activeBeacons });
 }
 
 export async function POST(request: Request) {
@@ -132,60 +109,58 @@ export async function POST(request: Request) {
     );
   }
 
+  const nowIso = new Date().toISOString();
   const expiresAt = new Date(Date.now() + durationMins * 60000).toISOString();
-
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json({
-      success: true,
-      beacon: {
-        id: "mock-new-beacon",
-        user_id: user.id,
-        activity,
-        note,
-        lat,
-        lng,
-        created_at: new Date().toISOString(),
-        expires_at: expiresAt,
-      },
-    });
-  }
 
   const supabase = createAdminClient();
 
-  // Remove existing active beacon for this user before inserting new one
-  await supabase.from("micro_status").delete().eq("user_id", user.id);
-
-  const { data, error } = await supabase
-    .from("micro_status")
-    .insert({
-      user_id: user.id,
-      activity,
-      note,
-      lat,
-      lng,
-      expires_at: expiresAt,
-    })
-    .select("*")
+  const { data: userProfile, error: profileError } = await supabase
+    .from("users")
+    .select("profile_digest")
+    .eq("id", user.id)
     .single();
 
-  if (error) {
-    console.warn("Falling back to local beacon response:", error.message);
-    return NextResponse.json({
-      success: true,
-      beacon: {
-        id: "local-" + Date.now(),
-        user_id: user.id,
-        activity,
-        note,
-        lat,
-        lng,
-        created_at: new Date().toISOString(),
-        expires_at: expiresAt,
-      },
-    });
+  if (profileError || !userProfile) {
+    return NextResponse.json({ error: "User profile not found" }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, beacon: data });
+  const profileDigest = userProfile.profile_digest || {};
+  const beaconData = {
+    id: `beacon-${user.id}`,
+    user_id: user.id,
+    activity,
+    note,
+    duration_mins: durationMins,
+    lat,
+    lng,
+    created_at: nowIso,
+    expires_at: expiresAt,
+  };
+
+  profileDigest.active_beacon = beaconData;
+
+  const { error: updateError } = await supabase
+    .from("users")
+    .update({ profile_digest: profileDigest })
+    .eq("id", user.id);
+
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    beacon: {
+      ...beaconData,
+      user: {
+        id: user.id,
+        full_name: user.full_name,
+        company: user.company,
+        job_title: user.job_title,
+        profile_photo_url: user.profile_photo_url,
+      },
+    },
+  });
 }
 
 export async function DELETE() {
@@ -194,9 +169,20 @@ export async function DELETE() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (isSupabaseConfigured()) {
-    const supabase = createAdminClient();
-    await supabase.from("micro_status").delete().eq("user_id", user.id);
+  const supabase = createAdminClient();
+  const { data: userProfile } = await supabase
+    .from("users")
+    .select("profile_digest")
+    .eq("id", user.id)
+    .single();
+
+  if (userProfile?.profile_digest?.active_beacon) {
+    const profileDigest = { ...userProfile.profile_digest };
+    delete profileDigest.active_beacon;
+    await supabase
+      .from("users")
+      .update({ profile_digest: profileDigest })
+      .eq("id", user.id);
   }
 
   return NextResponse.json({ success: true, message: "Beacon cancelled." });
