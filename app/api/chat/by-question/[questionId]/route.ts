@@ -21,38 +21,52 @@ export async function GET(
   let sessionId = session?.id;
 
   if (!sessionId) {
-    // Backward compatibility: If no session exists, check if this is a direct question (exactly 1 target, and asker == user)
+    // If no session exists, check if user is asker or targeted professional
     const { data: question } = await supabase
       .from("questions")
       .select("asker_id, type")
       .eq("id", questionId)
       .single();
     
-    if (question && question.asker_id === user.id && question.type === "direct") {
+    if (question) {
       const { data: targets } = await supabase
         .from("question_targets")
         .select("professional_id")
         .eq("question_id", questionId);
       
-      if (targets && targets.length === 1) {
-        const targetUserId = targets[0].professional_id;
+      const isAsker = question.asker_id === user.id;
+      const isTarget = targets?.some((t: any) => t.professional_id === user.id);
+
+      if ((isAsker && targets && targets.length === 1) || isTarget) {
+        const otherUserId = isAsker ? targets![0].professional_id : question.asker_id;
         const { data: newSession } = await supabase.from("chat_sessions").insert({ question_id: questionId }).select("id").single();
         if (newSession) {
           sessionId = newSession.id;
-          const { data: usersData } = await supabase.from("users").select("id, company, job_title").in("id", [user.id, targetUserId]);
-          const asker = usersData?.find((u: any) => u.id === user.id);
-          const pro = usersData?.find((u: any) => u.id === targetUserId);
+          const { data: usersData } = await supabase.from("users").select("id, company, job_title").in("id", [user.id, otherUserId]);
+          const me = usersData?.find((u: any) => u.id === user.id);
+          const other = usersData?.find((u: any) => u.id === otherUserId);
 
           const getAlias = (u: any, defaultType: "resident" | "professional") => {
             if (u && u.job_title && u.company) return `${u.job_title} @ ${u.company}`;
-            // Simple fallback if generateAlias is not imported
             return defaultType === "resident" ? "A ProxNet User" : "A Nearby Professional";
           };
 
+          const myAlias = isAsker ? getAlias(me, "resident") : getAlias(me, "professional");
+          const otherAlias = isAsker ? getAlias(other, "professional") : getAlias(other, "resident");
+
           await supabase.from("chat_participants").insert([
-            { session_id: sessionId, user_id: user.id, alias: getAlias(asker, "resident") },
-            { session_id: sessionId, user_id: targetUserId, alias: getAlias(pro, "professional") },
+            { session_id: sessionId, user_id: user.id, alias: myAlias },
+            { session_id: sessionId, user_id: otherUserId, alias: otherAlias },
           ]);
+
+          if (isTarget) {
+            await supabase
+              .from("question_targets")
+              .update({ status: "viewed" })
+              .eq("question_id", questionId)
+              .eq("professional_id", user.id)
+              .eq("status", "pending");
+          }
         }
       }
     }

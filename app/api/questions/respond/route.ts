@@ -9,7 +9,8 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { questionId, targetId } = await request.json();
+  const reqBody = await request.json().catch(() => ({}));
+  const { questionId, targetId, body } = reqBody;
   if (!questionId || !targetId) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
@@ -64,33 +65,57 @@ export async function POST(request: Request) {
     ]);
   }
 
+  // If a reply message was actually provided in the request body, process the reply
+  const replyText = typeof body?.body === "string" ? body.body.trim() : "";
+  if (replyText) {
+    await supabase.from("chat_messages").insert({
+      session_id: sessionId,
+      sender_id: user.id,
+      body: replyText,
+    });
+
+    await supabase
+      .from("question_targets")
+      .update({ status: "responded" })
+      .eq("id", targetId);
+
+    // Award credits for answering a career question
+    const creditReward = await awardWalletCredits(user.id, "answered_career_question", questionId);
+
+    // Notify the asker that a professional responded
+    try {
+      await sendNotification(askerId, {
+        title: "Question Responded",
+        body: `A nearby professional responded to your question: "${replyText.slice(0, 60)}${replyText.length > 60 ? "..." : ""}"`,
+        url: `/chat/${sessionId}`,
+        data: {
+          type: "question_responded",
+          sessionId,
+        },
+      });
+    } catch (err) {
+      console.error("Notification trigger error:", err);
+    }
+
+    return NextResponse.json({
+      sessionId,
+      creditsAwarded: creditReward.creditsAwarded,
+      newBalance: creditReward.newBalance,
+      rewardMessage: creditReward.message,
+    });
+  }
+
+  // User just opened the chat to view the question - mark as viewed, NO notification, NO premature credits
   await supabase
     .from("question_targets")
-    .update({ status: "responded" })
-    .eq("id", targetId);
-
-  // Award credits for answering a career question
-  const creditReward = await awardWalletCredits(user.id, "answered_career_question", questionId);
-
-  // Notify the asker that a professional responded
-  try {
-    await sendNotification(askerId, {
-      title: "Question Responded",
-      body: `A nearby professional responded to your question: "${target.questions.body.slice(0, 60)}${target.questions.body.length > 60 ? "..." : ""}"`,
-      url: `/chat/${sessionId}`,
-      data: {
-        type: "question_responded",
-        sessionId,
-      },
-    });
-  } catch (err) {
-    console.error("Notification trigger error:", err);
-  }
+    .update({ status: "viewed" })
+    .eq("id", targetId)
+    .eq("status", "pending");
 
   return NextResponse.json({
     sessionId,
-    creditsAwarded: creditReward.creditsAwarded,
-    newBalance: creditReward.newBalance,
-    rewardMessage: creditReward.message,
+    creditsAwarded: 0,
+    newBalance: 0,
+    rewardMessage: null,
   });
 }

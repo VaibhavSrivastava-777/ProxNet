@@ -102,7 +102,7 @@ export async function POST(request: Request) {
   await supabase.from("question_targets").insert({
     question_id: question.id,
     professional_id: targetUserId,
-    status: "responded",
+    status: "pending",
   });
 
   // 6. Create chat_session

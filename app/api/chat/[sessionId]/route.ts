@@ -138,7 +138,8 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Award credits to professional answering career question if applicable
+  // Award credits to professional answering career question if applicable and update status to responded
+  let isQuestionResponse = false;
   try {
     const { data: sessionData } = await supabase
       .from("chat_sessions")
@@ -149,6 +150,15 @@ export async function POST(
     if (sessionData?.question_id) {
       const askerId = (sessionData.questions as any)?.asker_id;
       if (askerId && askerId !== user.id) {
+        isQuestionResponse = true;
+
+        // Mark target as responded now that a real message was actually sent
+        await supabase
+          .from("question_targets")
+          .update({ status: "responded" })
+          .eq("question_id", sessionData.question_id)
+          .eq("professional_id", user.id);
+
         await awardWalletCredits(user.id, "answered_career_question", sessionData.question_id);
       }
     }
@@ -250,8 +260,12 @@ Never mention that you are an AI assistant or simulated user. Play your characte
           }
         })();
       } else {
+        const notifTitle = isQuestionResponse
+          ? `💬 Response from ${participant.alias || "Neighbor"}`
+          : `New Message from ${participant.alias || "Neighbor"}`;
+
         await sendNotification(otherParticipant.user_id, {
-          title: `New Message from ${participant.alias || "Neighbor"}`,
+          title: notifTitle,
           body: `${body.trim().slice(0, 80)}${body.trim().length > 80 ? "..." : ""}`,
           url: `/chat/${sessionId}`,
           data: {
