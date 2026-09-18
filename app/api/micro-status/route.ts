@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
+import { sendNotification } from "@/lib/notifications";
 import type { MicroStatus } from "@/lib/types";
 
 export async function GET(request: Request) {
@@ -218,6 +219,69 @@ export async function POST(request: Request) {
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  // ── Notify active users within 2km radius (FCM push, or fallback email if token not available) ──
+  try {
+    const { data: potentialNeighbors } = await supabase
+      .from("users")
+      .select("id, home_lat, home_lng, office_lat, office_lng")
+      .eq("is_active", true)
+      .neq("id", user.id);
+
+    if (potentialNeighbors && potentialNeighbors.length > 0) {
+      const activityLabel =
+        activity === "chai"
+          ? "15-min Chai"
+          : activity === "walk"
+          ? "Walk & Talk"
+          : activity === "sports"
+          ? "Badminton / Sports"
+          : "Quick Catch-up";
+      const notifTitle = `☕ ${effectiveJobTitle} @ ${effectiveCompany} is down for ${activityLabel}!`;
+      const notifBody = note
+        ? `"${note}" • Pinned at the top of your Network tab.`
+        : `A professional neighbor is down for ${activityLabel} nearby. Tap to view on your Network tab.`;
+
+      const nearbyPromises: Promise<any>[] = [];
+      for (const neighbor of potentialNeighbors) {
+        let minDistance = Infinity;
+        if (neighbor.home_lat != null && neighbor.home_lng != null) {
+          minDistance = Math.min(
+            minDistance,
+            haversineDistanceMeters(lat, lng, Number(neighbor.home_lat), Number(neighbor.home_lng))
+          );
+        }
+        if (neighbor.office_lat != null && neighbor.office_lng != null) {
+          minDistance = Math.min(
+            minDistance,
+            haversineDistanceMeters(lat, lng, Number(neighbor.office_lat), Number(neighbor.office_lng))
+          );
+        }
+
+        if (minDistance <= 2000) {
+          nearbyPromises.push(
+            sendNotification(neighbor.id, {
+              title: notifTitle,
+              body: notifBody,
+              url: "/qa?tab=network",
+              data: {
+                type: "beacon_broadcast",
+                activity,
+                durationMins,
+                beaconId: beaconData.id,
+                broadcasterId: user.id,
+                distance: Math.round(minDistance),
+              },
+            }).catch((e) => console.warn(`Failed to notify neighbor ${neighbor.id} of beacon:`, e))
+          );
+        }
+      }
+
+      await Promise.allSettled(nearbyPromises);
+    }
+  } catch (notifyErr) {
+    console.error("Failed to dispatch 2km beacon notifications:", notifyErr);
   }
 
   return NextResponse.json({

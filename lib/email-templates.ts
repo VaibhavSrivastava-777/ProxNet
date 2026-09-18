@@ -56,6 +56,11 @@ export function checkEmailRateLimit(
     userEmailRateMap.set(userId, stats);
   }
 
+  // High-priority live beacon notifications bypass daily email caps
+  if (notificationType === "beacon_broadcast" || notificationType === "beacon_join") {
+    return { allowed: true };
+  }
+
   // Absolute hard cap per day
   const maxDaily = forceEmail ? 10 : 5;
   if (stats.countToday >= maxDaily) {
@@ -478,6 +483,61 @@ export function generateContextEmail(payload: EmailTemplatePayload): GeneratedEm
       </div>
       <p style="font-size: 13px; color: #64748b; margin: 0;">
         Share your knowledge or get answers from verified professionals in your locality.
+      </p>
+    `;
+  }
+
+  // 13. Neighborhood Broadcast Beacon (within 2km)
+  else if (notifType === "beacon_broadcast") {
+    category = "social";
+    badgeText = "NEIGHBORHOOD BEACON";
+    badgeColor = "#d97706";
+    badgeBg = "#fef3c7";
+    heading = title || "Chai / Walk Beacon Nearby";
+    ctaLabel = "View on Network Tab &rarr;";
+    ctaUrl = actionUrl;
+
+    bodyHtml = `
+      <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 16px 0;">
+        A verified professional neighbor within 2km has turned on their live beacon:
+      </p>
+      <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 0 8px 8px 0; padding: 14px 16px; margin-bottom: 16px;">
+        <p style="font-size: 15px; font-weight: 700; color: #92400e; margin: 0 0 6px 0;">
+          ${escapeHtml(title)}
+        </p>
+        <p style="font-size: 14px; color: #78350f; line-height: 1.5; margin: 0;">
+          ${escapeHtml(body)}
+        </p>
+      </div>
+      <p style="font-size: 13px; color: #64748b; margin: 0;">
+        Tap below to open your ProxNet Network tab, see their card at the top, and click "Join" to connect!
+      </p>
+    `;
+  }
+
+  // 14. Neighbor Joined Beacon
+  else if (notifType === "beacon_join") {
+    category = "message";
+    const sender = data?.senderAlias || "A neighbor";
+    subject = `☕ ${sender} joined your broadcast on ProxNet!`;
+    badgeText = "BEACON CONNECT";
+    badgeColor = "#059669";
+    badgeBg = "#ecfdf5";
+    heading = `A Neighbor Joined Your Broadcast!`;
+    ctaLabel = "Open Chat & Reply &rarr;";
+    ctaUrl = actionUrl;
+
+    bodyHtml = `
+      <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 16px 0;">
+        Great news! <strong>${escapeHtml(sender)}</strong> has joined your broadcast and sent a chat message:
+      </p>
+      <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; border-radius: 0 8px 8px 0; padding: 14px 16px; margin-bottom: 16px;">
+        <p style="font-size: 14px; color: #065f46; line-height: 1.5; margin: 0;">
+          "${escapeHtml(body)}"
+        </p>
+      </div>
+      <p style="font-size: 13px; color: #64748b; margin: 0;">
+        Tap below to open your chat session, finalize the meetup details, and connect.
       </p>
     `;
   }

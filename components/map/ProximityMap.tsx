@@ -141,6 +141,7 @@ export function ProximityMap() {
   const [chatTarget, setChatTarget] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [stoppingBroadcast, setStoppingBroadcast] = useState(false);
+  const [joiningBeaconId, setJoiningBeaconId] = useState<string | null>(null);
   
   // Pagination
   const [displayLimit, setDisplayLimit] = useState(20);
@@ -406,6 +407,42 @@ export function ProximityMap() {
 
   const openDirectChat = (person: any) => {
     setChatTarget(person);
+  };
+
+  const handleJoinBeacon = async (userBeacon: any, targetPerson?: any) => {
+    const targetUserId = targetPerson?.id || userBeacon.user_id;
+    if (!targetUserId) return;
+    if (profile?.id && targetUserId === profile.id) return;
+
+    setJoiningBeaconId(targetUserId);
+    try {
+      const res = await fetch("/api/micro-status/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          beaconId: userBeacon.id,
+          initiatorUserId: targetUserId,
+          activity: userBeacon.activity,
+          note: userBeacon.note,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.sessionId) {
+          router.push(`/chat/${data.sessionId}`);
+          return;
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Failed to join broadcast");
+      }
+    } catch (err) {
+      console.error("Failed to join broadcast:", err);
+      alert("Something went wrong while joining the broadcast.");
+    } finally {
+      setJoiningBeaconId(null);
+    }
   };
 
   const getChatSuggestion = (p: any) => {
@@ -684,14 +721,7 @@ export function ProximityMap() {
         userLng={center?.lng ?? (profile?.home_lng ? Number(profile.home_lng) : null)}
         onBeaconsChange={setActiveBeacons}
         onJoinBeacon={(beacon) => {
-          if (beacon.user_id) {
-            openDirectChat({
-              id: beacon.user_id,
-              anonymous_name: beacon.user?.full_name || "Neighbor",
-              company: beacon.user?.company || "Neighbor",
-              job_title: beacon.user?.job_title || "Professional",
-            });
-          }
+          handleJoinBeacon(beacon);
         }}
       />
 
@@ -790,6 +820,8 @@ export function ProximityMap() {
                   user_id: profile.id,
                   activity: profile.profile_digest.active_beacon.activity || "chai",
                   note: profile.profile_digest.active_beacon.note || null,
+                  lat: Number(profile.home_lat ?? 0),
+                  lng: Number(profile.home_lng ?? 0),
                   created_at: profile.profile_digest.active_beacon.created_at || new Date().toISOString(),
                   expires_at: profile.profile_digest.active_beacon.expires_at,
                   duration_mins: profile.profile_digest.active_beacon.duration_mins || 45,
@@ -964,17 +996,22 @@ export function ProximityMap() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                openDirectChat({
-                                  id: p.id,
-                                  anonymous_name: "Community Neighbor",
-                                  company: broadcasterCompany,
-                                  job_title: broadcasterTitle,
-                                });
+                                handleJoinBeacon(userBeacon, p);
                               }}
+                              disabled={joiningBeaconId === p.id}
                               className={`btn btn-sm bg-gradient-to-r ${timeTheme.btn} text-white font-bold text-xs px-3.5 py-2 rounded-xl border-0 shadow-sm flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105 shrink-0`}
                             >
-                              <span>{activityIcon}</span>
-                              <span>Join {userBeacon.activity === "chai" ? "Chai" : userBeacon.activity === "walk" ? "Walk" : "Meet"}</span>
+                              {joiningBeaconId === p.id ? (
+                                <>
+                                  <span className="spinner-sm" />
+                                  <span>Joining...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>{activityIcon}</span>
+                                  <span>Join {userBeacon.activity === "chai" ? "Chai" : userBeacon.activity === "walk" ? "Walk" : "Meet"}</span>
+                                </>
+                              )}
                             </button>
                           )}
                         </div>
