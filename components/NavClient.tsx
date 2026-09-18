@@ -14,6 +14,8 @@ import { playNotificationSound, unlockAudioContext, getSoundTypeForNotification,
 import { SmartAppBanner } from "./SmartAppBanner";
 import { NotificationCenter } from "./NotificationCenter";
 import { PushNotificationModal } from "./PushNotificationModal";
+import { ProfileWizardModal } from "@/components/profile/ProfileWizardModal";
+import { getMissingProfileWizardSteps } from "@/lib/profile-wizard";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -111,6 +113,9 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
   // Profile completion state
   const [showProfileReminder, setShowProfileReminder] = useState(false);
+  const [profileUser, setProfileUser] = useState<any>(null);
+  const [showProfileWizard, setShowProfileWizard] = useState(false);
+  const [missingStepCount, setMissingStepCount] = useState(0);
 
   // Login Modal State
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -148,6 +153,21 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     window.addEventListener("openLoginModal", handler);
     return () => window.removeEventListener("openLoginModal", handler);
   }, []);
+
+  // Register custom event listener & search params trigger for Profile Wizard Modal
+  useEffect(() => {
+    const handler = () => setShowProfileWizard(true);
+    window.addEventListener("openProfileWizard", handler);
+    return () => window.removeEventListener("openProfileWizard", handler);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && session && (searchParams.get("wizard") === "profile" || searchParams.get("complete_profile") === "true")) {
+      setShowProfileWizard(true);
+      const newUrl = window.location.pathname + window.location.search.replace(/([?&])(wizard=profile|complete_profile=true)&?/, '$1').replace(/[?&]$/, '');
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [session, searchParams]);
 
   // Strip fresh_login param from URL and trigger push notification modal
   useEffect(() => {
@@ -778,14 +798,18 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       .then(async (user) => {
         if (!user || user.error) return;
 
+        setProfileUser(user);
+
         if (user.wallet !== undefined) {
           setWalletBalance(user.wallet);
         }
         
         let hasHomeLocation = !!user.home_lat;
-        let isProfileComplete = !isProfileIncomplete(user);
-
         const dismissed = sessionStorage.getItem("dismissed_profile_reminder");
+
+        const isNotifGranted = typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
+        let missing = getMissingProfileWizardSteps(user, isNotifGranted);
+        setMissingStepCount(missing.length);
 
         if (!hasHomeLocation) {
           if (navigator.geolocation) {
@@ -805,21 +829,24 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                   body: JSON.stringify({ home_lat: lat, home_lng: lng, home_name: name })
                 });
                 
-                isProfileComplete = !isProfileIncomplete({ ...user, home_lat: lat, home_lng: lng });
-                if (!isProfileComplete && !dismissed) setShowProfileReminder(true);
+                const updatedUser = { ...user, home_lat: lat, home_lng: lng, home_name: name };
+                setProfileUser(updatedUser);
+                missing = getMissingProfileWizardSteps(updatedUser, isNotifGranted);
+                setMissingStepCount(missing.length);
+                if (missing.length > 0 && !dismissed) setShowProfileReminder(true);
               } catch (e) {
                 console.error("Failed to reverse geocode and save location", e);
-                if (!isProfileComplete && !dismissed) setShowProfileReminder(true);
+                if (missing.length > 0 && !dismissed) setShowProfileReminder(true);
               }
             }, (err) => {
               console.warn("Geolocation denied or failed", err);
-              if (!isProfileComplete && !dismissed) setShowProfileReminder(true);
+              if (missing.length > 0 && !dismissed) setShowProfileReminder(true);
             });
           } else {
-             if (!isProfileComplete && !dismissed) setShowProfileReminder(true);
+             if (missing.length > 0 && !dismissed) setShowProfileReminder(true);
           }
         } else {
-          if (!isProfileComplete && !dismissed) setShowProfileReminder(true);
+          if (missing.length > 0 && !dismissed) setShowProfileReminder(true);
         }
       })
       .catch(() => {});
@@ -1383,9 +1410,17 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         <>
           {/* Mobile floating sticky banner */}
           <div className="md:hidden fixed bottom-[calc(var(--bottom-nav-height)+8px)] left-4 right-4 z-[1005] bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl p-3 shadow-lg flex items-center justify-between animate-fadeInUp">
-            <span className="font-semibold text-xs pr-2">Complete your profile to unlock proximity matching!</span>
+            <span className="font-semibold text-xs pr-2">
+              Complete your profile {missingStepCount > 0 ? `(${missingStepCount} quick step${missingStepCount > 1 ? "s" : ""})` : ""} to unlock proximity matching!
+            </span>
             <div className="flex gap-3 items-center shrink-0">
-              <Link href="/profile" className="bg-white text-orange-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow hover:bg-white/95 transition-colors">Complete Now</Link>
+              <button 
+                type="button"
+                onClick={() => setShowProfileWizard(true)} 
+                className="bg-white text-orange-600 text-xs font-bold px-3 py-1.5 rounded-lg shadow hover:bg-white/95 transition-colors cursor-pointer border-0"
+              >
+                Complete Now
+              </button>
               <button 
                 onClick={() => {
                   sessionStorage.setItem("dismissed_profile_reminder", "true");
@@ -1401,9 +1436,17 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
 
           {/* Desktop/Tablet top sticky banner */}
           <div className="hidden md:flex bg-[var(--color-accent)] text-white px-4 py-3 text-sm items-center justify-between z-[1000] relative shadow-md">
-            <span className="font-medium">Complete your profile to unlock better proximity matches!</span>
+            <span className="font-medium">
+              Complete your profile {missingStepCount > 0 ? `(${missingStepCount} quick step${missingStepCount > 1 ? "s" : ""})` : ""} to unlock better proximity matches!
+            </span>
             <div className="flex gap-4 items-center shrink-0">
-              <Link href="/profile" className="font-bold underline hover:text-white/80 transition-colors">Complete Now</Link>
+              <button 
+                type="button"
+                onClick={() => setShowProfileWizard(true)} 
+                className="font-bold underline hover:text-white/80 transition-colors bg-transparent border-0 cursor-pointer p-0 text-white"
+              >
+                Complete Now
+              </button>
               <button 
                 onClick={() => {
                   sessionStorage.setItem("dismissed_profile_reminder", "true");
@@ -1417,6 +1460,25 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             </div>
           </div>
         </>
+      )}
+
+      {/* Profile Wizard Modal */}
+      {session && (
+        <ProfileWizardModal
+          isOpen={showProfileWizard}
+          onClose={() => setShowProfileWizard(false)}
+          initialUser={profileUser}
+          onUserUpdated={(updated) => {
+            setProfileUser((prev: any) => ({ ...prev, ...updated }));
+            const isNotifGranted = typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
+            const missing = getMissingProfileWizardSteps({ ...profileUser, ...updated }, isNotifGranted);
+            setMissingStepCount(missing.length);
+            if (missing.length === 0) {
+              setShowProfileReminder(false);
+            }
+          }}
+          onEnableNotifications={subscribeToPush}
+        />
       )}
 
       {/* Mobile Bottom Tab Bar */}

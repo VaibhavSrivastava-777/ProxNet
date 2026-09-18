@@ -169,18 +169,18 @@ export function generateContextEmail(payload: EmailTemplatePayload): GeneratedEm
     badgeBg = "#fef3c7";
     heading = "Unlock Your Neighborhood Professional Network";
     ctaLabel = "Complete My Profile &rarr;";
-    ctaUrl = `${baseUrl}/profile`;
+    ctaUrl = `${baseUrl}/qa?wizard=profile`;
 
     bodyHtml = `
       <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 16px 0;">
-        Your ProxNet profile is currently incomplete. Adding your designation, current company, and neighborhood location takes less than 60 seconds and instantly connects you with nearby peers.
+        Your ProxNet profile is currently incomplete. Completing it takes less than 60 seconds with our quick step-by-step wizard.
       </p>
       <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; margin-bottom: 8px;">
         <p style="font-size: 13px; font-weight: 700; color: #1e293b; margin: 0 0 8px 0;">Why complete your profile?</p>
         <ul style="margin: 0; padding-left: 18px; font-size: 13px; color: #475569; line-height: 1.6;">
           <li><strong>Get discovered:</strong> Nearby colleagues and tech neighbors can find and message you.</li>
           <li><strong>Unlock 90%+ Job Matches:</strong> Accurate referral matching based on your role.</li>
-          <li><strong>Earn credibility:</strong> Unlock the verified local professional badge.</li>
+          <li><strong>Zero Continuous Tracking:</strong> Setting your neighborhood and office is a one-time setup used strictly for proximity matching.</li>
         </ul>
       </div>
     `;

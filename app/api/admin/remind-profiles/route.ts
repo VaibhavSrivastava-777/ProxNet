@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       await sendNotification(u.id, {
         title: "Complete your profile",
         body: "Please complete your profile by adding your name, email, designation, and company name to unlock full access.",
-        url: "/profile"
+        url: "/qa?wizard=profile"
       });
       sent++;
     }
