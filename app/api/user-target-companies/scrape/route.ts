@@ -77,7 +77,15 @@ export async function POST() {
     .eq("id", user.id)
     .single();
 
-  const targetCompanyNames: string[] = userProfile?.profile_digest?.target_companies || [];
+  // 1. Fetch user targets directly from user_target_companies table
+  const { data: userTargetRows } = await supabase
+    .from("user_target_companies")
+    .select("*")
+    .eq("user_id", user.id);
+
+  const targetCompanyNames: string[] = (userTargetRows && userTargetRows.length > 0)
+    ? userTargetRows.map(r => r.company_name)
+    : (userProfile?.profile_digest?.target_companies || []);
 
   if (targetCompanyNames.length === 0) {
     return NextResponse.json({ error: "No target companies found in user profile" }, { status: 400 });
@@ -89,12 +97,19 @@ export async function POST() {
     .in("company_name", targetCompanyNames);
 
   const targetsMap = new Map(configs?.map(c => [c.company_name.toLowerCase().trim(), c]) || []);
+  const utcMap = new Map(userTargetRows?.map(r => [r.company_name.toLowerCase().trim(), r]) || []);
 
   const targets = (await Promise.all(targetCompanyNames.map(async (name) => {
-    const discovered = await discoverAts(name);
-    const config = targetsMap.get(name.toLowerCase().trim());
-    const provider = discovered?.provider || config?.provider || "none";
-    const token = discovered?.board || config?.board_token_or_url || "";
+    const key = name.toLowerCase().trim();
+    const utcRow = utcMap.get(key);
+    const config = targetsMap.get(key);
+    const discovered = (!utcRow?.ats_board_token && !config?.board_token_or_url) ? await discoverAts(name) : null;
+
+    const provider = utcRow?.ats_provider && utcRow.ats_provider !== "none"
+      ? utcRow.ats_provider
+      : (discovered?.provider || config?.provider || "none");
+
+    const token = utcRow?.ats_board_token || utcRow?.careers_url || discovered?.board || config?.board_token_or_url || "";
 
     return {
       company_name: name,
@@ -190,6 +205,19 @@ export async function POST() {
       total_jobs_found: companySaved,
       last_scraped_at: new Date().toISOString(),
     }, { onConflict: "company_name" });
+
+    // Update user_target_companies table for this user
+    await supabase
+      .from("user_target_companies")
+      .update({
+        last_scraped_at: new Date().toISOString(),
+        total_jobs_found: jobs.length,
+        scrape_status: jobs.length > 0 ? "success" : (target.ats_provider !== "none" ? "failed" : "no_ats"),
+        scrape_notes: `Full scrape: found ${jobs.length}, saved ${companySaved}`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", user.id)
+      .ilike("company_name", target.company_name);
   }
 
   // 3. Always re-evaluate user embedding from latest resume

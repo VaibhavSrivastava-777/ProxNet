@@ -12,42 +12,68 @@ export async function GET() {
 
   const supabase = createAdminClient();
 
-  // 1. Get user profile and target companies
+  // 1. Fetch user targets directly from user_target_companies table
+  let { data: userTargetRows } = await supabase
+    .from("user_target_companies")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true });
+
+  // Fetch user profile for profile_digest fallback and embedding
   const { data: userProfile } = await supabase
     .from("users")
     .select("embedding, job_title, company, about, resume_text, profile_digest")
     .eq("id", user.id)
     .single();
 
-  const targetCompanyNames: string[] = userProfile?.profile_digest?.target_companies || [];
+  const legacyTargetNames: string[] = userProfile?.profile_digest?.target_companies || [];
 
-  if (targetCompanyNames.length === 0) {
+  // Auto-backfill if legacy target_companies exist but aren't in user_target_companies
+  const existingNamesSet = new Set((userTargetRows || []).map(r => r.company_name.toLowerCase().trim()));
+  const missingFromUtc = legacyTargetNames.filter(name => !existingNamesSet.has(name.toLowerCase().trim()));
+
+  if (missingFromUtc.length > 0) {
+    for (const name of missingFromUtc) {
+      const discovered = await discoverAts(name);
+      await supabase.from("user_target_companies").upsert({
+        user_id: user.id,
+        company_name: name,
+        careers_url: discovered?.board || null,
+        ats_provider: discovered?.provider || "none",
+        ats_board_token: discovered?.board || null,
+        is_auto_discovered: Boolean(discovered),
+        scrape_status: discovered ? "pending" : "no_ats",
+        scrape_notes: discovered ? "Auto-synced from profile" : "No ATS detected",
+        total_jobs_found: 0,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id,company_name" });
+    }
+
+    const { data: refetched } = await supabase
+      .from("user_target_companies")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
+    userTargetRows = refetched;
+  }
+
+  if (!userTargetRows || userTargetRows.length === 0) {
     return NextResponse.json({
       targetCompanies: [],
       summary: { totalScraped: 0, totalMatches: 0 },
     });
   }
 
-  const { data: configs } = await supabase
-    .from("company_ats_config")
-    .select("*")
-    .in("company_name", targetCompanyNames);
-
-  const configsMap = new Map(configs?.map(c => [c.company_name.toLowerCase().trim(), c]) || []);
-
-  const targets = targetCompanyNames.map(name => {
-    const config = configsMap.get(name.toLowerCase().trim());
-    return {
-      id: config?.id || name,
-      company_name: name,
-      careers_url: config?.board_token_or_url || "",
-      ats_provider: config?.provider || "none",
-      scrape_status: config?.provider && config.provider !== "none" ? "success" : "no_ats",
-      total_jobs_found: config?.total_jobs_found || 0,
-      last_scraped_at: config?.last_scraped_at || null,
-      scrape_notes: config?.scrape_notes || null,
-    };
-  });
+  const targets = userTargetRows.map(row => ({
+    id: row.id,
+    company_name: row.company_name,
+    careers_url: row.careers_url || row.ats_board_token || "",
+    ats_provider: row.ats_provider || "none",
+    scrape_status: row.scrape_status || "pending",
+    total_jobs_found: row.total_jobs_found || 0,
+    last_scraped_at: row.last_scraped_at || null,
+    scrape_notes: row.scrape_notes || null,
+  }));
 
   let userEmbedding = userProfile?.embedding;
 
@@ -300,6 +326,41 @@ export async function POST(request: Request) {
     scrapeResult = { scraped: 0, saved: 0, error: err.message };
   }
 
+  // 4. Save into user_target_companies table
+  const scrapeStatus = scrapeResult.scraped > 0 
+    ? "success" 
+    : (provider !== "none" && provider !== "no_ats" ? "pending" : "no_ats");
+
+  const scrapeNotes = scrapeResult.error
+    ? `Failed: ${scrapeResult.error}`
+    : (scrapeResult.scraped > 0
+        ? `Real-time: Scraped ${scrapeResult.scraped} jobs, ${scrapeResult.saved} saved`
+        : (careers_url ? "Careers URL recorded" : "No active listings discovered"));
+
+  const careersUrlValue = careers_url?.trim() || (boardTokenOrUrl.startsWith("http") ? boardTokenOrUrl : null);
+
+  const { error: utcErr } = await supabase
+    .from("user_target_companies")
+    .upsert({
+      user_id: user.id,
+      company_name: cleanName,
+      careers_url: careersUrlValue,
+      ats_provider: provider,
+      ats_board_token: boardTokenOrUrl || null,
+      is_auto_discovered: !careers_url && provider !== "custom" && provider !== "none",
+      scrape_status: scrapeStatus,
+      scrape_notes: scrapeNotes,
+      total_jobs_found: scrapeResult.scraped || 0,
+      last_scraped_at: scrapeResult.scraped > 0 ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,company_name" });
+
+  if (utcErr) {
+    console.error("Failed to upsert user_target_companies:", utcErr);
+  } else {
+    console.log(`[USER_TARGET_COMPANIES] Successfully upserted target company ${cleanName} for user ${user.id}`);
+  }
+
   return NextResponse.json({
     success: true,
     company_name: cleanName,
@@ -469,6 +530,17 @@ export async function DELETE(request: Request) {
     .from("users")
     .update({ profile_digest: profileDigest })
     .eq("id", user.id);
+
+  // Delete from user_target_companies table
+  const { error: delErr } = await supabase
+    .from("user_target_companies")
+    .delete()
+    .eq("user_id", user.id)
+    .ilike("company_name", companyName.trim());
+
+  if (delErr) {
+    console.warn("Error deleting from user_target_companies:", delErr);
+  }
 
   return NextResponse.json({
     success: true,
