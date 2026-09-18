@@ -165,6 +165,35 @@ function extractLinkedInHandle(url: string | null | undefined): string {
   return clean;
 }
 
+const HELP_PRESETS = [
+  "System Design Prep",
+  "Startup Pitch Feedback",
+  "Frontend / React Debugging",
+  "Moving / Relocation Advice",
+  "Weekend Badminton",
+  "EV Buying Experience",
+  "School Recommendations",
+  "Home Automation & IoT",
+];
+
+const TINKERING_PRESETS = [
+  "Local LLMs on Mac",
+  "Sourdough Bread",
+  "Rust & WebAssembly",
+  "Arduino / Microcontrollers",
+  "Marathon Training",
+  "Bouldering",
+  "Investing & Trading Bots",
+];
+
+const ASK_PRESETS = [
+  "Life in Bangalore vs Europe",
+  "Parenting in Tech",
+  "Angel Investing",
+  "Remote Work Best Practices",
+  "Switching from IC to Manager",
+];
+
 export function ProfileForm({ initialUser }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -173,6 +202,14 @@ export function ProfileForm({ initialUser }: Props) {
     ...initialUser,
     linkedin_profile_url: initialUser.linkedin_profile_url || ""
   });
+  const [societyName, setSocietyName] = useState<string>(initialUser.society_name || "");
+  const [helpOffers, setHelpOffers] = useState<string[]>(initialUser.help_offers || []);
+  const [tinkeringWith, setTinkeringWith] = useState<string[]>(initialUser.tinkering_with || []);
+  const [askMeAbout, setAskMeAbout] = useState<string[]>(initialUser.ask_me_about || []);
+  const [quickChatPref, setQuickChatPref] = useState<string>(initialUser.quick_chat_preference || "chai");
+  const [helpInput, setHelpInput] = useState("");
+  const [tinkeringInput, setTinkeringInput] = useState("");
+  const [askInput, setAskInput] = useState("");
   const [linkedinHandle, setLinkedinHandle] = useState<string>(() => 
     extractLinkedInHandle(initialUser.linkedin_profile_url)
   );
@@ -585,6 +622,11 @@ export function ProfileForm({ initialUser }: Props) {
         office_name: user.office_name,
         anonymous_name: user.anonymous_name,
         tags: finalTags,
+        help_offers: helpOffers,
+        tinkering_with: tinkeringWith,
+        ask_me_about: askMeAbout,
+        quick_chat_preference: quickChatPref,
+        society_name: societyName.trim() || null,
         active_location: "home",
         visibility,
       }),
@@ -685,6 +727,11 @@ export function ProfileForm({ initialUser }: Props) {
         office_lng: user.office_lng ? Number(user.office_lng) : null,
         anonymous_name: user.anonymous_name,
         tags: finalTags,
+        help_offers: helpOffers,
+        tinkering_with: tinkeringWith,
+        ask_me_about: askMeAbout,
+        quick_chat_preference: quickChatPref,
+        society_name: societyName.trim() || null,
         active_location: "home",
         visibility,
       }),
@@ -1445,6 +1492,298 @@ export function ProfileForm({ initialUser }: Props) {
               </div>
             </div>
           )}
+        </div>
+      </CollapsibleSection>
+
+      {/* ---- Section: Neighbor Scrapbook & Icebreakers ---- */}
+      <CollapsibleSection
+        icon={<span className="text-base">📖</span>}
+        title="Neighbor Scrapbook & Icebreakers"
+        defaultOpen={true}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed">
+            The anti-resume. No corporate bragging needed — share what you genuinely enjoy helping neighbors with, what you tinker with after hours, or your favorite conversation topics.
+          </p>
+
+          {/* Society / Apartment Complex Name */}
+          <div>
+            <label className="label font-semibold text-xs flex items-center gap-1.5">
+              <span>🏢</span> Society / Apartment Complex / Tech Park
+            </label>
+            <input
+              className="input w-full"
+              value={societyName}
+              onChange={(e) => setSocietyName(e.target.value)}
+              placeholder="e.g. Prestige Falcon City, L&T South City, HSR Sector 2"
+            />
+            <p className="text-[11px] text-[var(--color-text-secondary)] mt-1">
+              Groups you with neighbors in your complex for the local tech yearbook and society directory.
+            </p>
+          </div>
+
+          {/* Quick Chat Preference */}
+          <div>
+            <label className="label font-semibold text-xs mb-2 block">
+              ☕ Quick Catch-up Preference
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { id: "chai", label: "15-min Chai", icon: "☕" },
+                { id: "walk", label: "Evening Walk", icon: "🚶" },
+                { id: "weekend_coffee", label: "Weekend Coffee", icon: "🥐" },
+                { id: "dm_only", label: "DM Only", icon: "💬" },
+              ].map((item) => {
+                const isSelected = quickChatPref === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setQuickChatPref(item.id)}
+                    className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      isSelected
+                        ? "border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 shadow-sm"
+                        : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-hover)]"
+                    }`}
+                  >
+                    <span>{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 1. What I can help neighbors with */}
+          <div>
+            <label className="label font-semibold text-xs mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span>🤝</span> What I can help neighbors with
+              </span>
+              <span className="text-[10px] text-[var(--color-text-tertiary)]">Generosity first</span>
+            </label>
+            <div className="flex gap-2 mb-2">
+              <input
+                className="input flex-1 text-xs"
+                value={helpInput}
+                onChange={(e) => setHelpInput(e.target.value)}
+                placeholder="e.g. System design prep, EV buying tips, badminton"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const trimmed = helpInput.trim();
+                    if (trimmed && !helpOffers.includes(trimmed)) {
+                      setHelpOffers([...helpOffers, trimmed]);
+                      setHelpInput("");
+                    }
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const trimmed = helpInput.trim();
+                  if (trimmed && !helpOffers.includes(trimmed)) {
+                    setHelpOffers([...helpOffers, trimmed]);
+                    setHelpInput("");
+                  }
+                }}
+                className="btn btn-secondary btn-sm text-xs cursor-pointer"
+              >
+                + Add
+              </button>
+            </div>
+
+            {/* Selected Tags */}
+            {helpOffers.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {helpOffers.map((offer) => (
+                  <span
+                    key={offer}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                  >
+                    {offer}
+                    <button
+                      type="button"
+                      onClick={() => setHelpOffers(helpOffers.filter((o) => o !== offer))}
+                      className="border-none bg-transparent text-emerald-700 dark:text-emerald-300 hover:text-red-500 cursor-pointer p-0 text-xs"
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Quick Presets */}
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-[10px] text-[var(--color-text-tertiary)] font-medium mr-1">Suggested:</span>
+              {HELP_PRESETS.filter((p) => !helpOffers.includes(p)).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setHelpOffers([...helpOffers, p])}
+                  className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-surface-secondary)] hover:bg-emerald-500/10 hover:text-emerald-500 text-[var(--color-text-secondary)] border border-[var(--color-border-light)] cursor-pointer transition-colors"
+                >
+                  + {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 2. What I'm tinkering with after 6 PM */}
+          <div>
+            <label className="label font-semibold text-xs mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span>⚡</span> What I'm tinkering with after 6 PM
+              </span>
+              <span className="text-[10px] text-[var(--color-text-tertiary)]">Passions & curiosity</span>
+            </label>
+            <div className="flex gap-2 mb-2">
+              <input
+                className="input flex-1 text-xs"
+                value={tinkeringInput}
+                onChange={(e) => setTinkeringInput(e.target.value)}
+                placeholder="e.g. Local LLMs on Mac, Sourdough, Arduino"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const trimmed = tinkeringInput.trim();
+                    if (trimmed && !tinkeringWith.includes(trimmed)) {
+                      setTinkeringWith([...tinkeringWith, trimmed]);
+                      setTinkeringInput("");
+                    }
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const trimmed = tinkeringInput.trim();
+                  if (trimmed && !tinkeringWith.includes(trimmed)) {
+                    setTinkeringWith([...tinkeringWith, trimmed]);
+                    setTinkeringInput("");
+                  }
+                }}
+                className="btn btn-secondary btn-sm text-xs cursor-pointer"
+              >
+                + Add
+              </button>
+            </div>
+
+            {/* Selected Tags */}
+            {tinkeringWith.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {tinkeringWith.map((item) => (
+                  <span
+                    key={item}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30"
+                  >
+                    {item}
+                    <button
+                      type="button"
+                      onClick={() => setTinkeringWith(tinkeringWith.filter((t) => t !== item))}
+                      className="border-none bg-transparent text-purple-700 dark:text-purple-300 hover:text-red-500 cursor-pointer p-0 text-xs"
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Quick Presets */}
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-[10px] text-[var(--color-text-tertiary)] font-medium mr-1">Suggested:</span>
+              {TINKERING_PRESETS.filter((p) => !tinkeringWith.includes(p)).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setTinkeringWith([...tinkeringWith, p])}
+                  className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-surface-secondary)] hover:bg-purple-500/10 hover:text-purple-500 text-[var(--color-text-secondary)] border border-[var(--color-border-light)] cursor-pointer transition-colors"
+                >
+                  + {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 3. Ask me about... */}
+          <div>
+            <label className="label font-semibold text-xs mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span>💬</span> Ask me about...
+              </span>
+              <span className="text-[10px] text-[var(--color-text-tertiary)]">Icebreaker topics</span>
+            </label>
+            <div className="flex gap-2 mb-2">
+              <input
+                className="input flex-1 text-xs"
+                value={askInput}
+                onChange={(e) => setAskInput(e.target.value)}
+                placeholder="e.g. Life in Bangalore vs Europe, Angel investing"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const trimmed = askInput.trim();
+                    if (trimmed && !askMeAbout.includes(trimmed)) {
+                      setAskMeAbout([...askMeAbout, trimmed]);
+                      setAskInput("");
+                    }
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const trimmed = askInput.trim();
+                  if (trimmed && !askMeAbout.includes(trimmed)) {
+                    setAskMeAbout([...askMeAbout, trimmed]);
+                    setAskInput("");
+                  }
+                }}
+                className="btn btn-secondary btn-sm text-xs cursor-pointer"
+              >
+                + Add
+              </button>
+            </div>
+
+            {/* Selected Tags */}
+            {askMeAbout.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {askMeAbout.map((topic) => (
+                  <span
+                    key={topic}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30"
+                  >
+                    {topic}
+                    <button
+                      type="button"
+                      onClick={() => setAskMeAbout(askMeAbout.filter((a) => a !== topic))}
+                      className="border-none bg-transparent text-blue-700 dark:text-blue-300 hover:text-red-500 cursor-pointer p-0 text-xs"
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Quick Presets */}
+            <div className="flex flex-wrap gap-1.5 items-center">
+              <span className="text-[10px] text-[var(--color-text-tertiary)] font-medium mr-1">Suggested:</span>
+              {ASK_PRESETS.filter((p) => !askMeAbout.includes(p)).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setAskMeAbout([...askMeAbout, p])}
+                  className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-surface-secondary)] hover:bg-blue-500/10 hover:text-blue-500 text-[var(--color-text-secondary)] border border-[var(--color-border-light)] cursor-pointer transition-colors"
+                >
+                  + {p}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </CollapsibleSection>
 

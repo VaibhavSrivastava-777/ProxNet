@@ -41,6 +41,11 @@ export interface User {
   embedding: number[] | null;
   wallet: number;
   tags: string[];
+  help_offers?: string[];
+  tinkering_with?: string[];
+  ask_me_about?: string[];
+  quick_chat_preference?: "chai" | "walk" | "weekend_coffee" | "dm_only" | string | null;
+  society_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,5 +119,38 @@ export interface UserInstituteAffiliation {
   verified_at: string | null;
   created_at: string;
   institute?: Institute;
+}
+
+export interface MicroStatus {
+  id: string;
+  user_id: string;
+  activity: "chai" | "walk" | "sports" | "quick_chat";
+  note: string | null;
+  lat: number;
+  lng: number;
+  created_at: string;
+  expires_at: string;
+  user?: Partial<User>;
+}
+
+export interface SocietyStats {
+  society_name: string;
+  total_members: number;
+  roles_breakdown: Record<string, number>;
+  top_companies: { name: string; count: number }[];
+  top_institutes: { name: string; count: number }[];
+  top_help_offers: { topic: string; count: number }[];
+  members: {
+    id: string;
+    full_name: string;
+    company: string | null;
+    job_title: string | null;
+    profile_photo_url: string | null;
+    help_offers?: string[];
+    tinkering_with?: string[];
+    ask_me_about?: string[];
+    quick_chat_preference?: string | null;
+    institute_affiliation?: string | null;
+  }[];
 }
 

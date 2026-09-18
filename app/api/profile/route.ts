@@ -78,6 +78,11 @@ export async function PATCH(request: Request) {
   if (body.resume_text !== undefined) updates.resume_text = body.resume_text;
   if (body.profile_photo_url !== undefined) updates.profile_photo_url = body.profile_photo_url;
   if (body.tags !== undefined && Array.isArray(body.tags)) updates.tags = body.tags;
+  if (body.help_offers !== undefined && Array.isArray(body.help_offers)) updates.help_offers = body.help_offers;
+  if (body.tinkering_with !== undefined && Array.isArray(body.tinkering_with)) updates.tinkering_with = body.tinkering_with;
+  if (body.ask_me_about !== undefined && Array.isArray(body.ask_me_about)) updates.ask_me_about = body.ask_me_about;
+  if (body.quick_chat_preference !== undefined) updates.quick_chat_preference = body.quick_chat_preference;
+  if (body.society_name !== undefined) updates.society_name = body.society_name;
   if (body.linkedin_profile_url !== undefined) {
     updates.linkedin_profile_url = normalizeLinkedInUrl(body.linkedin_profile_url);
   }

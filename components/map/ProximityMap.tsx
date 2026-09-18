@@ -9,6 +9,7 @@ import useSWR, { mutate } from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAnimatedPlaceholder } from "@/lib/hooks/useAnimatedPlaceholder";
 import { CompanyLogo } from "@/components/qa/QuestionList";
+import { MicroStatusBeacon } from "./MicroStatusBeacon";
 
 const ProximityMapInner = dynamic(
   () => import("./ProximityMapInner").then((m) => m.ProximityMapInner),
@@ -559,6 +560,43 @@ export function ProximityMap() {
         )}
       </div>
 
+      {/* ── 15-Minute Chai / Walk & Talk Micro-Meetup Beacon ── */}
+      <MicroStatusBeacon
+        currentUserId={profile?.id}
+        userLat={center?.lat ?? (profile?.home_lat ? Number(profile.home_lat) : null)}
+        userLng={center?.lng ?? (profile?.home_lng ? Number(profile.home_lng) : null)}
+        onJoinBeacon={(beacon) => {
+          if (beacon.user_id) {
+            openDirectChat({
+              id: beacon.user_id,
+              anonymous_name: beacon.user?.full_name || "Neighbor",
+              company: beacon.user?.company || "Neighbor",
+              job_title: beacon.user?.job_title || "Professional",
+            });
+          }
+        }}
+      />
+
+      {/* ── Society Yearbook Shortcut Banner ── */}
+      {profile?.society_name && (
+        <div className="flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-amber-500/10 border border-blue-500/25 shadow-xs animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">🏢</span>
+            <div>
+              <div className="text-xs font-bold text-[var(--color-text)]">{profile.society_name}</div>
+              <div className="text-[11px] text-[var(--color-text-secondary)]">Society Tech Directory & Yearbook</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push(`/society/${encodeURIComponent(profile.society_name.toLowerCase().replace(/\s+/g, '-'))}`)}
+            className="text-xs font-bold text-[var(--color-primary)] hover:underline bg-transparent border-none cursor-pointer flex items-center gap-1"
+          >
+            Open Directory &rarr;
+          </button>
+        </div>
+      )}
+
       {/* Error state */}
       {error && (
         <div className="alert alert-error">
@@ -771,6 +809,55 @@ export function ProximityMap() {
                 <p className="text-xs text-[var(--color-text)] leading-relaxed m-0">
                   {selectedPerson.professional_bio}
                 </p>
+              </div>
+            )}
+
+            {/* Scrapbook: Help Offers, Tinkering & Society Directory Link */}
+            {(selectedPerson.help_offers?.length > 0 || selectedPerson.tinkering_with?.length > 0 || selectedPerson.society_name) && (
+              <div className="p-3 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col gap-2">
+                {selectedPerson.society_name && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[11px] text-[var(--color-text-secondary)]">🏢 Complex:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPerson(null);
+                        router.push(`/society/${encodeURIComponent(selectedPerson.society_name.toLowerCase().replace(/\s+/g, '-'))}`);
+                      }}
+                      className="font-semibold text-xs text-[var(--color-primary)] hover:underline bg-transparent border-none cursor-pointer p-0"
+                    >
+                      {selectedPerson.society_name} &rarr;
+                    </button>
+                  </div>
+                )}
+                {selectedPerson.help_offers?.length > 0 && (
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
+                      🤝 Can Help With
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedPerson.help_offers.slice(0, 3).map((o: string) => (
+                        <span key={o} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          {o}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedPerson.tinkering_with?.length > 0 && (
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
+                      ⚡ Tinkering With
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedPerson.tinkering_with.slice(0, 3).map((t: string) => (
+                        <span key={t} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

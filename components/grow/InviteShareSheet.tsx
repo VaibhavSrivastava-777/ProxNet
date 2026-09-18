@@ -4,10 +4,11 @@ import { useState } from "react";
 
 interface InviteShareSheetProps {
   inviteCode: string;
+  societyName?: string | null;
   onClose: () => void;
 }
 
-export function InviteShareSheet({ inviteCode, onClose }: InviteShareSheetProps) {
+export function InviteShareSheet({ inviteCode, societyName, onClose }: InviteShareSheetProps) {
   const [copied, setCopied] = useState(false);
   const inviteUrl = `${window.location.origin}/join/${inviteCode}`;
 
@@ -30,9 +31,11 @@ export function InviteShareSheet({ inviteCode, onClose }: InviteShareSheetProps)
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const communityName = societyName?.trim() || "our apartment complex";
+
   const shareData = {
     title: "ProxNet Local Network",
-    text: "I connect with professionals in our apartment complex on ProxNet. We share carpools, job referrals, and local tips anonymously. Join our local network!",
+    text: `I connect with professionals in ${communityName} on ProxNet. We share carpools, job referrals, and local tips anonymously. Join our local network!`,
     url: inviteUrl,
   };
 
@@ -49,8 +52,10 @@ export function InviteShareSheet({ inviteCode, onClose }: InviteShareSheetProps)
     }
   };
 
-  const getWhatsAppLink = () => {
-    const text = `Hey! I use ProxNet to connect with professionals in our apartment complex — carpools, job referrals, and local recommendations. It's anonymous and free. Join here: ${inviteUrl}`;
+  const getWhatsAppLink = (isSocietyGroup = false) => {
+    const text = isSocietyGroup && societyName
+      ? `Hey neighbors! 👋 Did you know we have 30+ engineers, founders, and product folks living right here in ${societyName}? Check out our community tech directory & see who's building next door: ${inviteUrl}`
+      : `Hey! I use ProxNet to connect with professionals in ${communityName} — carpools, job referrals, and local recommendations. It's anonymous and free. Join here: ${inviteUrl}`;
     return `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
   };
 
@@ -101,6 +106,30 @@ export function InviteShareSheet({ inviteCode, onClose }: InviteShareSheetProps)
           </button>
 
           <hr style={{ border: 0, borderTop: "1px solid var(--color-border-light)", margin: "8px 0" }} />
+
+          {societyName && (
+            <a
+              href={getWhatsAppLink(true)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => trackShare("whatsapp_society")}
+              className="p-3.5 rounded-xl bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 flex items-center justify-between transition-colors no-underline"
+              style={{ textDecoration: "none" }}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🏢</span>
+                <div>
+                  <div className="text-xs font-bold text-[#128C7E] dark:text-[#25D366]">
+                    Share to {societyName} WhatsApp Group
+                  </div>
+                  <div className="text-[11px] text-[var(--color-text-secondary)]">
+                    Share community tech yearbook stats with neighbors
+                  </div>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-[#128C7E] dark:text-[#25D366]">&rarr;</span>
+            </a>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <a
