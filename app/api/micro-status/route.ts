@@ -8,9 +8,20 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const latParam = searchParams.get("lat");
   const lngParam = searchParams.get("lng");
-  const radiusMeters = Number(searchParams.get("radius")) || 50000; // default 50km
-  const lat = latParam ? Number(latParam) : null;
-  const lng = lngParam ? Number(lngParam) : null;
+  const radiusMeters = Number(searchParams.get("radius")) || 2000; // default 2km (2000m)
+  let lat = latParam ? Number(latParam) : null;
+  let lng = lngParam ? Number(lngParam) : null;
+
+  let currentUser = null;
+  try {
+    currentUser = await getCurrentUser();
+  } catch {
+    currentUser = null;
+  }
+  if ((lat == null || lng == null) && currentUser?.home_lat != null && currentUser?.home_lng != null) {
+    lat = Number(currentUser.home_lat);
+    lng = Number(currentUser.home_lng);
+  }
 
   const supabase = createAdminClient();
   const now = new Date();
@@ -24,8 +35,7 @@ export async function GET(request: Request) {
       company,
       job_title,
       profile_photo_url,
-      society_name,
-      quick_chat_preference,
+      home_name,
       home_lat,
       home_lng,
       profile_digest
@@ -52,9 +62,10 @@ export async function GET(request: Request) {
     const beaconLat = rawBeacon.lat != null ? Number(rawBeacon.lat) : (u.home_lat ? Number(u.home_lat) : null);
     const beaconLng = rawBeacon.lng != null ? Number(rawBeacon.lng) : (u.home_lng ? Number(u.home_lng) : null);
 
-    // Optional proximity filter if coordinates provided
+    // Strict proximity filter when coordinates are available (2km radius)
+    let dist: number | null = null;
     if (lat != null && lng != null && beaconLat != null && beaconLng != null) {
-      const dist = haversineDistanceMeters(lat, lng, beaconLat, beaconLng);
+      dist = haversineDistanceMeters(lat, lng, beaconLat, beaconLng);
       if (dist > radiusMeters) {
         continue;
       }
@@ -67,6 +78,7 @@ export async function GET(request: Request) {
       note: rawBeacon.note || null,
       lat: beaconLat ?? 0,
       lng: beaconLng ?? 0,
+      distance: dist !== null ? Math.round(dist) : null,
       created_at: rawBeacon.created_at || now.toISOString(),
       expires_at: rawBeacon.expires_at,
       duration_mins: rawBeacon.duration_mins || 45,
@@ -76,20 +88,24 @@ export async function GET(request: Request) {
         company: u.company || rawBeacon.company || "Nearby Company",
         job_title: u.job_title || rawBeacon.job_title || "Professional",
         profile_photo_url: u.profile_photo_url || rawBeacon.profile_photo_url || null,
-        society_name: u.society_name || null,
-        quick_chat_preference: u.quick_chat_preference || "chai",
+        society_name: u.home_name || u.profile_digest?.society_name || null,
+        quick_chat_preference: u.profile_digest?.quick_chat_preference || "chai",
       },
     });
   }
 
-  // Sort latest first
-  activeBeacons.sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  // Sort by shortest distance ascending, then latest created
+  activeBeacons.sort((a, b) => {
+    const distA = typeof a.distance === "number" ? a.distance : Infinity;
+    const distB = typeof b.distance === "number" ? b.distance : Infinity;
+    if (distA !== distB) {
+      return distA - distB;
+    }
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 
   // Check if current user has an active broadcast
   let myBeacon: MicroStatus | null = null;
-  const currentUser = await getCurrentUser();
   if (currentUser) {
     const rawMy = (currentUser as any).profile_digest?.active_beacon;
     if (rawMy && rawMy.expires_at && new Date(rawMy.expires_at).getTime() > now.getTime()) {
@@ -100,6 +116,7 @@ export async function GET(request: Request) {
         note: rawMy.note || null,
         lat: rawMy.lat != null ? Number(rawMy.lat) : (currentUser.home_lat ? Number(currentUser.home_lat) : 0),
         lng: rawMy.lng != null ? Number(rawMy.lng) : (currentUser.home_lng ? Number(currentUser.home_lng) : 0),
+        distance: 0,
         created_at: rawMy.created_at || now.toISOString(),
         expires_at: rawMy.expires_at,
         duration_mins: rawMy.duration_mins || 45,
@@ -109,8 +126,8 @@ export async function GET(request: Request) {
           company: currentUser.company || rawMy.company || "Nearby Company",
           job_title: currentUser.job_title || rawMy.job_title || "Professional",
           profile_photo_url: currentUser.profile_photo_url || rawMy.profile_photo_url || null,
-          society_name: currentUser.society_name || null,
-          quick_chat_preference: currentUser.quick_chat_preference || "chai",
+          society_name: currentUser.home_name || (currentUser as any).profile_digest?.society_name || null,
+          quick_chat_preference: (currentUser as any).profile_digest?.quick_chat_preference || "chai",
         },
       };
     }

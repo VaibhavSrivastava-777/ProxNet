@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAnimatedPlaceholder } from "@/lib/hooks/useAnimatedPlaceholder";
 import { CompanyLogo } from "@/components/qa/QuestionList";
 import { MicroStatusBeacon } from "./MicroStatusBeacon";
+import { haversineDistanceMeters } from "@/lib/geo/haversine";
 
 const ProximityMapInner = dynamic(
   () => import("./ProximityMapInner").then((m) => m.ProximityMapInner),
@@ -276,16 +277,18 @@ export function ProximityMap() {
     return map;
   }, [activeBeacons]);
 
-  // Sort people so anyone broadcasting a beacon appears at the very top of the network list!
+  // Sort people: beacon = yes first, then by shortest distance ascending!
   const sortedPeople = useMemo(() => {
     const existingIds = new Set(filteredPeople.map((p: any) => p.id));
     const extraBroadcasters: any[] = [];
 
-    // If the current user has an active broadcast, PIN IT AT THE VERY TOP OF THE NETWORK LIST!
+    // If the current user has an active broadcast, PIN IT AT THE VERY TOP OF THE NETWORK LIST FOR THEMSELVES!
     const myRawBeacon = profile?.profile_digest?.active_beacon;
-    const hasMyActiveBeacon = profile?.id && (
-      activeBeaconMap.has(profile.id) ||
-      (myRawBeacon?.expires_at && new Date(myRawBeacon.expires_at).getTime() > Date.now())
+    const hasMyActiveBeacon = Boolean(
+      profile?.id && (
+        activeBeaconMap.has(profile.id) ||
+        (myRawBeacon?.expires_at && new Date(myRawBeacon.expires_at).getTime() > Date.now())
+      )
     );
 
     if (hasMyActiveBeacon && profile?.id) {
@@ -301,8 +304,18 @@ export function ProximityMap() {
       });
     }
 
+    // Add other active broadcasters strictly within 2km who might not be in filteredPeople
     for (const b of activeBeacons) {
       if (b.user_id && b.user_id !== profile?.id && !existingIds.has(b.user_id)) {
+        const beaconDistance = (center?.lat != null && center?.lng != null && b.lat && b.lng)
+          ? Math.round(haversineDistanceMeters(center.lat, center.lng, b.lat, b.lng))
+          : (typeof b.distance === "number" ? b.distance : null);
+
+        // Strict 2km (2000 meters) limit on beacon visibility
+        if (beaconDistance != null && beaconDistance > 2000) {
+          continue;
+        }
+
         extraBroadcasters.push({
           id: b.user_id,
           full_name: "Community Neighbor",
@@ -310,23 +323,46 @@ export function ProximityMap() {
           company: b.user?.company || "Nearby Company",
           job_title: b.user?.job_title || "Professional",
           profile_photo_url: b.user?.profile_photo_url || null,
-          distance: 1000,
+          distance: beaconDistance,
+          is_me: false,
         });
       }
     }
 
     const combined = [...extraBroadcasters, ...filteredPeople];
-    return combined.sort((a: any, b: any) => {
-      // Current user's live broadcast is ALWAYS at the absolute top of the list!
-      if (a.is_me) return -1;
-      if (b.is_me) return 1;
-      const aHas = activeBeaconMap.has(a.id);
-      const bHas = activeBeaconMap.has(b.id);
-      if (aHas && !bHas) return -1;
-      if (!aHas && bHas) return 1;
-      return 0;
+
+    // Filter out any active beacon that exceeds 2km
+    const withinRadiusPeople = combined.filter((p: any) => {
+      if (p.is_me) return true;
+      if (activeBeaconMap.has(p.id)) {
+        const dist = typeof p.distance === "number" ? p.distance : null;
+        if (dist !== null && dist > 2000) return false;
+      }
+      return true;
     });
-  }, [filteredPeople, activeBeacons, activeBeaconMap, profile]);
+
+    return withinRadiusPeople.sort((a: any, b: any) => {
+      // 1. Current user's live broadcast is ALWAYS at the absolute top for themselves
+      if (a.is_me && hasMyActiveBeacon) return -1;
+      if (b.is_me && hasMyActiveBeacon) return 1;
+
+      // 2. Primary sort: beacon = yes first
+      const aBeacon = Boolean(activeBeaconMap.has(a.id) || (a.is_me && hasMyActiveBeacon));
+      const bBeacon = Boolean(activeBeaconMap.has(b.id) || (b.is_me && hasMyActiveBeacon));
+      if (aBeacon && !bBeacon) return -1;
+      if (!aBeacon && bBeacon) return 1;
+
+      // 3. Secondary sort: shortest distance ascending
+      const distA = typeof a.distance === "number" && !isNaN(a.distance) ? a.distance : Infinity;
+      const distB = typeof b.distance === "number" && !isNaN(b.distance) ? b.distance : Infinity;
+      if (distA !== distB) {
+        return distA - distB;
+      }
+
+      // 4. Tie-breaker by company name alphabetically
+      return (a.company || "").localeCompare(b.company || "");
+    });
+  }, [filteredPeople, activeBeacons, activeBeaconMap, profile, center]);
 
   const isInitializing = !profile || !center;
   const loading = isInitializing || clustersLoading || peopleLoading || (!peopleData && !localError);

@@ -128,6 +128,7 @@ export interface MicroStatus {
   note: string | null;
   lat: number;
   lng: number;
+  distance?: number | null;
   created_at: string;
   expires_at: string;
   duration_mins?: number;

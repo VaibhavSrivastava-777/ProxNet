@@ -33,10 +33,10 @@ export function MicroStatusBeacon({
 
   const fetchBeacons = async () => {
     try {
-      // Use generous 50km radius so neighborhood and metro area broadcasts are visible to all users
+      // Broadcast beacons are strictly visible to the 2km neighborhood radius only
       const url = (userLat != null && userLng != null)
-        ? `/api/micro-status?lat=${userLat}&lng=${userLng}&radius=50000`
-        : `/api/micro-status`;
+        ? `/api/micro-status?lat=${userLat}&lng=${userLng}&radius=2000`
+        : `/api/micro-status?radius=2000`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
