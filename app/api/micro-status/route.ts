@@ -71,10 +71,10 @@ export async function GET(request: Request) {
       expires_at: rawBeacon.expires_at,
       user: {
         id: u.id,
-        full_name: u.full_name || "Neighbor",
-        company: u.company || "Professional",
-        job_title: u.job_title || "Member",
-        profile_photo_url: u.profile_photo_url || null,
+        full_name: u.full_name || rawBeacon.user_name || "Neighbor",
+        company: u.company || rawBeacon.company || "Nearby Company",
+        job_title: u.job_title || rawBeacon.job_title || "Professional",
+        profile_photo_url: u.profile_photo_url || rawBeacon.profile_photo_url || null,
         society_name: u.society_name || null,
         quick_chat_preference: u.quick_chat_preference || "chai",
       },
@@ -116,7 +116,7 @@ export async function POST(request: Request) {
 
   const { data: userProfile, error: profileError } = await supabase
     .from("users")
-    .select("profile_digest")
+    .select("id, profile_digest, job_title, company, full_name, profile_photo_url")
     .eq("id", user.id)
     .single();
 
@@ -125,6 +125,26 @@ export async function POST(request: Request) {
   }
 
   const profileDigest = userProfile.profile_digest || {};
+
+  // Disallow opening another broadcast when a current broadcast is still in motion
+  if (profileDigest.active_beacon?.expires_at) {
+    const existingExpires = new Date(profileDigest.active_beacon.expires_at).getTime();
+    if (existingExpires > Date.now()) {
+      return NextResponse.json(
+        {
+          error: "You already have an active broadcast in motion. Please close your current broadcast before starting a new one.",
+          active_beacon: profileDigest.active_beacon,
+        },
+        { status: 409 }
+      );
+    }
+  }
+
+  const effectiveJobTitle = userProfile.job_title || user.job_title || "Professional";
+  const effectiveCompany = userProfile.company || user.company || "Nearby Company";
+  const effectiveFullName = userProfile.full_name || user.full_name || "Neighbor";
+  const effectivePhoto = userProfile.profile_photo_url || user.profile_photo_url || null;
+
   const beaconData = {
     id: `beacon-${user.id}`,
     user_id: user.id,
@@ -135,6 +155,10 @@ export async function POST(request: Request) {
     lng,
     created_at: nowIso,
     expires_at: expiresAt,
+    user_name: effectiveFullName,
+    job_title: effectiveJobTitle,
+    company: effectiveCompany,
+    profile_photo_url: effectivePhoto,
   };
 
   profileDigest.active_beacon = beaconData;
@@ -154,10 +178,10 @@ export async function POST(request: Request) {
       ...beaconData,
       user: {
         id: user.id,
-        full_name: user.full_name,
-        company: user.company,
-        job_title: user.job_title,
-        profile_photo_url: user.profile_photo_url,
+        full_name: effectiveFullName,
+        company: effectiveCompany,
+        job_title: effectiveJobTitle,
+        profile_photo_url: effectivePhoto,
       },
     },
   });

@@ -603,6 +603,7 @@ export function ProximityMap() {
       {/* ── 15-Minute Chai / Walk & Talk Micro-Meetup Beacon ── */}
       <MicroStatusBeacon
         currentUserId={profile?.id}
+        userProfile={profile}
         userLat={center?.lat ?? (profile?.home_lat ? Number(profile.home_lat) : null)}
         userLng={center?.lng ?? (profile?.home_lng ? Number(profile.home_lng) : null)}
         onBeaconsChange={setActiveBeacons}
@@ -712,6 +713,10 @@ export function ProximityMap() {
                 if (beacon) {
                   const activityIcon = beacon.activity === "chai" ? "☕" : beacon.activity === "walk" ? "🚶" : beacon.activity === "sports" ? "🏸" : "💬";
                   const activityLabel = beacon.activity === "chai" ? "15-min Chai Beacon" : beacon.activity === "walk" ? "Walk & Talk Beacon" : beacon.activity === "sports" ? "Badminton / Sports" : "Quick Catch-up";
+                  const broadcasterName = beacon.user?.full_name || p.full_name || p.anonymous_name || "Neighbor";
+                  const broadcasterTitle = (beacon.user?.job_title || p.job_title || "Professional").trim();
+                  const broadcasterCompany = (beacon.user?.company || p.company || "Nearby Company").trim();
+                  const designationAtCompany = `${broadcasterTitle} @ ${broadcasterCompany}`;
 
                   return (
                     <div
@@ -720,20 +725,23 @@ export function ProximityMap() {
                       onClick={() => setSelectedPerson(p)}
                       className="card p-3.5 sm:p-4 rounded-2xl border-2 border-amber-500/60 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-[var(--color-surface)] dark:from-amber-950/40 dark:via-amber-900/15 shadow-md shadow-amber-500/10 hover:border-amber-500 transition-all cursor-pointer flex flex-col gap-2.5 animate-fadeIn"
                     >
-                      {/* Broadcast status header with pulsing radar + live time-lapse animation */}
+                      {/* Broadcast status header with pulsing radar + live time-lapse animation + designation@company */}
                       <div className="flex items-center justify-between gap-2 border-b border-amber-500/20 pb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="relative flex h-2.5 w-2.5">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span className="relative flex h-2.5 w-2.5 shrink-0">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-80" />
                             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
                           </span>
-                          <span className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 shrink-0">
                             <span>{activityIcon}</span>
                             <span>{activityLabel}</span>
                           </span>
+                          <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-900 dark:text-amber-100 border border-amber-500/40 truncate max-w-[260px] sm:max-w-none">
+                            {designationAtCompany}
+                          </span>
                         </div>
 
-                        <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[11px] font-bold border border-amber-500/30">
+                        <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[11px] font-bold border border-amber-500/30 shrink-0">
                           <span className="animate-pulse">⏳</span>
                           <span>{remainingMins}m left</span>
                         </div>
@@ -742,19 +750,25 @@ export function ProximityMap() {
                       {/* Main card row: profile info + Join action button */}
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <CompanyLogo company={p.company} size={42} />
+                          <CompanyLogo company={broadcasterCompany} size={42} />
                           <div className="flex flex-col min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-[var(--color-text)] truncate">
-                                {p.full_name || p.anonymous_name || p.company}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-extrabold text-[var(--color-text)] truncate">
+                                {broadcasterName}
                               </span>
-                              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.2 rounded-md">
+                              <span className="text-xs font-extrabold text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md truncate">
+                                {designationAtCompany}
+                              </span>
+                              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.2 rounded-md uppercase tracking-wider">
                                 Broadcast
                               </span>
                             </div>
-                            <span className="text-xs text-[var(--color-text-secondary)] font-medium truncate mt-0.5">
-                              {p.job_title} @ {p.company}
-                            </span>
+                            <div className="text-xs font-semibold text-[var(--color-text)] mt-0.5 flex items-center gap-1.5 truncate">
+                              <span>💼</span>
+                              <span className="font-bold text-[var(--color-text)]">{broadcasterTitle}</span>
+                              <span className="text-[var(--color-text-secondary)] font-normal">at</span>
+                              <span className="font-bold text-[var(--color-text)]">{broadcasterCompany}</span>
+                            </div>
                             {beacon.note && (
                               <span className="text-[11px] text-amber-700 dark:text-amber-300 italic truncate mt-0.5 flex items-center gap-1 font-medium">
                                 <span>📍</span> &quot;{beacon.note}&quot;
@@ -774,9 +788,9 @@ export function ProximityMap() {
                               e.stopPropagation();
                               openDirectChat({
                                 id: p.id,
-                                anonymous_name: p.full_name || p.anonymous_name || "Neighbor",
-                                company: p.company || "Neighbor",
-                                job_title: p.job_title || "Professional",
+                                anonymous_name: broadcasterName,
+                                company: broadcasterCompany,
+                                job_title: broadcasterTitle,
                               });
                             }}
                             className="btn btn-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl border-0 shadow-sm flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105 shrink-0"

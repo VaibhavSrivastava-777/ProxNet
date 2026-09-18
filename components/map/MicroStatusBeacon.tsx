@@ -5,6 +5,7 @@ import type { MicroStatus } from "@/lib/types";
 
 interface MicroStatusBeaconProps {
   currentUserId?: string;
+  userProfile?: any;
   userLat?: number | null;
   userLng?: number | null;
   onJoinBeacon?: (beacon: MicroStatus) => void;
@@ -13,6 +14,7 @@ interface MicroStatusBeaconProps {
 
 export function MicroStatusBeacon({
   currentUserId,
+  userProfile,
   userLat,
   userLng,
   onJoinBeacon,
@@ -26,6 +28,7 @@ export function MicroStatusBeacon({
   const [note, setNote] = useState("");
   const [durationMins, setDurationMins] = useState(45);
   const [broadcasting, setBroadcasting] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   const fetchBeacons = async () => {
     if (userLat == null || userLng == null) return;
@@ -54,6 +57,10 @@ export function MicroStatusBeacon({
 
   const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (myBeacon) {
+      alert("You already have an active broadcast in motion. Please close your current broadcast before starting a new one.");
+      return;
+    }
     if (userLat == null || userLng == null) {
       alert("Location is required to broadcast a beacon. Please set your home location.");
       return;
@@ -88,13 +95,22 @@ export function MicroStatusBeacon({
     }
   };
 
-  const handleCancelBeacon = async () => {
+  const handleCloseBeacon = async () => {
+    setClosing(true);
     try {
-      await fetch("/api/micro-status", { method: "DELETE" });
-      setMyBeacon(null);
-      fetchBeacons();
+      const res = await fetch("/api/micro-status", { method: "DELETE" });
+      if (res.ok) {
+        setMyBeacon(null);
+        setShowBroadcastModal(false);
+        fetchBeacons();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Failed to close broadcast");
+      }
     } catch (err) {
-      console.error("Failed to cancel beacon:", err);
+      console.error("Failed to close beacon:", err);
+    } finally {
+      setClosing(false);
     }
   };
 
@@ -110,50 +126,79 @@ export function MicroStatusBeacon({
     return Math.max(1, Math.round(diff / 60000));
   };
 
+  const myTitle = myBeacon?.user?.job_title || userProfile?.job_title || "Professional";
+  const myCompany = myBeacon?.user?.company || userProfile?.company || "Nearby Company";
+
   return (
     <>
       {/* Floating Beacon Action Bar */}
       <div className="flex flex-col gap-2">
         {/* Active Personal Beacon Banner */}
         {myBeacon ? (
-          <div className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-[var(--color-text)] shadow-md backdrop-blur-md animate-fadeIn">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500" />
+          <div className="flex items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-[var(--color-surface)] border-2 border-amber-500/50 text-[var(--color-text)] shadow-lg backdrop-blur-md animate-fadeIn">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="relative flex h-3.5 w-3.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-80" />
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-500 shadow-sm" />
               </span>
-              <div>
-                <div className="text-xs font-bold flex items-center gap-1.5 flex-wrap">
-                  <span>{activityMeta[myBeacon.activity]?.icon}</span>
-                  <span>Your {activityMeta[myBeacon.activity]?.label} beacon is live</span>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 animate-pulse">
-                    ⏳ {getRemainingMins(myBeacon.expires_at)}m left
+              <div className="flex flex-col min-w-0">
+                <div className="text-xs font-extrabold flex items-center gap-1.5 flex-wrap">
+                  <span className="text-base">{activityMeta[myBeacon.activity]?.icon}</span>
+                  <span className="text-amber-900 dark:text-amber-100">
+                    Your {activityMeta[myBeacon.activity]?.label} broadcast is live
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-800 dark:text-amber-200 border border-amber-500/40 animate-pulse shrink-0">
+                    ⏳ {getRemainingMins(myBeacon.expires_at)}m remaining
                   </span>
                 </div>
+                
+                {/* Designation @ Company Display */}
+                <div className="text-xs font-semibold text-[var(--color-text)] mt-1 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30">
+                    Broadcasting as
+                  </span>
+                  <span className="font-extrabold text-amber-900 dark:text-amber-200">
+                    {myTitle} @ {myCompany}
+                  </span>
+                </div>
+
                 {myBeacon.note && (
-                  <div className="text-[11px] text-[var(--color-text-secondary)] truncate max-w-[240px] mt-0.5">
-                    &quot;{myBeacon.note}&quot;
+                  <div className="text-[11px] text-amber-800 dark:text-amber-300 italic truncate max-w-[320px] mt-0.5 flex items-center gap-1 font-medium">
+                    <span>📍</span> &quot;{myBeacon.note}&quot;
                   </div>
                 )}
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleCancelBeacon}
-              className="text-[11px] font-semibold text-red-500 hover:text-red-600 px-2.5 py-1 rounded-lg bg-red-500/10 border border-red-500/20 cursor-pointer transition-colors"
-            >
-              Cancel ✕
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleCloseBeacon}
+                disabled={closing}
+                className="btn btn-sm bg-red-500/15 hover:bg-red-500/25 text-red-600 dark:text-red-400 border border-red-500/30 font-bold text-xs px-3 py-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 shrink-0 shadow-xs hover:scale-105"
+                title="Close and end this broadcast anytime"
+              >
+                {closing ? (
+                  <>
+                    <span className="spinner-sm" /> Closing...
+                  </>
+                ) : (
+                  <>
+                    <span>🛑</span>
+                    <span>Close Broadcast</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         ) : (
           <button
             type="button"
             onClick={() => setShowBroadcastModal(true)}
-            className="flex items-center justify-center gap-2 py-2 px-3.5 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-secondary)] border border-[var(--color-border)] shadow-sm text-xs font-semibold text-[var(--color-text)] cursor-pointer transition-all hover:border-amber-500/50"
+            className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-[var(--color-surface)] to-amber-500/10 hover:from-amber-500/20 hover:to-amber-500/20 border border-amber-500/30 shadow-sm text-xs font-bold text-[var(--color-text)] cursor-pointer transition-all hover:scale-[1.01]"
           >
-            <span>☕</span>
-            <span>Down for Chai? (Set Beacon)</span>
+            <span className="text-base">☕</span>
+            <span>Down for Chai / Walk? (Set Broadcast Beacon)</span>
           </button>
         )}
       </div>
@@ -170,7 +215,7 @@ export function MicroStatusBeacon({
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-bold text-[var(--color-text)] m-0 flex items-center gap-2">
-                <span>📡</span> Neighborhood Beacon
+                <span>📡</span> Neighborhood Broadcast Beacon
               </h3>
               <button
                 onClick={() => setShowBroadcastModal(false)}
@@ -180,90 +225,124 @@ export function MicroStatusBeacon({
               </button>
             </div>
 
-            <p className="text-xs text-[var(--color-text-secondary)] m-0 mb-4 leading-relaxed">
-              Broadcast a 15-minute icebreaker beacon to neighbors within 1-2 km. Great for spontaneous coffee breaks, walks, or sports!
-            </p>
-
-            <form onSubmit={handleBroadcast} className="flex flex-col gap-4">
-              {/* Activity Selection */}
-              <div>
-                <label className="label text-xs font-semibold mb-1.5 block">Activity</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: "chai", label: "15-min Chai", icon: "☕" },
-                    { id: "walk", label: "Walk & Talk", icon: "🚶" },
-                    { id: "sports", label: "Badminton", icon: "🏸" },
-                    { id: "quick_chat", label: "Quick Catch-up", icon: "💬" },
-                  ].map((act) => (
-                    <button
-                      key={act.id}
-                      type="button"
-                      onClick={() => setSelectedActivity(act.id as any)}
-                      className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                        selectedActivity === act.id
-                          ? "border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                          : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)]"
-                      }`}
-                    >
-                      <span>{act.icon}</span>
-                      <span>{act.label}</span>
-                    </button>
-                  ))}
+            {myBeacon ? (
+              /* Already active broadcast block */
+              <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-[var(--color-text)] flex flex-col gap-3 my-2">
+                <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-200 text-sm">
+                  <span>⚠️</span> Broadcast Already in Motion
                 </div>
-              </div>
-
-              {/* Optional Note */}
-              <div>
-                <label className="label text-xs font-semibold mb-1 block">
-                  Location Hint / Note (Optional)
-                </label>
-                <input
-                  className="input w-full text-xs"
-                  placeholder="e.g. Near Third Wave Coffee / Clubhouse"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  maxLength={60}
-                />
-              </div>
-
-              {/* Duration Selector */}
-              <div>
-                <label className="label text-xs font-semibold mb-1 block">Active Duration</label>
-                <div className="flex gap-2">
-                  {[30, 45, 60].map((mins) => (
-                    <button
-                      key={mins}
-                      type="button"
-                      onClick={() => setDurationMins(mins)}
-                      className={`flex-1 py-1.5 rounded-lg border text-xs font-medium cursor-pointer ${
-                        durationMins === mins
-                          ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
-                          : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border-[var(--color-border)]"
-                      }`}
-                    >
-                      {mins} mins
-                    </button>
-                  ))}
+                <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed">
+                  You already have an active <strong>{activityMeta[myBeacon.activity]?.label}</strong> broadcast running.
+                  Opening another broadcast when one is still in motion is not allowed.
+                </p>
+                <div className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                  Broadcasting as: {myTitle} @ {myCompany}
                 </div>
+                <button
+                  type="button"
+                  onClick={handleCloseBeacon}
+                  disabled={closing}
+                  className="btn btn-sm bg-red-500 hover:bg-red-600 text-white font-bold text-xs py-2 rounded-xl border-0 shadow-sm cursor-pointer flex items-center justify-center gap-2 mt-2"
+                >
+                  {closing ? <span className="spinner-sm" /> : <span>🛑</span>}
+                  <span>Close Current Broadcast First</span>
+                </button>
               </div>
+            ) : (
+              <>
+                <p className="text-xs text-[var(--color-text-secondary)] m-0 mb-3 leading-relaxed">
+                  Broadcast your presence to neighbors within 1-2 km. Your card will appear at the top of their network tab with your <strong>designation @ company</strong>!
+                </p>
 
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={broadcasting}
-                className="btn btn-primary w-full py-2.5 rounded-xl font-semibold text-xs mt-2 shadow-md cursor-pointer flex items-center justify-center gap-2"
-              >
-                {broadcasting ? (
-                  <>
-                    <span className="spinner spinner-sm" /> Broadcasting...
-                  </>
-                ) : (
-                  <>
-                    <span>📡</span> Broadcast Local Beacon
-                  </>
-                )}
-              </button>
-            </form>
+                {/* Profile Preview */}
+                <div className="p-2.5 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border)] mb-3 flex items-center gap-2 text-xs">
+                  <span>👤</span>
+                  <span className="text-[var(--color-text-secondary)]">Visible to neighbors as:</span>
+                  <strong className="text-[var(--color-text)] truncate">{myTitle} @ {myCompany}</strong>
+                </div>
+
+                <form onSubmit={handleBroadcast} className="flex flex-col gap-4">
+                  {/* Activity Selection */}
+                  <div>
+                    <label className="label text-xs font-semibold mb-1.5 block">Activity</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: "chai", label: "15-min Chai", icon: "☕" },
+                        { id: "walk", label: "Walk & Talk", icon: "🚶" },
+                        { id: "sports", label: "Badminton", icon: "🏸" },
+                        { id: "quick_chat", label: "Quick Catch-up", icon: "💬" },
+                      ].map((act) => (
+                        <button
+                          key={act.id}
+                          type="button"
+                          onClick={() => setSelectedActivity(act.id as any)}
+                          className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                            selectedActivity === act.id
+                              ? "border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                              : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)]"
+                          }`}
+                        >
+                          <span>{act.icon}</span>
+                          <span>{act.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Optional Note */}
+                  <div>
+                    <label className="label text-xs font-semibold mb-1 block">
+                      Location Hint / Note (Optional)
+                    </label>
+                    <input
+                      className="input w-full text-xs"
+                      placeholder="e.g. Near Third Wave Coffee / Clubhouse"
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      maxLength={60}
+                    />
+                  </div>
+
+                  {/* Duration Selector */}
+                  <div>
+                    <label className="label text-xs font-semibold mb-1 block">Active Duration</label>
+                    <div className="flex gap-2">
+                      {[30, 45, 60].map((mins) => (
+                        <button
+                          key={mins}
+                          type="button"
+                          onClick={() => setDurationMins(mins)}
+                          className={`flex-1 py-1.5 rounded-lg border text-xs font-medium cursor-pointer ${
+                            durationMins === mins
+                              ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                              : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border-[var(--color-border)]"
+                          }`}
+                        >
+                          {mins} mins
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Submit */}
+                  <button
+                    type="submit"
+                    disabled={broadcasting || !!myBeacon}
+                    className="btn btn-primary w-full py-2.5 rounded-xl font-semibold text-xs mt-2 shadow-md cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {broadcasting ? (
+                      <>
+                        <span className="spinner spinner-sm" /> Broadcasting...
+                      </>
+                    ) : (
+                      <>
+                        <span>📡</span> Broadcast Local Beacon
+                      </>
+                    )}
+                  </button>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}
