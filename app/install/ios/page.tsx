@@ -66,7 +66,7 @@ export default function IosInstallPage() {
           <div>
             <h3 className="text-body font-semibold m-0">Tap the Share icon</h3>
             <p className="text-body-sm text-[var(--color-text-secondary)] m-0 mt-1">
-              Tap the Safari Share button in the bottom menu bar of your browser:
+              In Chrome, tap the <strong>Share</strong> button at the <strong className="text-[var(--color-text)]">top right</strong> of your screen (next to the address bar):
             </p>
             <div className="mt-2 inline-flex items-center justify-center p-2 rounded-lg bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] text-[var(--color-primary)]">
               {/* iOS Share Icon Representation */}
@@ -85,7 +85,7 @@ export default function IosInstallPage() {
           <div>
             <h3 className="text-body font-semibold m-0">Select "Add to Home Screen"</h3>
             <p className="text-body-sm text-[var(--color-text-secondary)] m-0 mt-1">
-              Scroll down the sharing options menu and select <strong className="text-[var(--color-text)]">Add to Home Screen</strong>:
+              Scroll down the share sheet to expand options and tap <strong className="text-[var(--color-text)]">Add to Home Screen</strong>:
             </p>
             <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] text-sm font-semibold">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -112,7 +112,7 @@ export default function IosInstallPage() {
       {/* Footer / Fallback */}
       <div className="w-full max-w-md flex flex-col items-center gap-4 text-center">
         <p className="text-caption text-[var(--color-text-tertiary)] m-0">
-          Note: This must be opened in the Safari browser. Third-party browsers like Chrome or Firefox do not support adding PWAs to the iOS home screen.
+          Works in Google Chrome and Safari on iPhone (iOS 16.4+). In Safari, the Share button is located in the bottom bar.
         </p>
         <Link 
           href="/login" 

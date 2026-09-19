@@ -231,7 +231,7 @@ export function SmartAppBanner() {
                   1
                 </div>
                 <div className="text-xs flex-1">
-                  Tap the Safari{" "}
+                  Tap the{" "}
                   <strong className="text-[var(--color-primary)] font-semibold inline-flex items-center gap-1">
                     Share
                     <svg
@@ -246,7 +246,7 @@ export function SmartAppBanner() {
                       <line x1="12" y1="2" x2="12" y2="15" />
                     </svg>
                   </strong>{" "}
-                  button in the bottom bar.
+                  icon at the <strong className="text-[var(--color-text)] font-semibold">top right</strong> of Chrome (next to the address bar).
                 </div>
               </div>
 
@@ -255,11 +255,11 @@ export function SmartAppBanner() {
                   2
                 </div>
                 <div className="text-xs flex-1">
-                  Scroll down and tap{" "}
+                  Scroll down the share sheet to expand options and tap{" "}
                   <strong className="text-[var(--color-text)] font-semibold">
                     Add to Home Screen
                   </strong>{" "}
-                  <span className="text-[var(--color-text-secondary)]">(+)</span>.
+                  <span className="text-[var(--color-text-secondary)] font-bold">(+)</span>.
                 </div>
               </div>
 
@@ -268,15 +268,15 @@ export function SmartAppBanner() {
                   3
                 </div>
                 <div className="text-xs flex-1">
-                  Tap <strong className="text-[var(--color-text)] font-semibold">Add</strong> in
+                  Tap <strong className="text-[var(--color-primary)] font-semibold">Add</strong> in
                   the top right. Open ProxNet from your Home Screen!
                 </div>
               </div>
             </div>
 
-            {/* Bouncing down indicator toward Safari toolbar */}
-            <div className="flex items-center justify-center gap-2 text-[var(--color-primary)] text-xs font-semibold py-1">
-              <span>Tap Share below</span>
+            {/* Indicator pointing to Chrome top right share icon */}
+            <div className="flex items-center justify-center gap-1.5 text-[var(--color-primary)] text-xs font-semibold py-1">
+              <span>Look for the Share icon at top right</span>
               <svg
                 className="w-4 h-4 animate-bounce"
                 viewBox="0 0 24 24"
@@ -284,9 +284,13 @@ export function SmartAppBanner() {
                 stroke="currentColor"
                 strokeWidth="2.5"
               >
-                <path d="M12 5v14M19 12l-7 7-7-7" />
+                <line x1="7" y1="17" x2="17" y2="7" />
+                <polyline points="7 7 17 7 17 17" />
               </svg>
             </div>
+            <p className="text-[11px] text-[var(--color-text-tertiary)] text-center m-0">
+              (Using Safari? Tap the Share icon in the bottom menu bar instead.)
+            </p>
 
             {/* Got It Button */}
             <button

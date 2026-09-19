@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import type { User } from "@/lib/types";
+import { formatLinkedInUrl } from "@/lib/linkedin/normalize-url";
 
 interface Props {
   user?: User;
@@ -200,19 +201,26 @@ export function UserForm({ user, onSuccess }: Props) {
       : emptyUser
   );
 
-  const [linkedinHandle, setLinkedinHandle] = useState<string>(() => 
-    extractLinkedInHandle(user?.linkedin_profile_url)
-  );
+  const [linkedinUrl, setLinkedinUrl] = useState<string>(() => user?.linkedin_profile_url || "");
 
   const handleLinkedInInputChange = (val: string) => {
-    let cleanHandle = val.trim();
-    if (cleanHandle.includes("linkedin.com/in/")) {
-      cleanHandle = cleanHandle.split("linkedin.com/in/")[1] || "";
+    let cleanVal = val.trim();
+    if (cleanVal.includes("linkedin.com") && cleanVal.includes("?")) {
+      cleanVal = cleanVal.split("?")[0].replace(/\/+$/, "");
     }
-    cleanHandle = cleanHandle.replace(/^https?:\/\/[^\/]+\//, "").replace(/^\/+|\/+$/g, "");
-    setLinkedinHandle(cleanHandle);
-    const fullUrl = cleanHandle ? `https://www.linkedin.com/in/${cleanHandle}` : "";
-    setForm(prev => ({ ...prev, linkedin_profile_url: fullUrl }));
+    setLinkedinUrl(cleanVal);
+    setForm(prev => ({ ...prev, linkedin_profile_url: cleanVal }));
+  };
+
+  const handleLinkedInBlurFormatted = (rawVal: string) => {
+    const formatted = formatLinkedInUrl(rawVal);
+    if (formatted) {
+      setLinkedinUrl(formatted);
+      setForm(prev => ({ ...prev, linkedin_profile_url: formatted }));
+    } else if (!rawVal.trim()) {
+      setLinkedinUrl("");
+      setForm(prev => ({ ...prev, linkedin_profile_url: "" }));
+    }
   };
 
   const [saving, setSaving] = useState(false);
@@ -294,7 +302,7 @@ export function UserForm({ user, onSuccess }: Props) {
       }));
 
       if (data.linkedin_profile_url) {
-        setLinkedinHandle(extractLinkedInHandle(data.linkedin_profile_url));
+        setLinkedinUrl(data.linkedin_profile_url);
       }
 
       setAutofillSuccess(
@@ -339,7 +347,7 @@ export function UserForm({ user, onSuccess }: Props) {
       }));
 
       if (data.linkedin_profile_url) {
-        setLinkedinHandle(extractLinkedInHandle(data.linkedin_profile_url));
+        setLinkedinUrl(data.linkedin_profile_url);
       }
 
       setAutofillSuccess(
@@ -547,7 +555,7 @@ export function UserForm({ user, onSuccess }: Props) {
                 value={form.linkedin_profile_url}
                 onChange={(e) => {
                   setForm({ ...form, linkedin_profile_url: e.target.value });
-                  setLinkedinHandle(extractLinkedInHandle(e.target.value));
+                  setLinkedinUrl(e.target.value);
                 }}
                 placeholder="https://linkedin.com/in/..."
               />
@@ -695,17 +703,29 @@ export function UserForm({ user, onSuccess }: Props) {
             <label className="label">
               <span>LinkedIn profile URL</span>
             </label>
-            <div className="flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden focus-within:ring-2 focus-within:ring-[var(--color-primary)]">
-              <span className="bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] text-xs font-semibold px-3 flex items-center border-r border-[var(--color-border-light)] select-none shrink-0">
-                https://www.linkedin.com/in/
-              </span>
+            <div className="flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden focus-within:ring-2 focus-within:ring-[var(--color-primary)] transition-all shadow-sm">
+              <div className="bg-[#0A66C2]/10 text-[#0A66C2] px-3 flex items-center justify-center border-r border-[var(--color-border-light)] shrink-0 select-none">
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                  <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.2a1.66 1.66 0 0 0-1.66 1.66 1.66 1.66 0 0 0 1.66 1.66 1.66 1.66 0 0 0 1.66-1.66A1.66 1.66 0 0 0 7.83 6.2z"/>
+                </svg>
+              </div>
               <input
-                className="w-full bg-transparent px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none"
-                value={linkedinHandle}
-                placeholder="VaibhavSrivastava777"
+                type="url"
+                className="w-full bg-transparent px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none placeholder:text-[var(--color-text-tertiary)] placeholder:opacity-60"
+                value={linkedinUrl}
+                placeholder="https://www.linkedin.com/in/your-profile"
                 onChange={(e) => handleLinkedInInputChange(e.target.value)}
+                onBlur={() => handleLinkedInBlurFormatted(linkedinUrl)}
               />
+              {linkedinUrl && linkedinUrl.includes("linkedin.com/in/") && (
+                <div className="flex items-center pr-3 shrink-0 text-emerald-600 dark:text-emerald-400 text-xs font-semibold gap-1">
+                  ✓
+                </div>
+              )}
             </div>
+            <p className="text-[11px] text-[var(--color-text-secondary)] mt-1">
+              💡 Tip: Paste the full profile link directly from LinkedIn.
+            </p>
           </div>
 
           <div style={{ gridColumn: "1 / -1" }}>

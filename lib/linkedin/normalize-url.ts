@@ -9,3 +9,51 @@ export function normalizeLinkedInUrl(url: string | null | undefined): string | n
     return null;
   }
 }
+
+/**
+ * User-friendly LinkedIn URL formatter:
+ * Handles full URLs (stripping query/tracking params), shorthand domains, and standalone handles.
+ */
+export function formatLinkedInUrl(input: string | null | undefined): string {
+  if (!input) return "";
+  let clean = input.trim();
+  if (!clean) return "";
+
+  // Remove tracking query parameters and hash
+  clean = clean.split("?")[0].split("#")[0].replace(/\/+$/, "");
+
+  // If already starts with http:// or https://
+  if (/^https?:\/\//i.test(clean)) {
+    try {
+      const parsed = new URL(clean);
+      if (parsed.hostname.includes("linkedin.com")) {
+        let pathname = parsed.pathname.replace(/\/+$/, "");
+        if (!pathname.startsWith("/in/") && pathname.length > 1) {
+          pathname = `/in${pathname}`;
+        }
+        return `https://www.linkedin.com${pathname}`;
+      }
+      return clean;
+    } catch {
+      return clean;
+    }
+  }
+
+  // If starts with (www.)linkedin.com
+  if (/^(?:www\.)?linkedin\.com/i.test(clean)) {
+    const withoutDomain = clean.replace(/^(?:https?:\/\/)?(?:www\.)?linkedin\.com\/?/i, "");
+    const pathname = withoutDomain.startsWith("in/") ? withoutDomain : `in/${withoutDomain}`;
+    return `https://www.linkedin.com/${pathname.replace(/\/+$/, "")}`;
+  }
+
+  // If starts with in/
+  if (/^in\//i.test(clean)) {
+    return `https://www.linkedin.com/${clean.replace(/\/+$/, "")}`;
+  }
+
+  // Otherwise assume it's a handle / slug
+  const username = clean.replace(/^@/, "").replace(/^\/+|\/+$/g, "");
+  if (!username) return "";
+  return `https://www.linkedin.com/in/${username}`;
+}
+
