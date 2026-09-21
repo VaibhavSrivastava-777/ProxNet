@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { discoverAts, detectAtsFromUrl } from "@/lib/ats-discovery";
 import { STRATEGIES } from "@/lib/scrape-strategies";
 
+export const maxDuration = 60;
+
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
@@ -157,7 +159,7 @@ export async function GET() {
 
   for (const job of (matchedJobs || [])) {
     const matchRate = Math.min(99, Math.max(0, Math.round(((job.similarity - 0.25) / 0.35) * 100)));
-    if (matchRate < 60) continue;
+    if (matchRate < 45) continue;
 
     // Skip old jobs
     if (job.posted_at) {
@@ -262,8 +264,8 @@ export async function POST(request: Request) {
   }
 
   // 2. Resolve ATS config for this company
-  let provider = "custom";
-  let boardTokenOrUrl = careers_url || `https://careers.google.com/jobs/results/?q=${encodeURIComponent(cleanName)}`;
+  let provider = "none";
+  let boardTokenOrUrl = "";
 
   // Priority 1: Check if user provided an explicit careers URL that matches a known ATS pattern
   if (careers_url) {
@@ -271,11 +273,14 @@ export async function POST(request: Request) {
     if (urlDetected) {
       provider = urlDetected.provider;
       boardTokenOrUrl = urlDetected.board;
+    } else {
+      provider = "custom";
+      boardTokenOrUrl = careers_url;
     }
   }
 
   // Priority 2: If not detected from URL, probe known boards or database
-  if (provider === "custom") {
+  if (provider === "none") {
     const discovered = await discoverAts(cleanName);
     if (discovered) {
       provider = discovered.provider;
@@ -287,17 +292,41 @@ export async function POST(request: Request) {
         .ilike("company_name", cleanName)
         .single();
 
-      if (existingConfig) {
+      if (existingConfig && existingConfig.provider && existingConfig.provider !== "none" && !existingConfig.board_token_or_url?.includes("careers.google.com")) {
         provider = existingConfig.provider;
-        boardTokenOrUrl = existingConfig.board_token_or_url || boardTokenOrUrl;
-      } else if (careers_url) {
-        provider = "custom";
-        boardTokenOrUrl = careers_url;
+        boardTokenOrUrl = existingConfig.board_token_or_url || "";
       }
     }
   }
 
-  // Save config state (company_ats_config schema: id, company_name, provider, board_token_or_url, scrape_notes, total_jobs_found, last_scraped_at)
+  // If no ATS board and no careers URL provided, DO NOT default to careers.google.com!
+  if (provider === "none" || !boardTokenOrUrl) {
+    await supabase.from("user_target_companies").upsert({
+      user_id: user.id,
+      company_name: cleanName,
+      careers_url: null,
+      ats_provider: "none",
+      ats_board_token: null,
+      is_auto_discovered: false,
+      scrape_status: "no_ats",
+      scrape_notes: "Please provide company careers page URL to enable live scraping",
+      total_jobs_found: 0,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,company_name" });
+
+    return NextResponse.json({
+      success: true,
+      needs_url: true,
+      company_name: cleanName,
+      ats_provider: "none",
+      jobs_scraped: 0,
+      jobs_saved: 0,
+      message: `${cleanName} added! ATS board could not be auto-detected. Please enter their direct Careers Page URL to start scraping.`,
+      targetCompanies: profileDigest.target_companies,
+    });
+  }
+
+  // Save config state in company_ats_config
   await supabase.from("company_ats_config").upsert({
     company_name: cleanName,
     provider,
@@ -306,7 +335,7 @@ export async function POST(request: Request) {
     last_scraped_at: new Date().toISOString(),
   }, { onConflict: "company_name" });
 
-  // 3. Execute Real-Time Scraping with a safety timeout wrapper (12 seconds)
+  // 3. Execute Real-Time Scraping with 45-second timeout wrapper
   let scrapeResult: { scraped: number; saved: number; error?: string } = { scraped: 0, saved: 0 };
   try {
     const scrapePromise = scrapeTargetCompany(
@@ -318,7 +347,7 @@ export async function POST(request: Request) {
       userProfile.company
     );
     const timeoutPromise = new Promise<{ scraped: number; saved: number; error: string }>((resolve) =>
-      setTimeout(() => resolve({ scraped: 0, saved: 0, error: "timeout" }), 12000)
+      setTimeout(() => resolve({ scraped: 0, saved: 0, error: "timeout after 45s" }), 45000)
     );
     scrapeResult = await Promise.race([scrapePromise, timeoutPromise]);
   } catch (err: any) {
@@ -327,15 +356,13 @@ export async function POST(request: Request) {
   }
 
   // 4. Save into user_target_companies table
-  const scrapeStatus = scrapeResult.scraped > 0 
-    ? "success" 
-    : (provider !== "none" && provider !== "no_ats" ? "pending" : "no_ats");
+  const scrapeStatus = scrapeResult.scraped > 0 ? "success" : "failed";
 
   const scrapeNotes = scrapeResult.error
     ? `Failed: ${scrapeResult.error}`
     : (scrapeResult.scraped > 0
         ? `Real-time: Scraped ${scrapeResult.scraped} jobs, ${scrapeResult.saved} saved`
-        : (careers_url ? "Careers URL recorded" : "No active listings discovered"));
+        : "0 active listings discovered on careers portal");
 
   const careersUrlValue = careers_url?.trim() || (boardTokenOrUrl.startsWith("http") ? boardTokenOrUrl : null);
 
@@ -369,9 +396,10 @@ export async function POST(request: Request) {
     jobs_scraped: scrapeResult.scraped,
     jobs_saved: scrapeResult.saved,
     scrape_error: scrapeResult.error || null,
+    scrape_status: scrapeStatus,
     message: scrapeResult.scraped > 0
       ? `Real-time scrape complete: Found ${scrapeResult.scraped} active openings (${scrapeResult.saved} saved) for ${cleanName}!`
-      : `Target company ${cleanName} recorded (${provider}). ${scrapeResult.error ? `Scraper returned: ${scrapeResult.error}` : "0 jobs found on portal."}`,
+      : `Target company ${cleanName} recorded (${provider}). ${scrapeResult.error ? `Scraper returned: ${scrapeResult.error}` : "0 active listings found on portal."}`,
     targetCompanies: profileDigest.target_companies,
   });
 }
@@ -547,4 +575,93 @@ export async function DELETE(request: Request) {
     company_name: companyName,
     targetCompanies: updatedTargets,
   });
+}
+
+export async function PATCH(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const { company_name, careers_url } = body;
+
+    if (!company_name || !careers_url) {
+      return NextResponse.json({ error: "company_name and careers_url are required" }, { status: 400 });
+    }
+
+    const cleanName = company_name.trim();
+    const cleanUrl = careers_url.trim();
+    const supabase = createAdminClient();
+
+    const { data: userProfile } = await supabase
+      .from("users")
+      .select("job_title, company")
+      .eq("id", user.id)
+      .single();
+
+    const urlDetected = detectAtsFromUrl(cleanUrl);
+    const provider = urlDetected?.provider || "custom";
+    const boardTokenOrUrl = urlDetected?.board || cleanUrl;
+
+    // Save in company_ats_config
+    await supabase.from("company_ats_config").upsert({
+      company_name: cleanName,
+      provider,
+      board_token_or_url: boardTokenOrUrl,
+      scrape_notes: "status: live scraping after URL update",
+      last_scraped_at: new Date().toISOString(),
+    }, { onConflict: "company_name" });
+
+    // Execute scrape with 45s timeout
+    const scrapePromise = scrapeTargetCompany(
+      cleanName,
+      provider,
+      boardTokenOrUrl,
+      user.id,
+      userProfile?.job_title,
+      userProfile?.company
+    );
+    const timeoutPromise = new Promise<{ scraped: number; saved: number; error?: string }>((resolve) =>
+      setTimeout(() => resolve({ scraped: 0, saved: 0, error: "timeout after 45s" }), 45000)
+    );
+    const scrapeResult = await Promise.race([scrapePromise, timeoutPromise]);
+
+    const scrapeStatus = scrapeResult.scraped > 0 ? "success" : "failed";
+    const scrapeNotes = scrapeResult.error
+      ? `Failed: ${scrapeResult.error}`
+      : (scrapeResult.scraped > 0 ? `Scraped ${scrapeResult.scraped} jobs, ${scrapeResult.saved} saved` : "0 active listings found");
+
+    await supabase.from("user_target_companies").upsert({
+      user_id: user.id,
+      company_name: cleanName,
+      careers_url: cleanUrl,
+      ats_provider: provider,
+      ats_board_token: boardTokenOrUrl,
+      is_auto_discovered: false,
+      scrape_status: scrapeStatus,
+      scrape_notes: scrapeNotes,
+      total_jobs_found: scrapeResult.scraped || 0,
+      last_scraped_at: scrapeResult.scraped > 0 ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,company_name" });
+
+    return NextResponse.json({
+      success: true,
+      company_name: cleanName,
+      ats_provider: provider,
+      careers_url: cleanUrl,
+      jobs_scraped: scrapeResult.scraped,
+      jobs_saved: scrapeResult.saved,
+      scrape_status: scrapeStatus,
+      scrape_error: scrapeResult.error || null,
+      message: scrapeResult.scraped > 0
+        ? `Scraped ${scrapeResult.scraped} active openings (${scrapeResult.saved} saved) for ${cleanName}!`
+        : `Updated URL for ${cleanName}. ${scrapeResult.error ? `Error: ${scrapeResult.error}` : "0 jobs found on portal."}`,
+    });
+  } catch (err: any) {
+    console.error("PATCH target company error:", err);
+    return NextResponse.json({ error: err.message || "Failed to update target company" }, { status: 500 });
+  }
 }

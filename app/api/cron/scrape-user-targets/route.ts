@@ -103,7 +103,7 @@ export async function GET(request: Request) {
   const { data: userTargets } = await supabase
     .from("user_target_companies")
     .select("company_name, ats_provider, ats_board_token, careers_url")
-    .in("scrape_status", ["pending", "success"]);
+    .in("scrape_status", ["pending", "success", "failed"]);
 
   for (const ut of userTargets || []) {
     const key = ut.company_name.toLowerCase().trim();

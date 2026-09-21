@@ -24,6 +24,9 @@ export function TargetCompanyManager({ onCompaniesChanged }: TargetCompanyManage
   const [adding, setAdding] = useState(false);
   const [scrapingAll, setScrapingAll] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editingCompany, setEditingCompany] = useState<string | null>(null);
+  const [editUrlInput, setEditUrlInput] = useState("");
+  const [updatingUrl, setUpdatingUrl] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
@@ -55,7 +58,7 @@ export function TargetCompanyManager({ onCompaniesChanged }: TargetCompanyManage
 
       if (res.ok && data.success) {
         setMessage({
-          text: `⚡ Full scrape & match complete! Scraped ${data.totalScraped} active jobs across ${data.totalCompanies} target companies (${data.totalSaved} saved).`,
+          text: `⚡ Full scrape & match complete! Discovered ${data.totalScraped} active jobs across ${data.totalCompanies} target companies (${data.totalSaved} saved).`,
           type: "success",
         });
         await fetchTargets();
@@ -98,12 +101,24 @@ export function TargetCompanyManager({ onCompaniesChanged }: TargetCompanyManage
         setCareerUrl("");
         const count = data.jobs_scraped ?? 0;
         const saved = data.jobs_saved ?? count;
-        setMessage({
-          text: count > 0
-            ? `⚡ Successfully scraped ${count} active opening${count > 1 ? "s" : ""} (${saved} saved) for ${companyToAdd} (${data.ats_provider}) in real-time!`
-            : `⚡ ${companyToAdd} added (${data.ats_provider}). ${data.message || ""}`,
-          type: "success",
-        });
+
+        if (data.needs_url) {
+          setMessage({
+            text: `⚠️ ${companyToAdd} added! We could not auto-detect the ATS board. Please click "Add URL" on the chip to supply their careers page.`,
+            type: "error",
+          });
+        } else if (count > 0) {
+          setMessage({
+            text: `⚡ Successfully scraped ${count} active opening${count > 1 ? "s" : ""} (${saved} saved) for ${companyToAdd} (${data.ats_provider}) in real-time!`,
+            type: "success",
+          });
+        } else {
+          setMessage({
+            text: `Target company ${companyToAdd} recorded (${data.ats_provider}). ${data.message || ""}`,
+            type: "success",
+          });
+        }
+
         await fetchTargets();
         if (onCompaniesChanged) onCompaniesChanged();
       } else {
@@ -116,6 +131,49 @@ export function TargetCompanyManager({ onCompaniesChanged }: TargetCompanyManage
       });
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleUpdateCompanyUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCompany || !editUrlInput.trim()) return;
+
+    setUpdatingUrl(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/user-target-companies", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_name: editingCompany,
+          careers_url: editUrlInput.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setMessage({
+          text: data.jobs_scraped > 0
+            ? `⚡ Scraped ${data.jobs_scraped} active openings (${data.jobs_saved} saved) for ${editingCompany}!`
+            : `Updated careers URL for ${editingCompany}. ${data.message || ""}`,
+          type: "success",
+        });
+        setEditingCompany(null);
+        setEditUrlInput("");
+        await fetchTargets();
+        if (onCompaniesChanged) onCompaniesChanged();
+      } else {
+        throw new Error(data.error || "Failed to update URL");
+      }
+    } catch (err: any) {
+      setMessage({
+        text: err.message || "Failed to update careers URL",
+        type: "error",
+      });
+    } finally {
+      setUpdatingUrl(false);
     }
   };
 
@@ -225,32 +283,125 @@ export function TargetCompanyManager({ onCompaniesChanged }: TargetCompanyManage
 
       {/* Target Company Chips Preview (Collapsed or Expanded) */}
       <div className="flex flex-wrap gap-1.5 pt-1">
-        {companies.map((c) => (
-          <div
-            key={c.id || c.company_name}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-xs font-medium text-[var(--color-text)] hover:border-[var(--color-primary)]/40 transition-colors group"
-          >
-            <span>{c.company_name}</span>
-            {c.match_count > 0 && (
-              <span className="text-[10px] font-bold text-[#E56B42] bg-[#E56B42]/10 px-1.5 py-0.2 rounded-full">
-                {c.match_count}
-              </span>
-            )}
+        {companies.map((c) => {
+          const isNeedsUrl = c.scrape_status === "no_ats" || c.scrape_status === "needs_url" || (!c.careers_url && c.ats_provider === "none");
+          const isFailed = c.scrape_status === "failed";
+          const isSuccess = c.total_jobs_found > 0 || c.scrape_status === "success";
+
+          return (
+            <div
+              key={c.id || c.company_name}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                isNeedsUrl
+                  ? "bg-amber-500/10 border border-amber-500/30 text-[var(--color-text)]"
+                  : isFailed
+                  ? "bg-red-500/10 border border-red-500/30 text-[var(--color-text)]"
+                  : "bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-[var(--color-text)]"
+              } hover:border-[var(--color-primary)]/40 group`}
+            >
+              <span>{c.company_name}</span>
+
+              {isSuccess && c.total_jobs_found > 0 && (
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/15 px-1.5 py-0.2 rounded-full">
+                  {c.total_jobs_found} {c.total_jobs_found === 1 ? "job" : "jobs"}
+                </span>
+              )}
+
+              {isNeedsUrl && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingCompany(c.company_name);
+                    setEditUrlInput(c.careers_url || "");
+                    setIsExpanded(true);
+                  }}
+                  className="text-[10px] font-bold text-amber-700 bg-amber-500/20 px-1.5 py-0.5 rounded hover:bg-amber-500/30 transition-colors border-none cursor-pointer"
+                  title="Click to add careers URL"
+                >
+                  + Add URL
+                </button>
+              )}
+
+              {isFailed && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingCompany(c.company_name);
+                    setEditUrlInput(c.careers_url || "");
+                    setIsExpanded(true);
+                  }}
+                  className="text-[10px] font-bold text-red-600 bg-red-500/15 px-1.5 py-0.5 rounded hover:bg-red-500/25 transition-colors border-none cursor-pointer"
+                  title="Scrape failed. Click to verify or change URL."
+                >
+                  Fix URL
+                </button>
+              )}
+
+              {c.match_count > 0 && (
+                <span className="text-[10px] font-bold text-[#E56B42] bg-[#E56B42]/10 px-1.5 py-0.2 rounded-full" title={`${c.match_count} roles matching your profile`}>
+                  {c.match_count} matches
+                </span>
+              )}
+
+              <button
+                type="button"
+                disabled={deleting === c.company_name}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteCompany(c.company_name);
+                }}
+                className="text-[var(--color-text-tertiary)] hover:text-red-500 transition-colors border-none bg-transparent p-0 cursor-pointer ml-0.5"
+                title={`Remove ${c.company_name}`}
+              >
+                {deleting === c.company_name ? "..." : "×"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Inline Careers URL Update Bar */}
+      {editingCompany && (
+        <form onSubmit={handleUpdateCompanyUrl} className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/5 flex flex-col sm:flex-row items-center gap-2 animate-fadeIn">
+          <div className="flex-1 flex flex-col gap-0.5 w-full">
+            <span className="text-[11px] font-bold text-amber-700">
+              Provide Direct Careers URL for <span className="underline">{editingCompany}</span>:
+            </span>
+            <input
+              type="url"
+              placeholder="e.g., https://boards.greenhouse.io/xyz, https://jobs.lever.co/xyz, or https://company.com/careers"
+              value={editUrlInput}
+              onChange={(e) => setEditUrlInput(e.target.value)}
+              disabled={updatingUrl}
+              className="w-full px-3 py-1.5 text-xs rounded-lg border border-amber-500/30 bg-[var(--color-surface)] text-[var(--color-text)] focus:outline-none focus:border-amber-600"
+              required
+              autoFocus
+            />
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-end">
+            <button
+              type="submit"
+              disabled={updatingUrl || !editUrlInput.trim()}
+              className="px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity border-none cursor-pointer flex items-center gap-1"
+            >
+              {updatingUrl ? "Scraping..." : "⚡ Save & Scrape"}
+            </button>
             <button
               type="button"
-              disabled={deleting === c.company_name}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteCompany(c.company_name);
+              disabled={updatingUrl}
+              onClick={() => {
+                setEditingCompany(null);
+                setEditUrlInput("");
               }}
-              className="text-[var(--color-text-tertiary)] hover:text-red-500 transition-colors border-none bg-transparent p-0 cursor-pointer ml-0.5"
-              title={`Remove ${c.company_name}`}
+              className="px-2.5 py-1.5 bg-transparent text-[var(--color-text-secondary)] text-xs font-semibold rounded-lg hover:bg-[var(--color-surface-secondary)] border-none cursor-pointer"
             >
-              {deleting === c.company_name ? "..." : "×"}
+              Cancel
             </button>
           </div>
-        ))}
-      </div>
+        </form>
+      )}
 
       {/* Expandable Management Form */}
       {isExpanded && (

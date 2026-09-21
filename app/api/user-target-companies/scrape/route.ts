@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { STRATEGIES } from "@/lib/scrape-strategies";
 import { discoverAts } from "@/lib/ats-discovery";
 
+export const maxDuration = 60;
+
 function isJuniorJob(title: string, description: string): boolean {
   const t = title.toLowerCase();
   const d = description.toLowerCase();
@@ -117,7 +119,7 @@ export async function POST() {
       ats_board_token: token,
       careers_url: token,
     };
-  }))).filter(t => t.ats_provider !== "none");
+  }))).filter(t => t.ats_provider !== "none" && t.ats_board_token && !t.ats_board_token.includes("careers.google.com"));
 
   const twoWeeksAgo = new Date();
   twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
@@ -125,20 +127,34 @@ export async function POST() {
   let totalScraped = 0;
   let totalSaved = 0;
 
-  // 2. Scrape each target company
-  for (const target of targets) {
+  // 2. Scrape target companies concurrently (up to 4 at a time to prevent serverless timeout)
+  const scrapeTarget = async (target: typeof targets[0]) => {
     const strategy = STRATEGIES[target.ats_provider] || STRATEGIES["custom"];
-    if (!strategy) continue;
+    if (!strategy) return { scraped: 0, saved: 0 };
 
     let jobs: any[] = [];
     try {
-      jobs = await strategy(target.ats_board_token || target.careers_url || "", target.company_name);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Scrape timeout after 40s")), 40000)
+      );
+      jobs = await Promise.race([
+        strategy(target.ats_board_token || target.careers_url || "", target.company_name),
+        timeoutPromise
+      ]);
     } catch (e: any) {
       console.error(`Scrape failed for ${target.company_name}:`, e.message);
-      continue;
+      await supabase
+        .from("user_target_companies")
+        .update({
+          scrape_status: "failed",
+          scrape_notes: `Failed: ${e.message}`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", user.id)
+        .ilike("company_name", target.company_name);
+      return { scraped: 0, saved: 0 };
     }
 
-    totalScraped += jobs.length;
     let companySaved = 0;
 
     for (const job of jobs) {
@@ -169,6 +185,7 @@ export async function POST() {
               input: textToEmbed,
               model: "text-embedding-3-small",
             }),
+            signal: AbortSignal.timeout(10000),
           });
 
           if (embRes.ok) {
@@ -194,7 +211,6 @@ export async function POST() {
 
       if (!insertErr) {
         companySaved++;
-        totalSaved++;
       }
     }
 
@@ -206,18 +222,25 @@ export async function POST() {
       last_scraped_at: new Date().toISOString(),
     }, { onConflict: "company_name" });
 
-    // Update user_target_companies table for this user
     await supabase
       .from("user_target_companies")
       .update({
         last_scraped_at: new Date().toISOString(),
         total_jobs_found: jobs.length,
-        scrape_status: jobs.length > 0 ? "success" : (target.ats_provider !== "none" ? "failed" : "no_ats"),
-        scrape_notes: `Full scrape: found ${jobs.length}, saved ${companySaved}`,
+        scrape_status: jobs.length > 0 ? "success" : "failed",
+        scrape_notes: `Scraped ${jobs.length} jobs (${companySaved} saved)`,
         updated_at: new Date().toISOString(),
       })
       .eq("user_id", user.id)
       .ilike("company_name", target.company_name);
+
+    return { scraped: jobs.length, saved: companySaved };
+  };
+
+  const results = await Promise.all(targets.map(scrapeTarget));
+  for (const r of results) {
+    totalScraped += r.scraped;
+    totalSaved += r.saved;
   }
 
   // 3. Always re-evaluate user embedding from latest resume
