@@ -1,5 +1,5 @@
 import { createAdminClient } from "./supabase/admin";
-import { normalizeLinkedInUrl } from "./linkedin/normalize-url";
+import { normalizeLinkedInUrl, isSyntheticLinkedInUrl } from "./linkedin/normalize-url";
 import { parseLinkedInHeadline } from "./linkedin/parse-headline";
 import { autoVerifyByEmail } from "./institutes";
 import { isSupabaseConfigured } from "./supabase/is-configured";
@@ -146,7 +146,11 @@ export async function upsertOAuthUser(params: {
     if (params.email) updates.email = params.email;
     if (params.name && (!existing.full_name || existing.full_name === "LinkedIn User")) updates.full_name = params.name;
     if (params.picture && !existing.profile_photo_url) updates.profile_photo_url = params.picture;
-    if (normalizedUrl && !existing.linkedin_profile_url) updates.linkedin_profile_url = normalizedUrl;
+    if (existing.linkedin_profile_url && isSyntheticLinkedInUrl(existing.linkedin_profile_url, existing.linkedin_sub)) {
+      updates.linkedin_profile_url = normalizedUrl || null;
+    } else if (normalizedUrl && !existing.linkedin_profile_url) {
+      updates.linkedin_profile_url = normalizedUrl;
+    }
     if (parsedCompany && !existing.company) updates.company = parsedCompany;
     if ((parsedTitle || params.headline) && !existing.job_title) updates.job_title = parsedTitle || params.headline;
     if (existing.source === "admin") {

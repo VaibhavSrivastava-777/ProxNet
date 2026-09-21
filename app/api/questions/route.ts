@@ -486,11 +486,27 @@ export async function POST(request: Request) {
     });
 
     const getExistingSessionResponse = async (q: any) => {
-      const { data: session } = await supabase
+      let { data: session } = await supabase
         .from("chat_sessions")
         .select("id")
         .eq("question_id", q.id)
         .maybeSingle();
+
+      if (!session) {
+        // Fallback: create session and participants if somehow missing
+        const { data: newSession } = await supabase
+          .from("chat_sessions")
+          .insert({ question_id: q.id })
+          .select("id")
+          .single();
+        if (newSession) {
+          session = newSession;
+          await supabase.from("chat_participants").insert([
+            { session_id: newSession.id, user_id: user.id, alias: "Resident" },
+            { session_id: newSession.id, user_id: targetUserId, alias: "Professional" },
+          ]);
+        }
+      }
 
       if (session) {
         if (questionBody && questionBody.trim()) {
@@ -535,6 +551,7 @@ export async function POST(request: Request) {
                     sessionId: session.id,
                     type: "chat_message",
                     senderAlias: myP?.alias || "Resident",
+                    forceEmail: true,
                   }
                 });
 
@@ -812,14 +829,17 @@ Never mention that you are an AI assistant or simulated user. Play your characte
 
       // Notify targeted professionals
       try {
+        const isDirect = Boolean(targetUserId && sessionId);
         const notifications = targets.map((t) =>
           sendNotification(t.professional_id, {
-            title: "New Incoming Question",
+            title: isDirect ? "New Message" : "New Incoming Question",
             body: `A neighbor asked a question: "${question.body.slice(0, 60)}${question.body.length > 60 ? "..." : ""}"`,
-            url: "/qa",
+            url: isDirect ? `/chat/${sessionId}` : "/qa",
             data: {
               type: "new_question",
               questionId: question.id,
+              sessionId: sessionId || undefined,
+              forceEmail: true,
             },
           })
         );

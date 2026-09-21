@@ -163,6 +163,7 @@ export async function POST(request: Request) {
         type: "beacon_join",
         activity,
         senderAlias,
+        forceEmail: true,
         soundType: "message",
         sound: "default",
       },

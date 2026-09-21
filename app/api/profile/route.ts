@@ -42,6 +42,7 @@ export async function GET() {
   const digest = (user as any).profile_digest || {};
   return NextResponse.json({
     ...user,
+    push_reward_claimed: Boolean(digest.push_reward_claimed || digest.rewarded_actions?.includes("push_notifications_enabled")),
     help_offers: user.help_offers || digest.help_offers || [],
     tinkering_with: user.tinkering_with || digest.tinkering_with || [],
     ask_me_about: user.ask_me_about || digest.ask_me_about || [],
@@ -200,6 +201,7 @@ export async function PATCH(request: Request) {
 
   const responseData = {
     ...data,
+    push_reward_claimed: Boolean(profileDigest.push_reward_claimed || profileDigest.rewarded_actions?.includes("push_notifications_enabled")),
     help_offers: profileDigest.help_offers || [],
     tinkering_with: profileDigest.tinkering_with || [],
     ask_me_about: profileDigest.ask_me_about || [],

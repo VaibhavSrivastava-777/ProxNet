@@ -19,6 +19,9 @@ async function main() {
   const minimalUser = {
     full_name: "Vaibhav Srivastava",
     email: "vaibhav@example.com",
+    linkedin_profile_url: null,
+    professional_bio: null,
+    about: null,
     job_title: null,
     company: null,
     home_lat: null,
@@ -30,44 +33,46 @@ async function main() {
   console.log("  Steps for minimal user:", stepsForMinimal);
   assert.deepStrictEqual(
     stepsForMinimal,
-    ["designation", "company", "home_location", "office_location", "notifications"],
-    "Minimal user must require all 5 steps in order"
+    ["linkedin_url", "designation", "company", "about_me", "home_location", "office_location", "notifications"],
+    "Minimal user must require all 7 steps in order"
   );
-  console.log("  ✓ Minimal user correctly requires all 5 steps");
+  console.log("  ✓ Minimal user correctly requires all 7 steps");
 
-  // Scenario 2: User has filled designation, but not company
+  // Scenario 2: User has filled linkedin_profile_url and designation, but not company or bio
   const userWithRole = {
     ...minimalUser,
+    linkedin_profile_url: "https://www.linkedin.com/in/vaibhav-srivastava",
     job_title: "Staff Software Engineer",
   };
   const stepsForUserWithRole = getMissingProfileWizardSteps(userWithRole, false);
   console.log("  Steps for user with role only:", stepsForUserWithRole);
   assert.deepStrictEqual(
     stepsForUserWithRole,
-    ["company", "home_location", "office_location", "notifications"],
+    ["company", "about_me", "home_location", "office_location", "notifications"],
     "User with role must resume starting with company"
   );
   assert.strictEqual(stepsForUserWithRole[0], "company", "First missing step must be company");
   console.log("  ✓ Dynamic resumption: Starts with 'company' after designation is saved");
 
-  // Scenario 3: User has filled designation and company, missing locations
-  const userWithCompany = {
+  // Scenario 3: User has filled designation, company, and bio, missing locations
+  const userWithCompanyAndBio = {
     ...userWithRole,
     company: "Google",
+    professional_bio: "Staff Software Engineer passionate about distributed systems.",
   };
-  const stepsForUserWithCompany = getMissingProfileWizardSteps(userWithCompany, false);
-  console.log("  Steps for user with company:", stepsForUserWithCompany);
+  const stepsForUserWithCompany = getMissingProfileWizardSteps(userWithCompanyAndBio, false);
+  console.log("  Steps for user with company and bio:", stepsForUserWithCompany);
   assert.deepStrictEqual(
     stepsForUserWithCompany,
     ["home_location", "office_location", "notifications"],
-    "User with company must resume starting with home_location"
+    "User with company and bio must resume starting with home_location"
   );
   assert.strictEqual(stepsForUserWithCompany[0], "home_location", "First missing step must be home_location");
-  console.log("  ✓ Dynamic resumption: Starts with 'home_location' after company is saved");
+  console.log("  ✓ Dynamic resumption: Starts with 'home_location' after company and bio are saved");
 
   // Scenario 4: User has filled Home location, missing Office
   const userWithHome = {
-    ...userWithCompany,
+    ...userWithCompanyAndBio,
     home_lat: 12.9716,
     home_lng: 77.5946,
     home_name: "Indiranagar, Bengaluru",
@@ -81,7 +86,7 @@ async function main() {
   );
   console.log("  ✓ Dynamic resumption: Starts with 'office_location' after home is saved");
 
-  // Scenario 5: User has filled all 4 profile fields and granted notifications
+  // Scenario 5: User has filled all profile fields and granted notifications
   const fullyCompleteUser = {
     ...userWithHome,
     office_lat: 12.926,
@@ -147,7 +152,13 @@ async function main() {
       console.log(`  ✓ Step A saved job_title: "${patch1.job_title}"`);
 
       // Verify resumption logic for this updated user state
-      const updatedUserAfterStepA = { ...testUser, job_title: testRole, company: null };
+      const updatedUserAfterStepA = {
+        ...testUser,
+        linkedin_profile_url: "https://www.linkedin.com/in/test-user",
+        professional_bio: "Test Engineer Bio",
+        job_title: testRole,
+        company: null,
+      };
       const nextStepsA = getMissingProfileWizardSteps(updatedUserAfterStepA, true);
       assert.strictEqual(nextStepsA[0], "company", "After saving designation, next step must be company");
       console.log(`  ✓ Next step dynamically advances to: "${nextStepsA[0]}"`);
@@ -167,7 +178,14 @@ async function main() {
       console.log(`  ✓ Step B saved company: "${patch2.company}" while preserving job_title: "${patch2.job_title}"`);
 
       // Verify resumption logic after step B
-      const updatedUserAfterStepB = { ...testUser, job_title: testRole, company: testComp, home_lat: null };
+      const updatedUserAfterStepB = {
+        ...testUser,
+        linkedin_profile_url: "https://www.linkedin.com/in/test-user",
+        professional_bio: "Test Engineer Bio",
+        job_title: testRole,
+        company: testComp,
+        home_lat: null,
+      };
       const nextStepsB = getMissingProfileWizardSteps(updatedUserAfterStepB, true);
       assert.strictEqual(nextStepsB[0], "home_location", "After saving company, next step must be home_location");
       console.log(`  ✓ Next step dynamically advances to: "${nextStepsB[0]}"`);

@@ -80,7 +80,7 @@ function runTests() {
   const dailyEngagementContent = readFileSync(dailyEngagementPath, "utf-8");
   assert(dailyEngagementContent.includes("ENGAGEMENT_TEMPLATES"), "daily-engagement defines rotating templates");
   assert(dailyEngagementContent.includes("in_app_notifications"), "daily-engagement checks recent in_app_notifications");
-  assert(dailyEngagementContent.includes("twentyFourHoursAgo"), "daily-engagement filters for 24-hour notification gap");
+  assert(dailyEngagementContent.includes("fortyEightHoursAgo"), "daily-engagement filters for 48-hour notification gap");
   assert(dailyEngagementContent.includes("sendNotification"), "daily-engagement sends notification via sendNotification");
 
   const vercelJsonPath = join(root, "vercel.json");

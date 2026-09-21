@@ -8,6 +8,7 @@ import {
   getMissingProfileWizardSteps,
 } from "@/lib/profile-wizard";
 import { LocationAutocomplete } from "@/components/map/LocationAutocomplete";
+import { formatLinkedInUrl, isSyntheticLinkedInUrl } from "@/lib/linkedin/normalize-url";
 
 interface ProfileWizardModalProps {
   isOpen: boolean;
@@ -51,10 +52,12 @@ export function ProfileWizardModal({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
   // Field states
+  const [linkedinUrl, setLinkedinUrl] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [company, setCompany] = useState("");
   const [companySuggestions, setCompanySuggestions] = useState<string[]>([]);
   const [fetchingCompanies, setFetchingCompanies] = useState(false);
+  const [aboutMe, setAboutMe] = useState("");
 
   // Home Location state
   const [homeName, setHomeName] = useState("");
@@ -80,8 +83,11 @@ export function ProfileWizardModal({
 
   // Check notification permission
   useEffect(() => {
-    if (typeof window !== "undefined" && "Notification" in window) {
-      setNotificationsGranted(Notification.permission === "granted");
+    if (typeof window !== "undefined") {
+      const isAndroidApp = Boolean((window as any).AndroidBridge);
+      setNotificationsGranted(
+        ("Notification" in window && Notification.permission === "granted") || isAndroidApp
+      );
     }
   }, []);
 
@@ -90,8 +96,13 @@ export function ProfileWizardModal({
     if (isOpen && initialUser) {
       const u = { ...initialUser };
       setCurrentUser(u);
+      const cleanLinkedIn = isSyntheticLinkedInUrl(u.linkedin_profile_url, u.linkedin_sub)
+        ? ""
+        : (u.linkedin_profile_url || "");
+      setLinkedinUrl(cleanLinkedIn);
       setJobTitle(u.job_title || "");
       setCompany(u.company || "");
+      setAboutMe(u.professional_bio || u.about || "");
       setHomeName(u.home_name || "");
       setHomeLat(u.home_lat ?? null);
       setHomeLng(u.home_lng ?? null);
@@ -99,12 +110,14 @@ export function ProfileWizardModal({
       setOfficeLat(u.office_lat ?? null);
       setOfficeLng(u.office_lng ?? null);
 
+      const isAndroidApp = typeof window !== "undefined" && Boolean((window as any).AndroidBridge);
       const isNotifGranted =
-        typeof window !== "undefined" &&
+        (typeof window !== "undefined" &&
         "Notification" in window &&
-        Notification.permission === "granted";
+        Notification.permission === "granted") || isAndroidApp;
+      const isPushClaimed = Boolean((u as any)?.profile_digest?.push_reward_claimed || (u as any)?.push_reward_claimed);
 
-      const missing = getMissingProfileWizardSteps(u, isNotifGranted);
+      const missing = getMissingProfileWizardSteps(u, isNotifGranted || isPushClaimed);
       setMissingSteps(missing);
       setCurrentStepIndex(0);
       setIsCompleted(missing.length === 0);
@@ -161,7 +174,42 @@ export function ProfileWizardModal({
     try {
       const payload: Record<string, any> = {};
 
-      if (currentStepId === "designation") {
+      if (currentStepId === "linkedin_url") {
+        const formatted = formatLinkedInUrl(linkedinUrl);
+        if (!formatted) {
+          setErrorMsg("Please enter your LinkedIn profile URL or username, or click Skip.");
+          setSaving(false);
+          return;
+        }
+        setLinkedinUrl(formatted);
+        payload.linkedin_profile_url = formatted;
+
+        // Auto-fetch profile data from LinkedIn
+        try {
+          const res = await fetch(`/api/profile/parse-linkedin?url=${encodeURIComponent(formatted)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.data) {
+              const { company: pCompany, job_title: pTitle, professional_bio: pBio } = data.data;
+              if (pTitle && !jobTitle.trim()) {
+                payload.job_title = pTitle;
+                setJobTitle(pTitle);
+              }
+              if (pCompany && !company.trim()) {
+                payload.company = pCompany;
+                setCompany(pCompany);
+              }
+              if (pBio && !aboutMe.trim()) {
+                payload.professional_bio = pBio;
+                payload.about = pBio;
+                setAboutMe(pBio);
+              }
+            }
+          }
+        } catch (parseErr) {
+          console.warn("LinkedIn auto-parse attempt failed:", parseErr);
+        }
+      } else if (currentStepId === "designation") {
         if (!jobTitle.trim()) {
           setErrorMsg("Please enter or select your designation / role.");
           setSaving(false);
@@ -175,6 +223,14 @@ export function ProfileWizardModal({
           return;
         }
         payload.company = company.trim();
+      } else if (currentStepId === "about_me") {
+        if (!aboutMe.trim()) {
+          setErrorMsg("Please provide a brief 2–3 sentence introduction about yourself, or click Skip.");
+          setSaving(false);
+          return;
+        }
+        payload.about = aboutMe.trim();
+        payload.professional_bio = aboutMe.trim();
       } else if (currentStepId === "home_location") {
         if (!homeLat || !homeLng) {
           setErrorMsg("Please select your neighborhood or use current location.");
@@ -212,13 +268,35 @@ export function ProfileWizardModal({
         const mergedUser = { ...currentUser, ...updated, ...payload };
         setCurrentUser(mergedUser);
         onUserUpdated(mergedUser);
-      }
 
-      // Advance to next step or complete
-      if (currentStepIndex < totalSteps - 1) {
-        setCurrentStepIndex((prev) => prev + 1);
+        // Dynamically recompute missing steps based on updated mergedUser
+        const isAndroidApp = typeof window !== "undefined" && Boolean((window as any).AndroidBridge);
+        const isNotifGranted =
+          (typeof window !== "undefined" &&
+          "Notification" in window &&
+          Notification.permission === "granted") || isAndroidApp;
+        const isPushClaimed = Boolean(
+          (mergedUser as any)?.profile_digest?.push_reward_claimed ||
+          (mergedUser as any)?.push_reward_claimed
+        );
+        const updatedMissing = getMissingProfileWizardSteps(mergedUser, isNotifGranted || isPushClaimed);
+        setMissingSteps(updatedMissing);
+
+        if (updatedMissing.length === 0) {
+          setIsCompleted(true);
+          return;
+        }
+
+        if (currentStepIndex >= updatedMissing.length) {
+          setIsCompleted(true);
+        }
       } else {
-        setIsCompleted(true);
+        // Advance to next step or complete
+        if (currentStepIndex < totalSteps - 1) {
+          setCurrentStepIndex((prev) => prev + 1);
+        } else {
+          setIsCompleted(true);
+        }
       }
     } catch (err: any) {
       console.error("Step save failed:", err);
@@ -293,8 +371,26 @@ export function ProfileWizardModal({
     setEnablingNotifications(true);
     setErrorMsg("");
     try {
-      if (onEnableNotifications) {
+      const isAndroidApp = typeof window !== "undefined" && Boolean((window as any).AndroidBridge);
+      if (isAndroidApp) {
+        setNotificationsGranted(true);
+        const currentToken = (window as any).AndroidBridge.getFCMToken?.();
+        if (currentToken) {
+          const regRes = await fetch("/api/fcm/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: currentToken, platform: "android" }),
+          });
+          if (regRes.ok) {
+            const regData = await regRes.json();
+            if (regData.creditsAwarded > 0) {
+              window.dispatchEvent(new CustomEvent("proxnet:wallet-updated", { detail: { newBalance: regData.newBalance } }));
+            }
+          }
+        }
+      } else if (onEnableNotifications) {
         await onEnableNotifications();
+        setNotificationsGranted(true);
       } else if (typeof window !== "undefined" && "Notification" in window) {
         const perm = await Notification.requestPermission();
         if (perm === "granted") {
@@ -385,12 +481,24 @@ export function ProfileWizardModal({
 
               <div className="w-full bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] rounded-xl p-3.5 text-left text-xs flex flex-col gap-2 mt-2">
                 <div className="flex justify-between items-center">
+                  <span className="text-[var(--color-text-secondary)]">LinkedIn:</span>
+                  <span className="font-semibold text-[var(--color-text)] truncate max-w-[200px]">
+                    {currentUser.linkedin_profile_url ? "Connected" : "Skipped"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
                   <span className="text-[var(--color-text-secondary)]">Role:</span>
                   <span className="font-semibold text-[var(--color-text)]">{currentUser.job_title || "Provided"}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[var(--color-text-secondary)]">Company:</span>
                   <span className="font-semibold text-[var(--color-text)]">{currentUser.company || "Provided"}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[var(--color-text-secondary)]">About Me:</span>
+                  <span className="font-semibold text-[var(--color-text)] truncate max-w-[200px]">
+                    {currentUser.professional_bio || currentUser.about ? "Added" : "Skipped"}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[var(--color-text-secondary)]">Neighborhood:</span>
@@ -411,6 +519,75 @@ export function ProfileWizardModal({
                   {stepConfig?.subtitle}
                 </p>
               </div>
+
+              {/* Step: LinkedIn Profile URL */}
+              {currentStepId === "linkedin_url" && (
+                <div className="flex flex-col gap-3">
+                  <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-500/10 text-blue-900 dark:text-blue-200 text-xs flex items-start gap-2.5">
+                    <span className="text-lg shrink-0">⚡</span>
+                    <div>
+                      <span className="font-bold block">One-Click Auto-Fill</span>
+                      <span className="opacity-90 block mt-0.5 text-[11px] leading-relaxed">
+                        Provide your LinkedIn URL and we&apos;ll automatically import your role, company, and bio to save you time.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="label text-xs font-semibold flex items-center justify-between">
+                      <span>LinkedIn Profile URL *</span>
+                      <span className="text-[10px] text-[var(--color-text-secondary)] font-normal">
+                        Full link or handle (e.g. in/username)
+                      </span>
+                    </label>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-xs font-bold text-blue-600 dark:text-blue-400 select-none">
+                        in
+                      </span>
+                      <input
+                        type="text"
+                        className="input w-full pl-8 pr-4 text-xs"
+                        placeholder="https://www.linkedin.com/in/your-profile"
+                        value={linkedinUrl}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          setLinkedinUrl(raw);
+                          if (errorMsg) setErrorMsg("");
+                        }}
+                        onBlur={() => {
+                          const formatted = formatLinkedInUrl(linkedinUrl);
+                          if (formatted) setLinkedinUrl(formatted);
+                        }}
+                        onKeyDown={(e) => e.key === "Enter" && handleSaveStep()}
+                        autoFocus
+                      />
+                    </div>
+                    <p className="text-[10px] text-[var(--color-text-secondary)] mt-1">
+                      Tracking queries (utm, rcm) are automatically cleaned.
+                    </p>
+                  </div>
+
+                  {Boolean(formatLinkedInUrl(linkedinUrl)) && (
+                    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-xs">
+                      <div className="flex items-center gap-1.5 overflow-hidden text-[var(--color-text-secondary)]">
+                        <span>🔗</span>
+                        <span className="truncate font-mono text-[11px]">
+                          {formatLinkedInUrl(linkedinUrl)}
+                        </span>
+                      </div>
+                      <a
+                        href={formatLinkedInUrl(linkedinUrl)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 dark:text-blue-400 font-semibold hover:underline shrink-0 ml-2 text-[11px] flex items-center gap-1"
+                      >
+                        <span>Verify</span>
+                        <span>↗</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Step: Designation */}
               {currentStepId === "designation" && (
@@ -490,6 +667,46 @@ export function ProfileWizardModal({
                         ))}
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Step: About Me */}
+              {currentStepId === "about_me" && (
+                <div className="flex flex-col gap-3">
+                  <div className="p-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-900 dark:text-indigo-200 text-xs flex items-start gap-2.5">
+                    <span className="text-lg shrink-0">👋</span>
+                    <div>
+                      <span className="font-bold block">Introduce Yourself to Neighbors</span>
+                      <span className="opacity-90 block mt-0.5 text-[11px] leading-relaxed">
+                        Your summary helps nearby professionals learn your focus areas for mentorship, coffee chats, and tech discussions.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="label text-xs font-semibold">About You / Summary *</label>
+                    <textarea
+                      className="input w-full text-xs leading-relaxed"
+                      rows={4}
+                      placeholder="e.g. Senior Software Engineer passionate about cloud architecture and distributed systems. Always happy to chat about system design, open source, or tech career growth over a quick chai."
+                      value={aboutMe}
+                      onChange={(e) => {
+                        setAboutMe(e.target.value);
+                        if (errorMsg) setErrorMsg("");
+                      }}
+                      autoFocus
+                    />
+                    <div className="flex justify-between items-center text-[10px] text-[var(--color-text-secondary)] mt-1">
+                      <span>Recommended: 2–3 concise sentences</span>
+                      <span>{aboutMe.length} chars</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] rounded-xl p-2.5 text-[11px] text-[var(--color-text-secondary)] flex flex-col gap-1">
+                    <span className="font-semibold text-[var(--color-text)]">💡 Helpful prompts:</span>
+                    <span>• Your engineering domain or tech stack focus</span>
+                    <span>• Topics you&apos;d love to connect on (chai, carpooling, tech mentorship)</span>
                   </div>
                 </div>
               )}
@@ -682,11 +899,17 @@ export function ProfileWizardModal({
                     {saving ? (
                       <>
                         <span className="animate-spin inline-block">⏳</span>
-                        <span>Saving...</span>
+                        <span>{currentStepId === "linkedin_url" ? "Importing from LinkedIn..." : "Saving..."}</span>
                       </>
                     ) : (
                       <>
-                        <span>{currentStepIndex === totalSteps - 1 ? "Save & Finish" : "Save & Next"}</span>
+                        <span>
+                          {currentStepId === "linkedin_url"
+                            ? "Import & Next"
+                            : currentStepIndex === totalSteps - 1
+                            ? "Save & Finish"
+                            : "Save & Next"}
+                        </span>
                         <span>&rarr;</span>
                       </>
                     )}

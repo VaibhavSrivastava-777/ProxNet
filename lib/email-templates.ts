@@ -56,8 +56,12 @@ export function checkEmailRateLimit(
     userEmailRateMap.set(userId, stats);
   }
 
-  // High-priority live beacon notifications bypass daily email caps
-  if (notificationType === "beacon_broadcast" || notificationType === "beacon_join") {
+  // High-priority live beacon and direct contact notifications bypass daily email caps
+  if (
+    notificationType === "beacon_broadcast" ||
+    notificationType === "beacon_join" ||
+    ((notificationType === "new_question" || notificationType === "direct_question" || notificationType === "referral_request") && forceEmail)
+  ) {
     return { allowed: true };
   }
 
@@ -71,7 +75,9 @@ export function checkEmailRateLimit(
   const isChatMessage =
     notificationType === "chat_message" ||
     notificationType === "colleague_message" ||
-    notificationType === "chat_starter_reminder";
+    notificationType === "chat_starter_reminder" ||
+    notificationType === "new_question" ||
+    notificationType === "direct_question";
 
   if (isChatMessage && !forceEmail) {
     const timeSinceLastChat = now - stats.lastChatSentAt;
@@ -140,6 +146,28 @@ export function recordEmailSent(userId: string, notificationType: string) {
 }
 
 /**
+ * Robust alias sanitizer to ensure 'null @ null', 'undefined', or blank values
+ * gracefully fall back to friendly professional defaults.
+ */
+export function sanitizeAlias(rawAlias?: string | null): string {
+  if (!rawAlias) return "A neighbor";
+  const str = String(rawAlias).trim();
+  if (!str || str.toLowerCase() === "null" || str.toLowerCase() === "undefined" || str.toLowerCase() === "null @ null") {
+    return "A neighbor";
+  }
+  if (str.toLowerCase().includes("null") || str.toLowerCase().includes("undefined")) {
+    const parts = str.split("@").map((p) => p.trim());
+    const role = parts[0] && !parts[0].toLowerCase().includes("null") && !parts[0].toLowerCase().includes("undefined") ? parts[0] : null;
+    const comp = parts[1] && !parts[1].toLowerCase().includes("null") && !parts[1].toLowerCase().includes("undefined") ? parts[1] : null;
+    if (role && comp) return `${role} @ ${comp}`;
+    if (role) return role;
+    if (comp) return `Professional @ ${comp}`;
+    return "A neighbor";
+  }
+  return str;
+}
+
+/**
  * Generate context-specific responsive HTML email with direct CTA buttons.
  */
 export function generateContextEmail(payload: EmailTemplatePayload): GeneratedEmail {
@@ -148,8 +176,14 @@ export function generateContextEmail(payload: EmailTemplatePayload): GeneratedEm
   const actionUrl = url?.startsWith("http") ? url : `${baseUrl}${url || "/"}`;
   const notifType = String(data?.type || "general");
 
+  const cleanTitle = (title || "")
+    .replace(/null\s*@\s*null/gi, "A resident neighbor")
+    .replace(/\bnull\s*@/gi, "Professional @")
+    .replace(/@\s*null\b/gi, "")
+    .trim();
+
   // Determine context attributes
-  let subject = title;
+  let subject = cleanTitle || title;
   let category: GeneratedEmail["category"] = "general";
   let badgeText = "UPDATE";
   let badgeColor = "#0A66C2";
@@ -240,7 +274,7 @@ export function generateContextEmail(payload: EmailTemplatePayload): GeneratedEm
   // 4. Real-Time Chat Message
   else if (notifType === "chat_message") {
     category = "message";
-    const sender = data?.senderAlias || "A neighbor";
+    const sender = sanitizeAlias(data?.senderAlias);
     subject = `💬 New message from ${sender} on ProxNet`;
     badgeText = "DIRECT MESSAGE";
     badgeColor = "#0A66C2";
@@ -462,7 +496,34 @@ export function generateContextEmail(payload: EmailTemplatePayload): GeneratedEm
     `;
   }
 
-  // 12. Local Q&A / Forum
+  // 12. Direct Question (Peer to Peer)
+  else if ((notifType === "new_question" || notifType === "direct_question") && (data?.sessionId || actionUrl.includes("/chat/"))) {
+    category = "message";
+    const sender = sanitizeAlias(data?.senderAlias);
+    subject = `💬 Question from ${sender} on ProxNet`;
+    badgeText = "DIRECT QUESTION";
+    badgeColor = "#0A66C2";
+    badgeBg = "#eff6ff";
+    heading = `Question from ${escapeHtml(sender)}`;
+    ctaLabel = "Answer in Chat &rarr;";
+    ctaUrl = actionUrl;
+
+    bodyHtml = `
+      <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 16px 0;">
+        A neighbor in your verified professional network reached out with a direct question:
+      </p>
+      <div style="background-color: #f1f5f9; border-left: 4px solid #0A66C2; border-radius: 0 8px 8px 0; padding: 14px 16px; margin-bottom: 16px;">
+        <p style="font-size: 15px; color: #1e293b; line-height: 1.5; margin: 0;">
+          ${escapeHtml(body)}
+        </p>
+      </div>
+      <p style="font-size: 13px; color: #64748b; margin: 0;">
+        Tap below to open your chat session, answer their question, and connect.
+      </p>
+    `;
+  }
+
+  // 13. Local Q&A / Forum
   else if (notifType === "new_forum_post" || notifType === "new_question" || notifType === "question_responded") {
     category = "action";
     badgeText = "LOCAL Q&A";
@@ -518,7 +579,7 @@ export function generateContextEmail(payload: EmailTemplatePayload): GeneratedEm
   // 14. Neighbor Joined Beacon
   else if (notifType === "beacon_join") {
     category = "message";
-    const sender = data?.senderAlias || "A neighbor";
+    const sender = sanitizeAlias(data?.senderAlias);
     subject = `☕ ${sender} joined your broadcast on ProxNet!`;
     badgeText = "BEACON CONNECT";
     badgeColor = "#059669";

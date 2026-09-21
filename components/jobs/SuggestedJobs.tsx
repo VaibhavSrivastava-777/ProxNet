@@ -1265,7 +1265,13 @@ export function SuggestedJobs() {
               (c) => !currentUserId || c.id !== currentUserId
             );
             const targetContact = availableReferrers.find((c) => c.is_followed) || availableReferrers[0];
-            if (!targetContact) return;
+            if (!targetContact) {
+              const cleanUrl = (job.url || "").replace(/&amp;/g, "&").trim();
+              if (cleanUrl) {
+                window.open(cleanUrl, "_blank", "noopener,noreferrer");
+              }
+              return;
+            }
 
             setStartingReferralJobId(job.id);
             try {

@@ -101,9 +101,14 @@ Return ONLY a JSON object with:
 
         if (oaiRes.ok) {
           const oaiData = await oaiRes.json();
-          profileDigest = JSON.parse(oaiData.choices[0].message.content);
+          const existingDigest = userProfile.profile_digest || {};
+          const parsedSkills = JSON.parse(oaiData.choices[0].message.content);
+          profileDigest = {
+            ...existingDigest,
+            ...parsedSkills,
+          };
           
-          // Save profile_digest to DB
+          // Save merged profile_digest to DB
           await supabase
             .from("users")
             .update({ profile_digest: profileDigest })

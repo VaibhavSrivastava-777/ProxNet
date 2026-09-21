@@ -6,7 +6,7 @@ import { JobsClient } from "@/components/jobs/JobsClient";
 import { LocalForumFeed } from "@/components/home/LocalForumFeed";
 import { ProximityMap } from "@/components/map/ProximityMap";
 import { GrowClient } from "@/components/grow/GrowClient";
-import { TabValueTransition, isFirstTimeScreenOpening } from "@/components/common/TabValueTransition";
+import { TabValueTransition } from "@/components/common/TabValueTransition";
 import { useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -36,10 +36,8 @@ export function QAContent({ initialTab }: QAContentProps) {
   // Lazy-mount tabs: only initialize tabs that have been visited
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => new Set([getComputedInitialTab()]));
 
-  // Screen-specific animated value proposition transition state
-  const [isTransitioning, setIsTransitioning] = useState<boolean>(() => {
-    return isFirstTimeScreenOpening(getComputedInitialTab());
-  });
+  // Screen-specific animated value proposition transition state (5s loading message on each tab)
+  const [isTransitioning, setIsTransitioning] = useState<boolean>(true);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -61,6 +59,7 @@ export function QAContent({ initialTab }: QAContentProps) {
     const tabPaths = ["/jobs", "/network", "/qa", "/forum", "/grow"];
 
     if (currentParamTab && tabPaths.includes(currentParamTab) && currentParamTab !== activeTab) {
+      setIsTransitioning(true);
       setActiveTab(currentParamTab);
       const companyParam = searchParams.get("company");
       const suffix = companyParam ? `?company=${encodeURIComponent(companyParam)}` : "";
@@ -70,18 +69,14 @@ export function QAContent({ initialTab }: QAContentProps) {
     const handleTabChange = (e: Event) => {
       const targetTab = (e as CustomEvent).detail;
       if (tabPaths.includes(targetTab) && targetTab !== activeTab) {
-        // Only show 5-second value proposition on first-time screen opening by user
-        if (isFirstTimeScreenOpening(targetTab)) {
-          setIsTransitioning(true);
-        } else {
-          setIsTransitioning(false);
-        }
+        setIsTransitioning(true);
         setActiveTab(targetTab);
       }
     };
 
     const handlePopState = () => {
-      if (tabPaths.includes(window.location.pathname)) {
+      if (tabPaths.includes(window.location.pathname) && window.location.pathname !== activeTab) {
+        setIsTransitioning(true);
         setActiveTab(window.location.pathname);
       }
     };
@@ -110,8 +105,9 @@ export function QAContent({ initialTab }: QAContentProps) {
 
   return (
     <div className="w-full relative">
-      {/* ── Screen Load Animated Value Proposition & Logo (at least 5s on first-time screen opening) ── */}
+      {/* ── Screen Load Animated Value Proposition & Logo (5s loading message highlighting specific value proposition) ── */}
       <TabValueTransition
+        key={activeTab}
         activeTab={activeTab}
         isLoading={isTransitioning}
         minDisplayDurationMs={5000}

@@ -118,25 +118,30 @@ export async function handleMorningReminders(request?: Request | null, bypassAut
       initialTime: number;
     }>();
 
-    // 2A. Direct Q&A Sessions (chat_sessions)
+    // 2A. Direct Q&A and Chat Sessions (chat_sessions)
     const { data: sessions, error: sessionsErr } = await supabase
       .from("chat_sessions")
       .select(`
         id,
         question_id,
         created_at,
-        questions!inner(id, asker_id, body, created_at, status),
+        questions(id, asker_id, body, created_at, status),
         chat_participants(user_id, alias),
         chat_messages(id, sender_id, body, created_at)
-      `)
-      .not("question_id", "is", null);
+      `);
 
     if (!sessionsErr && sessions) {
       for (const session of sessions) {
         const q = session.questions as any;
-        if (!q || q.status === "closed") continue;
+        if (q && q.status === "closed") continue;
 
-        const askerId = q.asker_id;
+        const messages = (session.chat_messages || []).sort(
+          (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        const openingMsg = messages[0];
+        const askerId = q?.asker_id || openingMsg?.sender_id;
+        if (!askerId) continue;
+
         const participants = session.chat_participants || [];
         const recipientP = participants.find((p: any) => p.user_id !== askerId);
         const askerP = participants.find((p: any) => p.user_id === askerId);
@@ -147,21 +152,22 @@ export async function handleMorningReminders(request?: Request | null, bypassAut
         if (askerP?.alias === "ProxNet AI" || recipientP.alias === "ProxNet AI") continue;
 
         // Verify recipient has NEVER responded to this session (0 messages from recipient)
-        const recipientMessages = (session.chat_messages || []).filter((m: any) => m.sender_id === recipientP.user_id);
+        const recipientMessages = messages.filter((m: any) => m.sender_id === recipientP.user_id);
         if (recipientMessages.length > 0) {
           // Recipient already responded; not an unstarted conversation
           continue;
         }
 
         // Check if initial message was sent >= 24 hours ago
-        const initialTimestamp = new Date(q.created_at).getTime();
+        const initialDateStr = q?.created_at || openingMsg?.created_at || session.created_at;
+        const initialTimestamp = new Date(initialDateStr).getTime();
         const hoursSinceInitial = (now - initialTimestamp) / (1000 * 60 * 60);
         if (hoursSinceInitial < 24) {
           continue;
         }
 
         const senderAlias = askerP?.alias || "A neighbor";
-        const snippet = (q.body || "").replace(/\n+/g, " ").trim();
+        const snippet = (q?.body || openingMsg?.body || "").replace(/\n+/g, " ").trim();
         const cleanSnippet = snippet.length > 65 ? `${snippet.slice(0, 65)}...` : snippet;
 
         const title = `💬 New conversation waiting from ${senderAlias}`;
@@ -273,6 +279,7 @@ export async function handleMorningReminders(request?: Request | null, bypassAut
               type: "chat_starter_reminder",
               sessionId: item.sessionId,
               threadId: item.threadId,
+              forceEmail: true,
               soundType: "message",
               sound: "default",
             },

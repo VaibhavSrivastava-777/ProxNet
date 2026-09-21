@@ -33,6 +33,7 @@ export async function sendNotification(
   }
 
   // 2. Dispatch FCM notifications
+  let fcmSuccessCount = 0;
   if (fcmMessaging && fcmTokens && fcmTokens.length > 0) {
     console.log(`Sending FCM to ${fcmTokens.length} active devices for user ${userId}...`);
     
@@ -112,6 +113,7 @@ export async function sendNotification(
             },
           },
         });
+        fcmSuccessCount++;
       } catch (err: any) {
         console.error("FCM delivery failed for token:", tokenRecord.token, err.code);
         // Clean up expired or invalid registration tokens
@@ -126,10 +128,11 @@ export async function sendNotification(
     }
   }
 
-  // 3. Send Email Notification via Resend (Fallback for users without FCM or for priority reminders)
+  // 3. Send Email Notification via Resend (Fallback for users without FCM, failed FCM delivery, or priority events)
   const resendApiKey = process.env.RESEND_API_KEY;
   if (resendApiKey) {
-    const hasFcmTokens = fcmTokens && fcmTokens.length > 0;
+    const hasFcmTokens = Boolean(fcmTokens && fcmTokens.length > 0);
+    const hasSuccessfulFcm = fcmSuccessCount > 0;
     const notifType = String(data?.type || "general");
     const isPriorityNotification =
       data?.forceEmail === true ||
@@ -147,10 +150,14 @@ export async function sendNotification(
       notifType === "referral_request" ||
       notifType === "job_referral_request" ||
       notifType.includes("referral") ||
+      notifType === "new_question" ||
+      notifType === "direct_question" ||
+      notifType === "beacon_join" ||
+      notifType === "beacon_broadcast" ||
       notifType === "colleague_message";
 
-    // Dispatch email if user has no active FCM push tokens (crucial fallback), or for priority reminders
-    if (!hasFcmTokens || isPriorityNotification) {
+    // Dispatch email if user has no FCM tokens, or if FCM delivery failed on all tokens (vital fallback), or for priority/forceEmail events
+    if (!hasSuccessfulFcm || isPriorityNotification) {
       const { checkEmailRateLimit, recordEmailSent, generateContextEmail } = await import("@/lib/email-templates");
 
       // Anti-spam gate check

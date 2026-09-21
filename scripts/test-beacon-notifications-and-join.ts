@@ -160,9 +160,16 @@ async function main() {
       process.exit(1);
     }
 
+    const userBAlias = (userB.job_title && userB.company)
+      ? `${userB.job_title} @ ${userB.company}`
+      : "Resident Neighbor";
+    const userAAlias = (userA.job_title && userA.company)
+      ? `${userA.job_title} @ ${userA.company}`
+      : "Professional Neighbor";
+
     await supabase.from("chat_participants").insert([
-      { session_id: session.id, user_id: userB.id, alias: `${userB.job_title} @ ${userB.company}` },
-      { session_id: session.id, user_id: userA.id, alias: `${userA.job_title} @ ${userA.company}` },
+      { session_id: session.id, user_id: userB.id, alias: userBAlias },
+      { session_id: session.id, user_id: userA.id, alias: userAAlias },
     ]);
 
     sessionId = session.id;
@@ -186,16 +193,20 @@ async function main() {
 
   console.log(`- Automated chat message created in session ${sessionId}: "${insertedMsg.body}"`);
 
+  const userBAlias = (userB.job_title && userB.company)
+    ? `${userB.job_title} @ ${userB.company}`
+    : "Resident Neighbor";
+
   // Dispatch notification to User A
   const notifRes = await sendNotification(userA.id, {
-    title: `☕ ${userB.job_title} @ ${userB.company} joined your ${activityLabel} broadcast!`,
+    title: `☕ ${userBAlias} joined your ${activityLabel} broadcast!`,
     body: joinMessageText,
     url: `/chat/${sessionId}`,
     data: {
       sessionId,
       type: "beacon_join",
       activity: "chai",
-      senderAlias: `${userB.job_title} @ ${userB.company}`,
+      senderAlias: userBAlias,
     },
   });
 

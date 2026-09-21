@@ -57,3 +57,22 @@ export function formatLinkedInUrl(input: string | null | undefined): string {
   return `https://www.linkedin.com/in/${username}`;
 }
 
+/**
+ * Checks whether a LinkedIn URL was synthetically auto-generated from an OAuth sub/opaque ID
+ * (e.g. "https://www.linkedin.com/in/8y7d_lckr2" generated from sub "8y7D_lckr2").
+ */
+export function isSyntheticLinkedInUrl(url: string | null | undefined, sub?: string | null): boolean {
+  if (!url?.trim()) return false;
+  const cleanUrl = url.trim().toLowerCase();
+  if (sub?.trim()) {
+    const cleanSub = sub.trim().toLowerCase();
+    if (
+      cleanUrl === `https://www.linkedin.com/in/${cleanSub}` ||
+      cleanUrl.endsWith(`/in/${cleanSub}`) ||
+      cleanUrl.endsWith(`/in/${cleanSub}/`)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}

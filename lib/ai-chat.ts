@@ -49,12 +49,27 @@ export async function getOrCreateAISession(supabase: any, userId: string) {
   }
 
   if (!sessionId) {
-    // Create new session
-    const { data: newSession } = await supabase
+    // Create new session classified as AI
+    let { data: newSession, error: sErr } = await supabase
       .from("chat_sessions")
-      .insert({})
+      .insert({ type: "ai" })
       .select("id")
       .single();
+
+    if (sErr || !newSession) {
+      // Graceful fallback if type column is not yet present on remote DB
+      const fallback = await supabase
+        .from("chat_sessions")
+        .insert({})
+        .select("id")
+        .single();
+      newSession = fallback.data;
+    }
+
+    if (!newSession?.id) {
+      throw new Error("Failed to create AI chat session");
+    }
+
     sessionId = newSession.id;
     await supabase.from("chat_participants").insert([
       { session_id: sessionId, user_id: userId, alias: "Resident" },

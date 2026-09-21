@@ -58,7 +58,7 @@ export async function awardWalletCredits(
 
   // 2. Check deduplication
   if (reason === "push_notifications_enabled") {
-    if (profileDigest.push_reward_claimed) {
+    if (profileDigest.push_reward_claimed || rewardedActions.includes("push_notifications_enabled")) {
       return {
         success: false,
         creditsAwarded: 0,
@@ -80,7 +80,10 @@ export async function awardWalletCredits(
 
   // 3. Calculate new balance & updated digest
   const newBalance = currentWallet + config.amount;
-  const newRewardedActions = referenceId ? [...rewardedActions, `${reason}:${referenceId}`] : rewardedActions;
+  const actionKey = referenceId ? `${reason}:${referenceId}` : reason;
+  const newRewardedActions = rewardedActions.includes(actionKey)
+    ? rewardedActions
+    : [...rewardedActions, actionKey];
 
   const updatedDigest = {
     ...profileDigest,

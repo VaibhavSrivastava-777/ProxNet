@@ -70,10 +70,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const prof = profile as Record<string, any> | undefined;
       const linkedinProfileUrl =
         u.profileUrl ||
-        (prof?.vanityName ? `https://www.linkedin.com/in/${prof.vanityName}` : null) ||
-        (prof?.sub && account?.provider === "linkedin" && !/^\d+$/.test(prof.sub)
-          ? `https://www.linkedin.com/in/${prof.sub}`
-          : null);
+        (prof?.vanityName ? `https://www.linkedin.com/in/${prof.vanityName}` : null);
 
       const picture = u.image || prof?.picture || null;
       const headline = u.headline || prof?.headline || null;

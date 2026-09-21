@@ -132,16 +132,14 @@ export function TabValueTransition({
   minDisplayDurationMs = 5000,
   onTransitionComplete,
 }: TabValueTransitionProps) {
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(isLoading);
   const [fadingOut, setFadingOut] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(5);
   const [progress, setProgress] = useState(0);
   const completeFiredRef = useRef(false);
 
   useEffect(() => {
-    // Only display value proposition for the first time screen opening by user
-    const firstTime = isFirstTimeScreenOpening(activeTab);
-    if (!firstTime || !isLoading) {
+    if (!isLoading) {
       setVisible(false);
       if (!completeFiredRef.current) {
         completeFiredRef.current = true;
@@ -150,7 +148,7 @@ export function TabValueTransition({
       return;
     }
 
-    // First time opening this screen: keep displayed for at least 5 seconds irrespective of data load
+    // Always display 5-second value proposition loading screen on tab load/switch
     completeFiredRef.current = false;
     setVisible(true);
     setFadingOut(false);

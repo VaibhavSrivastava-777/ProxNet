@@ -71,13 +71,13 @@ async function handleDailyEngagement(request: Request) {
     return NextResponse.json({ error: "Failed to fetch active users", details: userError }, { status: 500 });
   }
 
-  // 2. Identify users who received at least one notification in the last 24 hours
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  // 2. Identify users who received at least one notification in the last 48 hours
+  const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
   
   const { data: recentNotifications, error: notifError } = await supabase
     .from("in_app_notifications")
     .select("user_id")
-    .gte("created_at", twentyFourHoursAgo);
+    .gte("created_at", fortyEightHoursAgo);
 
   if (notifError) {
     console.error("Failed to query recent notifications:", notifError);
@@ -85,7 +85,7 @@ async function handleDailyEngagement(request: Request) {
 
   const usersWithRecentActivity = new Set((recentNotifications || []).map((n) => n.user_id));
 
-  // 3. Filter to users who have received NOTHING today
+  // 3. Filter to users who have received NOTHING in the past 48 hours
   const eligibleUsers = users.filter((u) => !usersWithRecentActivity.has(u.id));
 
   let sentCount = 0;

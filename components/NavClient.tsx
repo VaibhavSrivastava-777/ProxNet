@@ -807,8 +807,12 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
         let hasHomeLocation = !!user.home_lat;
         const dismissed = sessionStorage.getItem("dismissed_profile_reminder");
 
-        const isNotifGranted = typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
-        let missing = getMissingProfileWizardSteps(user, isNotifGranted);
+        const isAndroidApp = typeof window !== "undefined" && Boolean((window as any).AndroidBridge);
+        const isNotifGranted =
+          (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") ||
+          isAndroidApp;
+        const isPushClaimed = Boolean((user as any)?.profile_digest?.push_reward_claimed || (user as any)?.push_reward_claimed);
+        let missing = getMissingProfileWizardSteps(user, isNotifGranted || isPushClaimed);
         setMissingStepCount(missing.length);
 
         if (!hasHomeLocation) {
@@ -831,7 +835,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                 
                 const updatedUser = { ...user, home_lat: lat, home_lng: lng, home_name: name };
                 setProfileUser(updatedUser);
-                missing = getMissingProfileWizardSteps(updatedUser, isNotifGranted);
+                missing = getMissingProfileWizardSteps(updatedUser, isNotifGranted || isPushClaimed);
                 setMissingStepCount(missing.length);
                 if (missing.length > 0 && !dismissed) setShowProfileReminder(true);
               } catch (e) {
@@ -1469,9 +1473,14 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
           onClose={() => setShowProfileWizard(false)}
           initialUser={profileUser}
           onUserUpdated={(updated) => {
-            setProfileUser((prev: any) => ({ ...prev, ...updated }));
-            const isNotifGranted = typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
-            const missing = getMissingProfileWizardSteps({ ...profileUser, ...updated }, isNotifGranted);
+            const merged = { ...profileUser, ...updated };
+            setProfileUser(merged);
+            const isAndroidApp = typeof window !== "undefined" && Boolean((window as any).AndroidBridge);
+            const isNotifGranted =
+              (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") ||
+              isAndroidApp;
+            const isPushClaimed = Boolean(merged?.profile_digest?.push_reward_claimed || (merged as any)?.push_reward_claimed);
+            const missing = getMissingProfileWizardSteps(merged, isNotifGranted || isPushClaimed);
             setMissingStepCount(missing.length);
             if (missing.length === 0) {
               setShowProfileReminder(false);
