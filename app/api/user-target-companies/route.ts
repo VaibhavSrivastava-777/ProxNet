@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { discoverAts, detectAtsFromUrl } from "@/lib/ats-discovery";
 import { STRATEGIES } from "@/lib/scrape-strategies";
+import { isJobEligible, normalizeJobUrl, normalizeJobTitle } from "@/lib/jobs/job-filters";
 
 export const maxDuration = 60;
 
@@ -356,13 +357,15 @@ export async function POST(request: Request) {
   }
 
   // 4. Save into user_target_companies table
-  const scrapeStatus = scrapeResult.scraped > 0 ? "success" : "failed";
+  const scrapeStatus = (scrapeResult.saved > 0 || (scrapeResult.scraped > 0 && !scrapeResult.error)) ? "success" : "failed";
 
   const scrapeNotes = scrapeResult.error
     ? `Failed: ${scrapeResult.error}`
-    : (scrapeResult.scraped > 0
-        ? `Real-time: Scraped ${scrapeResult.scraped} jobs, ${scrapeResult.saved} saved`
-        : "0 active listings discovered on careers portal");
+    : (scrapeResult.saved > 0
+        ? `Real-time: Scraped ${scrapeResult.scraped} raw jobs, ${scrapeResult.saved} India jobs saved`
+        : (scrapeResult.scraped > 0
+            ? `Checked ${scrapeResult.scraped} global listings (0 new Indian openings in last 30 days)`
+            : "0 active listings discovered on careers portal"));
 
   const careersUrlValue = careers_url?.trim() || (boardTokenOrUrl.startsWith("http") ? boardTokenOrUrl : null);
 
@@ -377,7 +380,7 @@ export async function POST(request: Request) {
       is_auto_discovered: !careers_url && provider !== "custom" && provider !== "none",
       scrape_status: scrapeStatus,
       scrape_notes: scrapeNotes,
-      total_jobs_found: scrapeResult.scraped || 0,
+      total_jobs_found: scrapeResult.saved || 0,
       last_scraped_at: scrapeResult.scraped > 0 ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,company_name" });
@@ -388,6 +391,12 @@ export async function POST(request: Request) {
     console.log(`[USER_TARGET_COMPANIES] Successfully upserted target company ${cleanName} for user ${user.id}`);
   }
 
+  const successMessage = scrapeResult.saved > 0
+    ? `Real-time scrape complete: Saved ${scrapeResult.saved} active Indian openings for ${cleanName}!`
+    : (scrapeResult.scraped > 0
+        ? `${cleanName} careers portal checked: 0 new Indian listings found in the last 30 days (${scrapeResult.scraped} global postings).`
+        : `Target company ${cleanName} recorded (${provider}). ${scrapeResult.error ? `Scraper returned: ${scrapeResult.error}` : "0 active listings found on portal."}`);
+
   return NextResponse.json({
     success: true,
     company_name: cleanName,
@@ -397,9 +406,7 @@ export async function POST(request: Request) {
     jobs_saved: scrapeResult.saved,
     scrape_error: scrapeResult.error || null,
     scrape_status: scrapeStatus,
-    message: scrapeResult.scraped > 0
-      ? `Real-time scrape complete: Found ${scrapeResult.scraped} active openings (${scrapeResult.saved} saved) for ${cleanName}!`
-      : `Target company ${cleanName} recorded (${provider}). ${scrapeResult.error ? `Scraper returned: ${scrapeResult.error}` : "0 active listings found on portal."}`,
+    message: successMessage,
     targetCompanies: profileDigest.target_companies,
   });
 }
@@ -437,16 +444,58 @@ async function scrapeTargetCompany(
       return { scraped: 0, saved: 0 };
     }
 
-    // Limit to top 35 active listings for real-time responsiveness
-    const toProcess = scrapedJobs.filter(j => j.title && j.title.trim().length >= 3).slice(0, 35);
+    // 1. Filter jobs by India location, 30-day freshness, and senior level
+    const eligibleJobs = scrapedJobs.filter(j => {
+      const { eligible } = isJobEligible({
+        title: j.title,
+        location: j.location,
+        description: j.description,
+        posted_at: j.posted_at,
+      });
+      return eligible;
+    });
+
+    console.log(`[REALTIME SCRAPE FILTER] ${cleanName}: ${scrapedJobs.length} raw discovered -> ${eligibleJobs.length} eligible for India (< 30d).`);
+
+    // 2. Fetch existing recent jobs for this company to prevent duplicate scraping & embedding
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const { data: existingRows } = await supabase
+      .from("scraped_jobs")
+      .select("url, title")
+      .ilike("company", cleanName)
+      .gte("posted_at", thirtyDaysAgo.toISOString());
+
+    const existingUrls = new Set((existingRows || []).map(r => normalizeJobUrl(r.url)));
+    const existingTitles = new Set((existingRows || []).map(r => normalizeJobTitle(r.title)));
+
+    // 3. Deduplicate
+    const seenBatchUrls = new Set<string>();
+    const toProcess: typeof scrapedJobs = [];
+    for (const j of eligibleJobs) {
+      const normUrl = normalizeJobUrl(j.url || "");
+      const normTitle = normalizeJobTitle(j.title || "");
+      if (normUrl && (existingUrls.has(normUrl) || seenBatchUrls.has(normUrl))) {
+        continue;
+      }
+      if (normTitle && existingTitles.has(normTitle)) {
+        continue;
+      }
+      if (normUrl) seenBatchUrls.add(normUrl);
+      toProcess.push(j);
+      if (toProcess.length >= 25) break; // Limit to top 25 fresh Indian jobs
+    }
+
+    console.log(`[REALTIME SCRAPE DEDUP] ${cleanName}: ${eligibleJobs.length} eligible -> ${toProcess.length} new unique jobs to embed and save.`);
+
     let savedCount = 0;
 
-    // Batch generate embeddings via OpenAI in a single call if available
+    // Batch generate embeddings via OpenAI only for new unique eligible jobs
     let embeddings: (number[] | null)[] = [];
     if (OPENAI_KEY && toProcess.length > 0) {
       try {
         const textsToEmbed = toProcess.map(j =>
-          `Company: ${cleanName}\nTitle: ${j.title}\nLocation: ${j.location || "Remote"}\nDescription: ${(j.description || j.title).slice(0, 1000)}`
+          `Company: ${cleanName}\nTitle: ${j.title}\nLocation: ${j.location || "India"}\nDescription: ${(j.description || j.title).slice(0, 1000)}`
         );
         const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
           method: "POST",
@@ -475,7 +524,7 @@ async function scrapeTargetCompany(
       const { error: insertErr } = await supabase.from("scraped_jobs").upsert({
         company: cleanName,
         title: j.title,
-        location: j.location || "Remote",
+        location: j.location || "India",
         url: j.url || boardTokenOrUrl,
         posted_at: j.posted_at || new Date().toISOString(),
         description: j.description || j.title,
@@ -491,16 +540,23 @@ async function scrapeTargetCompany(
       }
     }
 
+    let scrapeNotes = `status: success (${scrapedJobs.length} raw, ${eligibleJobs.length} India, ${savedCount} saved)`;
+    if (scrapedJobs.length > 0 && eligibleJobs.length === 0) {
+      scrapeNotes = `0 India listings found out of ${scrapedJobs.length} raw global postings (< 30d)`;
+    } else if (eligibleJobs.length > 0 && savedCount === 0) {
+      scrapeNotes = `All ${eligibleJobs.length} India listings (< 30d) are already up to date in ProxNet`;
+    }
+
     await supabase.from("company_ats_config").upsert({
       company_name: cleanName,
       provider,
       board_token_or_url: boardTokenOrUrl,
       total_jobs_found: scrapedJobs.length,
-      scrape_notes: `status: success (${scrapedJobs.length} raw, ${savedCount} saved)`,
+      scrape_notes: scrapeNotes,
       last_scraped_at: new Date().toISOString(),
     }, { onConflict: "company_name" });
 
-    console.log(`[REALTIME SCRAPE COMPLETE] ${cleanName}: ${scrapedJobs.length} pulled, ${savedCount} stored.`);
+    console.log(`[REALTIME SCRAPE COMPLETE] ${cleanName}: ${scrapedJobs.length} raw, ${eligibleJobs.length} India, ${savedCount} stored.`);
     return { scraped: scrapedJobs.length, saved: savedCount };
   } catch (scrapeErr: any) {
     console.error(`[REALTIME SCRAPE ERROR] ${cleanName}:`, scrapeErr.message);

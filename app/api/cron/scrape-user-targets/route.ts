@@ -2,64 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdminSession } from "@/lib/admin-session";
 import { STRATEGIES } from "@/lib/scrape-strategies";
-
-
-function isJuniorJob(title: string, description: string): boolean {
-  const t = title.toLowerCase();
-  const d = description.toLowerCase();
-
-  const seniorKeywords = ["senior", "sr.", "sr ", "lead", "principal", "staff", "director", "manager", "architect", "head", "vp", "chief"];
-  if (seniorKeywords.some(kw => t.includes(kw))) return false;
-
-  const juniorTitles = ["junior", "jr.", "jr ", "intern", "trainee", "fresher", "entry-level", "entry level"];
-  if (juniorTitles.some(kw => t.includes(kw))) return true;
-
-  const expRegexes = [
-    /(\d+)\s*(?:-|to)\s*(\d+)\s*years?/gi,
-    /(\d+)\+?\s*years?\s+(?:of\s+)?experience/gi,
-    /experience\s+(?:of\s+)?(\d+)\+?\s*years?/gi,
-    /min(?:imum)?\s*(\d+)\s*years?/gi,
-  ];
-
-  for (const regex of expRegexes) {
-    let match;
-    regex.lastIndex = 0;
-    while ((match = regex.exec(d)) !== null) {
-      const val1 = parseInt(match[1], 10);
-      const val2 = match[2] ? parseInt(match[2], 10) : null;
-      if (!isNaN(val1)) {
-        if (val2 !== null) {
-          if (val2 < 3) return true;
-        } else {
-          if (val1 < 3) return true;
-        }
-      }
-    }
-  }
-
-  return false;
-}
-
-function isIndianOrRemote(location: string): boolean {
-  if (!location) return true; // Accept omitted location fields from India-scoped pages
-  const loc = location.toLowerCase().trim();
-
-  if (loc.includes("remote") || loc.includes("anywhere") || loc.includes("multiple locations") || loc.includes("various")) {
-    return true;
-  }
-
-  const indianKeywords = [
-    "india", "bangalore", "bengaluru", "mumbai", "pune", "delhi",
-    "gurugram", "gurgaon", "noida", "hyderabad", "chennai", "kolkata",
-    "kochi", "trivandrum", "coimbatore", "chandigarh", "ahmedabad",
-    "indore", "jaipur", "mysore", "mohali", "lucknow", "nagpur",
-    "bhubaneswar", "visakhapatnam", "vadodara", "surat", "gandhinagar",
-    "maharashtra", "karnataka", "tamil nadu", "telangana", "andhra pradesh",
-    "gujarat", "haryana", "uttar pradesh", "west bengal", "kerala",
-  ];
-
-  return indianKeywords.some(k => loc.includes(k)) || loc === "in" || loc === "ind" || loc.includes("pan india");
-}
+import { isJobEligible, normalizeJobUrl, normalizeJobTitle } from "@/lib/jobs/job-filters";
 
 export const maxDuration = 60;
 
@@ -158,8 +101,9 @@ export async function GET(request: Request) {
 
   console.log(`[scrape-user-targets] Found ${targets.length} unique companies to scrape from ${allUsers?.length || 0} users + ${globalConfigs?.length || 0} global configs.`);
 
-  const twoWeeksAgo = new Date();
-  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const cutoffIso = thirtyDaysAgo.toISOString();
 
   let totalScraped = 0;
   let totalSaved = 0;
@@ -199,32 +143,53 @@ export async function GET(request: Request) {
     }
 
     totalScraped += jobs.length;
+
+    // Filter jobs by India location, 30-day freshness, and senior level
+    const eligibleJobs = jobs.filter(job => {
+      const { eligible } = isJobEligible({
+        title: job.title,
+        location: job.location,
+        description: job.description,
+        posted_at: job.posted_at,
+      });
+      return eligible;
+    });
+
+    // Query existing recent (< 30 days) jobs for this company to prevent duplicate scraping and embedding
+    const { data: existingRows } = await supabase
+      .from("scraped_jobs")
+      .select("url, title")
+      .ilike("company", target.company_name)
+      .gte("posted_at", cutoffIso);
+
+    const existingUrls = new Set((existingRows || []).map(r => normalizeJobUrl(r.url)));
+    const existingTitles = new Set((existingRows || []).map(r => normalizeJobTitle(r.title)));
+
+    const seenBatchUrls = new Set<string>();
+    const toProcess: typeof jobs = [];
+    for (const job of eligibleJobs) {
+      const normUrl = normalizeJobUrl(job.url || "");
+      const normTitle = normalizeJobTitle(job.title || "");
+      if (normUrl && (existingUrls.has(normUrl) || seenBatchUrls.has(normUrl))) {
+        continue;
+      }
+      if (normTitle && existingTitles.has(normTitle)) {
+        continue;
+      }
+      if (normUrl) seenBatchUrls.add(normUrl);
+      toProcess.push(job);
+      if (toProcess.length >= 25) break;
+    }
+
     let companySaved = 0;
 
-    for (const job of jobs) {
-      // Date filter
-      if (job.posted_at) {
-        const jobDate = new Date(job.posted_at);
-        if (!isNaN(jobDate.getTime()) && jobDate < twoWeeksAgo) continue;
-      }
-
-      // Location filter
-      if (!isIndianOrRemote(job.location || "")) continue;
-
-      // Content filter
-      const hasTitle = job.title && job.title.trim() !== "" && job.title !== "Unknown Title";
-      const hasDesc = job.description && job.description.trim() !== "";
-      if (!hasTitle || !hasDesc) continue;
-
-      // Experience filter
-      if (isJuniorJob(job.title, job.description)) continue;
-
-      // Generate embedding + keywords
+    for (const job of toProcess) {
+      // Generate embedding + keywords only for new unique eligible jobs
       let embedding = null;
       let keywords: string[] = [];
 
       try {
-        const textToEmbed = `Title: ${job.title}\nCompany: ${target.company_name}\nDescription: ${job.description}`.slice(0, 8000);
+        const textToEmbed = `Title: ${job.title}\nCompany: ${target.company_name}\nDescription: ${job.description || job.title}`.slice(0, 8000);
 
         // Keywords
         const kwRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -279,12 +244,13 @@ export async function GET(request: Request) {
       const jobData: any = {
         company: target.company_name,
         title: job.title,
-        location: job.location,
+        location: job.location || "India",
         url: job.url,
         description: (job.description || "").substring(0, 5000),
         ats_source: job.source,
-        posted_at: job.posted_at,
+        posted_at: job.posted_at || new Date().toISOString(),
         embedding,
+        created_at: new Date().toISOString(),
       };
 
       let { error: insertError } = await supabase.from("scraped_jobs").upsert({
@@ -303,11 +269,18 @@ export async function GET(request: Request) {
       }
     }
 
+    let scrapeNotes = `Cron: Scraped ${jobs.length} raw, ${eligibleJobs.length} India, saved ${companySaved}.`;
+    if (jobs.length > 0 && eligibleJobs.length === 0) {
+      scrapeNotes = `Cron: 0 India listings found out of ${jobs.length} global postings (< 30d).`;
+    } else if (eligibleJobs.length > 0 && companySaved === 0) {
+      scrapeNotes = `Cron: All ${eligibleJobs.length} India listings are already up to date in ProxNet.`;
+    }
+
     // Update company ATS config metadata
     await supabase.from("company_ats_config").update({
       last_scraped_at: new Date().toISOString(),
-      total_jobs_found: jobs.length,
-      scrape_notes: `Cron: Scraped ${jobs.length} total, saved ${companySaved}.`,
+      total_jobs_found: eligibleJobs.length,
+      scrape_notes: scrapeNotes,
     }).eq("company_name", target.company_name);
 
     companySummaries.push({

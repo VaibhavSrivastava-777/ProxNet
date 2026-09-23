@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { validateJobPost } from "@/lib/job-posts/validation";
 
 export function JobPostModal({ 
   isOpen, 
@@ -90,8 +91,19 @@ export function JobPostModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!role) {
-      alert("Please fill out the role title.");
+
+    const validation = validateJobPost({
+      type,
+      role,
+      company,
+      experienceYears,
+      skills,
+      description,
+      contactInfo,
+    });
+
+    if (!validation.valid || !validation.sanitized) {
+      alert(validation.errors.join("\n"));
       return;
     }
 
@@ -227,31 +239,36 @@ export function JobPostModal({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Company</label>
+                <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">
+                  {type === "giver" ? "Hiring Company *" : "Target Company *"}
+                </label>
                 <input
                   type="text"
+                  required
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  placeholder="e.g. Google, Startup, Remote"
+                  placeholder={type === "giver" ? "e.g. Google, Flipkart, Startup" : "e.g. Fintech, Top Tech, Remote"}
                   className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none bg-[var(--color-surface)]"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Experience</label>
+                <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Experience Level *</label>
                 <input
                   type="text"
+                  required
                   value={experienceYears}
                   onChange={(e) => setExperienceYears(e.target.value)}
-                  placeholder="e.g. 5+ years"
+                  placeholder="e.g. 3-5 years, 5+ years"
                   className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none bg-[var(--color-surface)]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Key Skills</label>
+              <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Key Skills *</label>
               <input
                 type="text"
+                required
                 value={skills}
                 onChange={(e) => setSkills(e.target.value)}
                 placeholder="e.g. React, Node.js, Python, System Design"
@@ -260,11 +277,20 @@ export function JobPostModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">Description</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">
+                  Description *
+                </label>
+                <span className={`text-[10px] font-semibold ${description.trim().length < 15 ? "text-amber-500" : "text-emerald-500"}`}>
+                  {description.trim().length}/15 min characters
+                </span>
+              </div>
               <textarea
+                required
+                minLength={15}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder={type === "seeker" ? "Describe your background, what you're looking for, or notice period..." : "Describe the job responsibilities, team, requirements, or referral process..."}
+                placeholder={type === "seeker" ? "Describe your background, what you're looking for, or notice period (min 15 chars)..." : "Describe the job responsibilities, team, requirements, or referral process (min 15 chars)..."}
                 rows={3}
                 className="input w-full p-2.5 rounded-lg border border-[var(--color-border)] focus:border-[var(--color-primary)] outline-none resize-none bg-[var(--color-surface)]"
               />

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { validateJobPost } from "@/lib/job-posts/validation";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -57,16 +58,35 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
+  const validation = validateJobPost({
+    type: body.type,
+    role: body.role,
+    company: body.company,
+    experienceYears: body.experienceYears,
+    skills: body.skills,
+    description: body.description,
+    contactInfo: body.contactInfo,
+  });
+
+  if (!validation.valid || !validation.sanitized) {
+    return NextResponse.json(
+      { error: validation.errors[0], errors: validation.errors },
+      { status: 400 }
+    );
+  }
+
+  const { sanitized } = validation;
+
   const { data: updatedPost, error } = await supabase
     .from("job_posts")
     .update({
-      type: body.type,
-      role: body.role,
-      company: body.company,
-      experience_years: body.experienceYears,
-      skills: body.skills,
-      description: body.description,
-      contact_info: body.contactInfo,
+      type: sanitized.type,
+      role: sanitized.role,
+      company: sanitized.company,
+      experience_years: sanitized.experience_years,
+      skills: sanitized.skills,
+      description: sanitized.description,
+      contact_info: sanitized.contact_info,
       updated_at: new Date().toISOString()
     })
     .eq("id", id)

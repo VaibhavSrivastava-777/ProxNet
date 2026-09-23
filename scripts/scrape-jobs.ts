@@ -1,57 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 import { STRATEGIES, stripHtml } from "../lib/scrape-strategies";
+import { isJobEligible, normalizeJobUrl, normalizeJobTitle } from "../lib/jobs/job-filters";
 
 dotenv.config({ path: ".env.local" });
-
-function isJuniorJob(title: string, description: string): boolean {
-  const t = title.toLowerCase();
-  const d = description.toLowerCase();
-
-  // If title explicitly says Senior, Principal, Lead, Staff, Director, Manager, VP, Architect, etc., it is NOT a junior job.
-  const seniorKeywords = ["senior", "sr.", "sr ", "lead", "principal", "staff", "director", "manager", "architect", "head", "vp", "chief"];
-  const isExplicitlySenior = seniorKeywords.some(kw => t.includes(kw));
-  if (isExplicitlySenior) {
-    return false;
-  }
-
-  // Check explicit junior titles
-  const juniorTitles = ["junior", "jr.", "jr ", "intern", "trainee", "fresher", "entry-level", "entry level"];
-  if (juniorTitles.some(kw => t.includes(kw))) {
-    return true;
-  }
-
-  // Look for years of experience mentions in description:
-  // e.g. "0-2 years", "1-2 years", "1+ years", "2+ years", "0 to 2 years", "1 to 2 years"
-  const expRegexes = [
-    /(\d+)\s*(?:-|to)\s*(\d+)\s*years?/gi,
-    /(\d+)\+?\s*years?\s+(?:of\s+)?experience/gi,
-    /experience\s+(?:of\s+)?(\d+)\+?\s*years?/gi,
-    /min(?:imum)?\s*(\d+)\s*years?/gi
-  ];
-
-  for (const regex of expRegexes) {
-    let match;
-    regex.lastIndex = 0;
-    while ((match = regex.exec(d)) !== null) {
-      const val1 = parseInt(match[1], 10);
-      const val2 = match[2] ? parseInt(match[2], 10) : null;
-      if (!isNaN(val1)) {
-        if (val2 !== null) {
-          if (val2 < 3) {
-            return true;
-          }
-        } else {
-          if (val1 < 3) {
-            return true;
-          }
-        }
-      }
-    }
-  }
-
-  return false;
-}
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -106,8 +58,9 @@ async function main() {
 
   console.log(`Found ${configs.length} ATS configurations to scrape.`);
 
-  const twoWeeksAgo = new Date();
-  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const cutoffIso = thirtyDaysAgo.toISOString();
 
   let totalProcessed = 0;
   let totalAdded = 0;
@@ -143,46 +96,54 @@ async function main() {
       continue;
     }
 
-    console.log(`Found ${jobs.length} total postings. Processing & upserting...`);
+    console.log(`Found ${jobs.length} total postings. Pre-checking duplicates and filters...`);
+
+    // Fetch existing recent jobs for this company
+    const { data: existingRows } = await supabase
+      .from("scraped_jobs")
+      .select("url, title")
+      .ilike("company", config.company_name)
+      .gte("posted_at", cutoffIso);
+
+    const existingUrls = new Set((existingRows || []).map(r => normalizeJobUrl(r.url)));
+    const existingTitles = new Set((existingRows || []).map(r => normalizeJobTitle(r.title)));
 
     let companyProcessed = 0;
     let companyAdded = 0;
-    let companySkippedDate = 0;
-    let companySkippedLocation = 0;
-    let companySkippedExperience = 0;
-    let companySkippedContent = 0;
+    let companySkippedFilter = 0;
+    let companySkippedDuplicate = 0;
+    const seenBatchUrls = new Set<string>();
 
     for (const job of jobs) {
-      if (job.posted_at) {
-        const jobDate = new Date(job.posted_at);
-        if (!isNaN(jobDate.getTime()) && jobDate < twoWeeksAgo) {
-          console.log(`  [SKIP] "${job.title}" (${job.location}) - Posted over 2 weeks ago (posted: ${job.posted_at})`);
-          companySkippedDate++;
-          continue;
-        }
-      }
+      // 1. Eligibility Check: 30-day age limit, India location, not junior
+      const { eligible, reason } = isJobEligible({
+        title: job.title,
+        location: job.location,
+        description: job.description,
+        posted_at: job.posted_at,
+      });
 
-      const loc = job.location ? job.location.toLowerCase() : "";
-      const isIndiaOrRemote = ["india", "bangalore", "bengaluru", "mumbai", "pune", "delhi", "gurugram", "gurgaon", "noida", "hyderabad", "chennai", "remote"].some(k => loc.includes(k));
-      if (!isIndiaOrRemote) {
-        console.log(`  [SKIP] "${job.title}" (${job.location}) - Location does not match India or Remote criteria`);
-        companySkippedLocation++;
+      if (!eligible) {
+        console.log(`  [SKIP FILTER] "${job.title}" (${job.location}) - ${reason}`);
+        companySkippedFilter++;
         continue;
       }
 
-      const hasTitle = job.title && job.title.trim() !== "" && job.title !== "Unknown Title" && job.title !== "Job Title";
-      const hasDesc = job.description && job.description.trim() !== "" && job.description !== "No description provided" && job.description !== "Full text of the job description";
-      if (!hasTitle || !hasDesc) {
-        console.log(`  [SKIP] "${job.title}" (${job.location}) - Missing or placeholder job title/description`);
-        companySkippedContent++;
+      // 2. Duplicate Check: Before calling OpenAI
+      const normUrl = normalizeJobUrl(job.url || "");
+      const normTitle = normalizeJobTitle(job.title || "");
+      if (normUrl && (existingUrls.has(normUrl) || seenBatchUrls.has(normUrl))) {
+        console.log(`  [SKIP DUPLICATE] "${job.title}" (${job.location}) - URL already exists in database`);
+        companySkippedDuplicate++;
+        continue;
+      }
+      if (normTitle && existingTitles.has(normTitle)) {
+        console.log(`  [SKIP DUPLICATE] "${job.title}" (${job.location}) - Title already exists for ${config.company_name}`);
+        companySkippedDuplicate++;
         continue;
       }
 
-      if (isJuniorJob(job.title, job.description)) {
-        console.log(`  [SKIP] "${job.title}" (${job.location}) - Skipped junior role (< 3 years experience required)`);
-        companySkippedExperience++;
-        continue;
-      }
+      if (normUrl) seenBatchUrls.add(normUrl);
 
       console.log(`\n[PROCESSING] "${job.title}" (${job.location}) - URL: ${job.url}`);
       companyProcessed++;
@@ -239,26 +200,26 @@ async function main() {
         
         if (oaiRes.ok) {
           const oaiData = await oaiRes.json();
-          if (oaiData.data && oaiData.data.length > 0) {
-            embedding = oaiData.data[0].embedding;
-            console.log(`  [OPENAI] Embedding generated successfully.`);
-          }
+          embedding = oaiData.data[0].embedding;
+          console.log(`  [OPENAI] Embedding generated successfully.`);
         } else {
           console.warn(`  ⚠️ [OPENAI] Failed to generate embedding. Status: ${oaiRes.status}`);
         }
-      } catch(e: any) {
+
+      } catch (e: any) {
         console.error(`OpenAI processing failed for "${job.title}":`, e.message);
       }
 
       const jobData: any = {
         company: config.company_name,
         title: job.title,
-        location: job.location,
+        location: job.location || "India",
         url: job.url,
-        description: job.description.substring(0, 5000),
+        description: (job.description || "").substring(0, 5000),
         ats_source: job.source,
-        posted_at: job.posted_at,
-        embedding: embedding
+        posted_at: job.posted_at || new Date().toISOString(),
+        embedding: embedding,
+        created_at: new Date().toISOString(),
       };
 
       console.log(`  [DB] Upserting job into Supabase...`);
@@ -287,10 +248,8 @@ async function main() {
 
     console.log(`\n  [SUMMARY for ${config.company_name}]`);
     console.log(`    Total checked: ${jobs.length}`);
-    console.log(`    Skipped (date filter): ${companySkippedDate}`);
-    console.log(`    Skipped (location filter): ${companySkippedLocation}`);
-    console.log(`    Skipped (experience filter): ${companySkippedExperience}`);
-    console.log(`    Skipped (content filter): ${companySkippedContent}`);
+    console.log(`    Skipped (filters - age/loc/seniority): ${companySkippedFilter}`);
+    console.log(`    Skipped (duplicate URLs/titles): ${companySkippedDuplicate}`);
     console.log(`    Processed (AI embeddings): ${companyProcessed}`);
     console.log(`    Successfully saved/updated: ${companyAdded}`);
 
@@ -300,7 +259,7 @@ async function main() {
       .update({
         last_scraped_at: new Date().toISOString(),
         total_jobs_found: jobs.length,
-        scrape_notes: `Scraped ${jobs.length} total. Saved ${companyAdded}. Skipped: ${companySkippedDate} date, ${companySkippedLocation} loc, ${companySkippedExperience} exp, ${companySkippedContent} empty.`
+        scrape_notes: `Scraped ${jobs.length} total. Saved ${companyAdded}. Skipped: ${companySkippedFilter} filtered, ${companySkippedDuplicate} duplicate.`
       })
       .eq("company_name", config.company_name);
   }

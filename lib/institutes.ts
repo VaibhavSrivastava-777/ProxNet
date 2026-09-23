@@ -75,11 +75,110 @@ export async function getUserAffiliations(userId: string): Promise<UserInstitute
 }
 
 /**
+ * Find or create an institute by name in the background.
+ * If an institute with a matching name exists (case-insensitive), returns it.
+ * Otherwise, creates a new record with category "other".
+ */
+export async function findOrCreateInstitute(
+  name: string,
+  category: string = "other"
+): Promise<Institute> {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Database not configured");
+  }
+  const cleanName = name.trim();
+  if (cleanName.length < 2) {
+    throw new Error("Institute name must be at least 2 characters");
+  }
+
+  const supabase = createAdminClient();
+
+  // 1. Check for existing institute with same name (case-insensitive)
+  const { data: existing, error: searchError } = await supabase
+    .from("institutes")
+    .select("*")
+    .ilike("name", cleanName)
+    .limit(1)
+    .maybeSingle();
+
+  if (searchError) {
+    console.error("Error searching institute by name:", searchError);
+  }
+
+  if (existing) {
+    return existing as Institute;
+  }
+
+  // 2. Generate clean short_code candidate if appropriate (e.g. capitalized acronym if >= 2 words)
+  let shortCodeCandidate: string | null = null;
+  const words = cleanName.split(/\s+/).filter((w) => /^[a-zA-Z0-9]/.test(w));
+  if (words.length >= 2 && words.length <= 5) {
+    const acronym = words.map((w) => w[0].toUpperCase()).join("");
+    // Check if acronym is already taken in short_code
+    const { data: codeMatch } = await supabase
+      .from("institutes")
+      .select("id")
+      .eq("short_code", acronym)
+      .maybeSingle();
+    if (!codeMatch) {
+      shortCodeCandidate = acronym;
+    }
+  }
+
+  // 3. Insert new institute
+  const insertPayload = {
+    name: cleanName,
+    short_code: shortCodeCandidate,
+    category: category || "other",
+    verified_domains: [],
+  };
+
+  const { data: created, error: insertError } = await supabase
+    .from("institutes")
+    .insert(insertPayload)
+    .select("*")
+    .single();
+
+  if (insertError) {
+    // If conflict occurs (e.g. concurrent creation or unique short_code), retry fallback
+    console.error("Error inserting institute:", insertError);
+
+    // If short_code had collision, try inserting with null short_code
+    if (shortCodeCandidate) {
+      const { data: fallbackCreated, error: fallbackError } = await supabase
+        .from("institutes")
+        .insert({ ...insertPayload, short_code: null })
+        .select("*")
+        .single();
+      if (!fallbackError && fallbackCreated) {
+        return fallbackCreated as Institute;
+      }
+    }
+
+    // Check if another request inserted it in the meantime
+    const { data: retryData } = await supabase
+      .from("institutes")
+      .select("*")
+      .ilike("name", cleanName)
+      .limit(1)
+      .maybeSingle();
+
+    if (retryData) {
+      return retryData as Institute;
+    }
+    throw new Error(`Failed to create institute: ${insertError.message}`);
+  }
+
+  return created as Institute;
+}
+
+/**
  * Add or update an institute affiliation for a user
  */
 export async function addAffiliation(params: {
   userId: string;
   instituteId: string;
+  instituteName?: string | null;
   degree?: string | null;
   batchYear?: number | null;
   userEmail?: string | null;
@@ -87,11 +186,22 @@ export async function addAffiliation(params: {
   if (!isSupabaseConfigured()) return null;
   const supabase = createAdminClient();
 
+  let targetInstituteId = params.instituteId;
+
+  // If user selected "other" or provided a custom institute name, create/find in background
+  if (targetInstituteId === "other" || (!targetInstituteId && params.instituteName)) {
+    if (!params.instituteName || !params.instituteName.trim()) {
+      throw new Error("Institute name is required when choosing 'Others'");
+    }
+    const resolvedInstitute = await findOrCreateInstitute(params.instituteName);
+    targetInstituteId = resolvedInstitute.id;
+  }
+
   // Check if institute exists and check domain verification
   const { data: institute, error: instError } = await supabase
     .from("institutes")
     .select("*")
-    .eq("id", params.instituteId)
+    .eq("id", targetInstituteId)
     .maybeSingle();
 
   if (instError || !institute) {
@@ -114,7 +224,7 @@ export async function addAffiliation(params: {
 
   const payload = {
     user_id: params.userId,
-    institute_id: params.instituteId,
+    institute_id: targetInstituteId,
     degree: cleanDegree,
     batch_year: batchYear,
     verification_status: verificationStatus,

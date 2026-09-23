@@ -154,7 +154,10 @@ export async function sendNotification(
       notifType === "direct_question" ||
       notifType === "beacon_join" ||
       notifType === "beacon_broadcast" ||
-      notifType === "colleague_message";
+      notifType === "colleague_message" ||
+      notifType === "job_post_nearby" ||
+      notifType.includes("hiring") ||
+      notifType.includes("looking");
 
     // Dispatch email if user has no FCM tokens, or if FCM delivery failed on all tokens (vital fallback), or for priority/forceEmail events
     if (!hasSuccessfulFcm || isPriorityNotification) {
@@ -298,6 +301,8 @@ export async function notifyUsersWithin2km({
   const matchedUserIds = new Set<string>();
 
   for (const u of users) {
+    if (u.id === creatorId) continue;
+
     let isMatch = false;
 
     if (u.home_lat != null && u.home_lng != null) {

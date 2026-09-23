@@ -2,69 +2,11 @@ import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
 import { STRATEGIES, stripHtml } from "../lib/scrape-strategies";
 import { discoverAts } from "../lib/ats-discovery";
+import { isJobEligible, normalizeJobUrl, normalizeJobTitle } from "../lib/jobs/job-filters";
 
 dotenv.config({ path: ".env.local" });
 
 const TARGET_USER_ID = "50ecc4a2-c514-4922-8eb7-7e74961c7c4f";
-
-function isJuniorJob(title: string, description: string): boolean {
-  const t = title.toLowerCase();
-  const d = description.toLowerCase();
-
-  const seniorKeywords = ["senior", "sr.", "sr ", "lead", "principal", "staff", "director", "manager", "architect", "head", "vp", "chief"];
-  if (seniorKeywords.some(kw => t.includes(kw))) return false;
-
-  const juniorTitles = ["junior", "jr.", "jr ", "intern", "trainee", "fresher", "entry-level", "entry level"];
-  if (juniorTitles.some(kw => t.includes(kw))) return true;
-
-  const expRegexes = [
-    /(\d+)\s*(?:-|to)\s*(\d+)\s*years?/gi,
-    /(\d+)\+?\s*years?\s+(?:of\s+)?experience/gi,
-    /experience\s+(?:of\s+)?(\d+)\+?\s*years?/gi,
-    /min(?:imum)?\s*(\d+)\s*years?/gi,
-  ];
-
-  for (const regex of expRegexes) {
-    let match;
-    regex.lastIndex = 0;
-    while ((match = regex.exec(d)) !== null) {
-      const val1 = parseInt(match[1], 10);
-      const val2 = match[2] ? parseInt(match[2], 10) : null;
-      if (!isNaN(val1)) {
-        if (val2 !== null) {
-          if (val2 < 3) return true;
-        } else {
-          if (val1 < 3) return true;
-        }
-      }
-    }
-  }
-
-  return false;
-}
-
-function isIndianOrRemote(location: string): boolean {
-  if (!location) return true; // Accept omitted locations from India-scoped boards
-  const loc = location.toLowerCase().trim();
-
-  if (loc.includes("remote") || loc.includes("anywhere") || loc.includes("multiple locations") || loc.includes("various")) {
-    return true;
-  }
-
-  const indianKeywords = [
-    "india", "bangalore", "bengaluru", "mumbai", "pune", "delhi",
-    "gurugram", "gurgaon", "noida", "hyderabad", "chennai", "kolkata",
-    "kochi", "trivandrum", "thiruvananthapuram", "coimbatore", "chandigarh",
-    "ahmedabad", "indore", "jaipur", "mysore", "mohali", "lucknow", "nagpur",
-    "bhubaneswar", "visakhapatnam", "vadodara", "surat", "gandhinagar", "bhopal",
-    "patna", "ludhiana", "thane", "navi mumbai",
-    "maharashtra", "karnataka", "tamil nadu", "telangana", "andhra pradesh",
-    "gujarat", "haryana", "uttar pradesh", "west bengal", "kerala", "punjab",
-    "rajasthan", "madhya pradesh", "odisha",
-  ];
-
-  return indianKeywords.some(k => loc.includes(k)) || loc === "in" || loc === "ind" || loc.includes("pan india");
-}
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -137,8 +79,9 @@ async function main() {
   console.log(`  Scrapeable targets with ATS configs: ${targets.length}`);
 
   // 3. Scrape each target company
-  const twoWeeksAgo = new Date();
-  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const cutoffIso = thirtyDaysAgo.toISOString();
 
   const companyResults: Array<{
     company: string;
@@ -146,7 +89,7 @@ async function main() {
     careersUrl: string;
     totalFromAts: number;
     savedCount: number;
-    skipped: { date: number; location: number; experience: number; content: number };
+    skipped: { filter: number; duplicate: number };
     error?: string;
   }> = [];
 
@@ -168,7 +111,7 @@ async function main() {
         careersUrl: target.careers_url || "",
         totalFromAts: 0,
         savedCount: 0,
-        skipped: { date: 0, location: 0, experience: 0, content: 0 },
+        skipped: { filter: 0, duplicate: 0 },
         error: "No strategy",
       });
       continue;
@@ -190,57 +133,66 @@ async function main() {
         careersUrl: target.careers_url || "",
         totalFromAts: 0,
         savedCount: 0,
-        skipped: { date: 0, location: 0, experience: 0, content: 0 },
+        skipped: { filter: 0, duplicate: 0 },
         error: e.message,
       });
       continue;
     }
 
-    console.log(`  Found ${jobs.length} total postings from ATS. Filtering & processing...`);
+    console.log(`  Found ${jobs.length} total postings from ATS. Pre-checking duplicates and filters...`);
     if (jobs.length > 50) {
-      console.log(`  (Capping processing to first 50 postings for speed...)`);
+      console.log(`  (Capping evaluation to first 50 postings for speed...)`);
       jobs = jobs.slice(0, 50);
     }
 
+    // Pre-query existing recent jobs for this company
+    const { data: existingRows } = await supabase
+      .from("scraped_jobs")
+      .select("url, title")
+      .ilike("company", target.company_name)
+      .gte("posted_at", cutoffIso);
+
+    const existingUrls = new Set((existingRows || []).map(r => normalizeJobUrl(r.url)));
+    const existingTitles = new Set((existingRows || []).map(r => normalizeJobTitle(r.title)));
+
     let savedCount = 0;
-    const skipped = { date: 0, location: 0, experience: 0, content: 0 };
+    const skipped = { filter: 0, duplicate: 0 };
+    const seenBatchUrls = new Set<string>();
 
     for (const job of jobs) {
-      // Date filter
-      if (job.posted_at) {
-        const jobDate = new Date(job.posted_at);
-        if (!isNaN(jobDate.getTime()) && jobDate < twoWeeksAgo) {
-          skipped.date++;
-          continue;
-        }
-      }
+      // 1. Eligibility Check: 30-day age limit, India location, not junior
+      const { eligible, reason } = isJobEligible({
+        title: job.title,
+        location: job.location,
+        description: job.description,
+        posted_at: job.posted_at,
+      });
 
-      // Location filter (India only)
-      if (!isIndianOrRemote(job.location || "")) {
-        skipped.location++;
+      if (!eligible) {
+        skipped.filter++;
         continue;
       }
 
-      // Content filter
-      const hasTitle = job.title && job.title.trim() !== "" && job.title !== "Unknown Title" && job.title !== "Job Title";
-      const hasDesc = job.description && job.description.trim() !== "" && job.description !== "No description provided";
-      if (!hasTitle || !hasDesc) {
-        skipped.content++;
+      // 2. Duplicate Check: Before calling OpenAI
+      const normUrl = normalizeJobUrl(job.url || "");
+      const normTitle = normalizeJobTitle(job.title || "");
+      if (normUrl && (existingUrls.has(normUrl) || seenBatchUrls.has(normUrl))) {
+        skipped.duplicate++;
+        continue;
+      }
+      if (normTitle && existingTitles.has(normTitle)) {
+        skipped.duplicate++;
         continue;
       }
 
-      // Experience filter (no junior)
-      if (isJuniorJob(job.title, job.description)) {
-        skipped.experience++;
-        continue;
-      }
+      if (normUrl) seenBatchUrls.add(normUrl);
 
       // Generate keywords + embedding
       let embedding = null;
       let keywords: string[] = [];
 
       try {
-        const textToEmbed = `Title: ${job.title}\nCompany: ${target.company_name}\nDescription: ${job.description}`.slice(0, 8000);
+        const textToEmbed = `Title: ${job.title}\nCompany: ${target.company_name}\nDescription: ${job.description || job.title}`.slice(0, 8000);
 
         // Keywords
         const kwPrompt = `Extract 3 to 5 technical skills or buzzwords from the job. Return a JSON object with key 'keywords' containing an array of strings.\n\nJob:\n${textToEmbed}`;
@@ -295,12 +247,13 @@ async function main() {
       const jobData: any = {
         company: target.company_name,
         title: job.title,
-        location: job.location,
+        location: job.location || "India",
         url: job.url,
         description: (job.description || "").substring(0, 5000),
         ats_source: job.source,
-        posted_at: job.posted_at,
+        posted_at: job.posted_at || new Date().toISOString(),
         embedding,
+        created_at: new Date().toISOString(),
       };
 
       let { error: insertError } = await supabase.from("scraped_jobs").upsert({
@@ -328,7 +281,7 @@ async function main() {
     await supabase.from("company_ats_config").update({
       last_scraped_at: new Date().toISOString(),
       total_jobs_found: jobs.length,
-      scrape_notes: `Scraped ${jobs.length} total. Saved ${savedCount}. Skipped: ${skipped.date} date, ${skipped.location} loc, ${skipped.experience} exp, ${skipped.content} content.`,
+      scrape_notes: `Scraped ${jobs.length} total. Saved ${savedCount}. Skipped: ${skipped.filter} filter, ${skipped.duplicate} duplicate.`,
     }).eq("company_name", target.company_name);
 
     companyResults.push({
@@ -340,7 +293,7 @@ async function main() {
       skipped,
     });
 
-    console.log(`  Summary: ${jobs.length} from ATS → ${savedCount} saved (${skipped.date} date, ${skipped.location} loc, ${skipped.experience} exp, ${skipped.content} content)`);
+    console.log(`  Summary: ${jobs.length} from ATS → ${savedCount} saved (${skipped.filter} filtered, ${skipped.duplicate} duplicate)`);
   }
 
   // 4. Always generate fresh user embedding from latest resume + profile

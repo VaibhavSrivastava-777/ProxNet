@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyUsersWithin2km } from "@/lib/notifications";
 import { awardWalletCredits } from "@/lib/wallet";
+import { validateJobPost } from "@/lib/job-posts/validation";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -80,10 +81,24 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { type, role, company, experienceYears, skills, description, contactInfo, centerLat, centerLng, isPublic } = body;
 
-  if (!type || !role) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  const validation = validateJobPost({
+    type,
+    role,
+    company,
+    experienceYears,
+    skills,
+    description,
+    contactInfo,
+  });
+
+  if (!validation.valid || !validation.sanitized) {
+    return NextResponse.json(
+      { error: validation.errors[0], errors: validation.errors },
+      { status: 400 }
+    );
   }
 
+  const { sanitized } = validation;
   const supabase = createAdminClient();
 
   const finalLat = centerLat || user.home_lat || 28.6139;
@@ -94,13 +109,13 @@ export async function POST(request: Request) {
     .insert({
       user_id: user.id,
       creator_id: user.id,
-      type,
-      role,
-      company: company || null,
-      experience_years: experienceYears || null,
-      skills: skills || null,
-      description: description || null,
-      contact_info: contactInfo || null,
+      type: sanitized.type,
+      role: sanitized.role,
+      company: sanitized.company,
+      experience_years: sanitized.experience_years,
+      skills: sanitized.skills,
+      description: sanitized.description,
+      contact_info: sanitized.contact_info,
       center_lat: finalLat,
       center_lng: finalLng,
       is_public: isPublic ?? true,
@@ -127,7 +142,7 @@ export async function POST(request: Request) {
       title: type === "giver" ? `New Hiring Referral nearby: ${role}` : `Neighbor Looking for Role nearby: ${role}`,
       body: `${company ? `${company} · ` : ""}${role}`,
       url: `/job-post/${jobPost.id}`,
-      data: { jobPostId: jobPost.id }
+      data: { jobPostId: jobPost.id, type: "job_post_nearby" }
     }).catch(err => console.error("2km notification error for job post:", err));
   }
 

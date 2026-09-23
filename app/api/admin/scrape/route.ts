@@ -1,59 +1,39 @@
 import { NextResponse } from "next/server";
+import { getAdminSession } from "@/lib/admin-session";
+import { parseLinkedInProfile } from "@/lib/linkedin/parse-profile";
 
 export async function POST(request: Request) {
   try {
+    const adminSession = await getAdminSession();
+    if (!adminSession) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { url } = await request.json();
     if (!url || !url.includes("linkedin.com")) {
       return NextResponse.json({ error: "Invalid LinkedIn URL" }, { status: 400 });
     }
 
-    // Try fetching the public profile page
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      next: { revalidate: 0 },
-    });
+    const result = await parseLinkedInProfile(url);
 
-    const html = await res.text();
-
-    // Extract title
-    const titleMatch = html.match(/<title>(.*?)<\/title>/i);
-    let title = titleMatch ? titleMatch[1] : "";
-
-    const ogTitleMatch = html.match(/<meta property="og:title" content="(.*?)"/i);
-    if (ogTitleMatch) title = ogTitleMatch[1];
-
-    title = title
-      .replace(/&amp;/g, "&")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&ndash;/g, "-")
-      .replace(/&mdash;/g, "-");
-
-    title = title.replace(/\s*\|\s*LinkedIn\s*$/i, "");
-
-    const parts = title.split(" - ");
-    let full_name = "";
-    let job_title = "";
-    let company = "";
-
-    if (parts.length >= 3) {
-      full_name = parts[0].trim();
-      job_title = parts[1].trim();
-      company = parts.slice(2).join(" - ").trim();
-    } else if (parts.length === 2) {
-      full_name = parts[0].trim();
-      company = parts[1].trim();
-    } else {
-      full_name = parts[0].trim();
+    if (!result.success || !result.data) {
+      return NextResponse.json(
+        { error: result.error || "Could not extract data. LinkedIn may have blocked the request." },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ full_name, job_title, company });
-  } catch (error) {
-    console.error("Scrape error:", error);
-    return NextResponse.json({ error: "Failed to scrape profile" }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      full_name: result.data.full_name || "",
+      company: result.data.company || "",
+      job_title: result.data.job_title || "",
+      about: result.data.about || result.data.professional_bio || "",
+      professional_bio: result.data.professional_bio || "",
+      data: result.data,
+    });
+  } catch (error: any) {
+    console.error("[admin/scrape] Error:", error);
+    return NextResponse.json({ error: error.message || "Failed to scrape profile" }, { status: 500 });
   }
 }

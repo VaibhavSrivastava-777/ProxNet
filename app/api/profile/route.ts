@@ -3,8 +3,9 @@ import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/is-configured";
 import { normalizeLinkedInUrl } from "@/lib/linkedin/normalize-url";
-import { isProfileIncomplete } from "@/lib/profile-validation";
+import { isProfileIncomplete, calculateProfileCompleteness } from "@/lib/profile-validation";
 import { initiateWelcomeMessage } from "@/lib/ai-chat";
+import { awardWalletCredits } from "@/lib/wallet";
 async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`, {
@@ -217,5 +218,22 @@ export async function PATCH(request: Request) {
     });
   }
 
-  return NextResponse.json(responseData);
+  // Check for 100% profile completeness reward
+  let completionReward = null;
+  const completeness = calculateProfileCompleteness(responseData);
+  if (completeness === 100) {
+    completionReward = await awardWalletCredits(user.id, "profile_100_percent").catch(err => {
+      console.error("Failed to award profile 100% credits:", err);
+      return null;
+    });
+    if (completionReward?.success) {
+      responseData.wallet = completionReward.newBalance;
+    }
+  }
+
+  return NextResponse.json({
+    ...responseData,
+    completeness,
+    completion_reward: completionReward,
+  });
 }

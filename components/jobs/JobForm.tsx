@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { validateJobPost } from "@/lib/job-posts/validation";
 
 interface Props {
   onPosted: () => void;
@@ -14,6 +15,7 @@ export function JobForm({ onPosted, onCancel, initialData }: Props) {
   const [company, setCompany] = useState(initialData?.company || "");
   const [experience, setExperience] = useState(initialData?.experience_years?.toString() || "");
   const [skills, setSkills] = useState(initialData?.skills || "");
+  const [description, setDescription] = useState(initialData?.description || "");
   const [isOnBehalf, setIsOnBehalf] = useState(initialData?.is_on_behalf || false);
   const [contactNumber, setContactNumber] = useState(initialData?.contact_number || "");
   const [loading, setLoading] = useState(false);
@@ -47,18 +49,35 @@ export function JobForm({ onPosted, onCancel, initialData }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!role.trim()) return;
-    setLoading(true);
     setError("");
+
+    const validation = validateJobPost({
+      type,
+      role,
+      company,
+      experience_years: experience,
+      skills,
+      description,
+      contact_number: contactNumber,
+      is_on_behalf: isOnBehalf,
+    });
+
+    if (!validation.valid || !validation.sanitized) {
+      setError(validation.errors[0]);
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const method = isEditing ? "PATCH" : "POST";
       const bodyPayload: any = {
-        type,
-        role,
-        company,
-        experience_years: experience,
-        skills,
+        type: validation.sanitized.type,
+        role: validation.sanitized.role,
+        company: validation.sanitized.company,
+        experience_years: validation.sanitized.experience_years,
+        skills: validation.sanitized.skills,
+        description: validation.sanitized.description,
         is_on_behalf: isOnBehalf,
         contact_number: contactNumber,
       };
@@ -197,6 +216,31 @@ export function JobForm({ onPosted, onCancel, initialData }: Props) {
               placeholder="e.g. React, Node.js, TypeScript"
               value={skills}
               onChange={(e) => setSkills(e.target.value)}
+            />
+          </div>
+
+          {/* Opportunity Description / Context */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
+                {type === "giver" ? "Role & Team Details *" : "What are you looking for? *"}
+              </span>
+              <span className={`text-[10px] font-semibold ${description.trim().length < 15 ? "text-amber-500" : "text-emerald-500"}`}>
+                {description.trim().length}/15 min chars
+              </span>
+            </div>
+            <textarea
+              required
+              minLength={15}
+              rows={3}
+              className="input text-sm resize-none"
+              placeholder={
+                type === "giver"
+                  ? "Describe responsibilities, team, work model (remote/hybrid), or referral requirements (min 15 chars)..."
+                  : "Describe your ideal role, domain preferences, notice period, or strengths (min 15 chars)..."
+              }
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
             />
           </div>
 

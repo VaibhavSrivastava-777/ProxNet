@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { User } from "@/lib/types";
 import {
   ProfileWizardStepId,
@@ -8,6 +8,7 @@ import {
   getMissingProfileWizardSteps,
 } from "@/lib/profile-wizard";
 import { LocationAutocomplete } from "@/components/map/LocationAutocomplete";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { formatLinkedInUrl, isSyntheticLinkedInUrl } from "@/lib/linkedin/normalize-url";
 
 interface ProfileWizardModalProps {
@@ -55,9 +56,10 @@ export function ProfileWizardModal({
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [company, setCompany] = useState("");
-  const [companySuggestions, setCompanySuggestions] = useState<string[]>([]);
-  const [fetchingCompanies, setFetchingCompanies] = useState(false);
   const [aboutMe, setAboutMe] = useState("");
+  const [backgroundParsing, setBackgroundParsing] = useState(false);
+  const [autoFilledToast, setAutoFilledToast] = useState<string | null>(null);
+  const parsedUrlsRef = useRef<Set<string>>(new Set());
 
   // Home Location state
   const [homeName, setHomeName] = useState("");
@@ -78,8 +80,6 @@ export function ProfileWizardModal({
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [isCompleted, setIsCompleted] = useState(false);
-
-  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check notification permission
   useEffect(() => {
@@ -125,39 +125,74 @@ export function ProfileWizardModal({
     }
   }, [isOpen, initialUser]);
 
-  // Debounced company suggestions from /api/companies
-  useEffect(() => {
-    if (!company || company.trim().length < 2) {
-      setCompanySuggestions([]);
-      return;
-    }
+  // Non-blocking background LinkedIn parser
+  const triggerBackgroundLinkedInParse = useCallback(
+    async (url: string) => {
+      const formatted = formatLinkedInUrl(url);
+      if (!formatted || parsedUrlsRef.current.has(formatted)) return;
+      parsedUrlsRef.current.add(formatted);
 
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-
-    searchDebounceRef.current = setTimeout(async () => {
-      setFetchingCompanies(true);
+      setBackgroundParsing(true);
       try {
-        const res = await fetch("/api/companies");
+        const res = await fetch(`/api/profile/parse-linkedin?url=${encodeURIComponent(formatted)}`);
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data.companies)) {
-            const matches = data.companies
-              .filter((c: string) => c.toLowerCase().includes(company.toLowerCase()))
-              .slice(0, 5);
-            setCompanySuggestions(matches);
+          if (data.success && data.data) {
+            const { company: pCompany, job_title: pTitle, professional_bio: pBio } = data.data;
+            const patchPayload: Record<string, any> = {};
+
+            setJobTitle((current) => {
+              if (!current.trim() && pTitle) {
+                patchPayload.job_title = pTitle;
+                return pTitle;
+              }
+              return current;
+            });
+
+            setCompany((current) => {
+              if (!current.trim() && pCompany) {
+                patchPayload.company = pCompany;
+                return pCompany;
+              }
+              return current;
+            });
+
+            setAboutMe((current) => {
+              if (!current.trim() && pBio) {
+                patchPayload.about = pBio;
+                patchPayload.professional_bio = pBio;
+                return pBio;
+              }
+              return current;
+            });
+
+            if (Object.keys(patchPayload).length > 0) {
+              const patchRes = await fetch("/api/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patchPayload),
+              });
+              if (patchRes.ok) {
+                const updatedUser = await patchRes.json();
+                setCurrentUser((prev) => {
+                  const merged = { ...prev, ...updatedUser, ...patchPayload };
+                  onUserUpdated(merged);
+                  return merged;
+                });
+              }
+              setAutoFilledToast("✨ Profile details auto-filled from LinkedIn");
+              setTimeout(() => setAutoFilledToast(null), 4000);
+            }
           }
         }
       } catch (err) {
-        console.warn("Failed to fetch company suggestions:", err);
+        console.warn("[ProfileWizardModal] Background LinkedIn parse failed:", err);
       } finally {
-        setFetchingCompanies(false);
+        setBackgroundParsing(false);
       }
-    }, 300);
-
-    return () => {
-      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    };
-  }, [company]);
+    },
+    [onUserUpdated]
+  );
 
   if (!isOpen) return null;
 
@@ -184,31 +219,8 @@ export function ProfileWizardModal({
         setLinkedinUrl(formatted);
         payload.linkedin_profile_url = formatted;
 
-        // Auto-fetch profile data from LinkedIn
-        try {
-          const res = await fetch(`/api/profile/parse-linkedin?url=${encodeURIComponent(formatted)}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success && data.data) {
-              const { company: pCompany, job_title: pTitle, professional_bio: pBio } = data.data;
-              if (pTitle && !jobTitle.trim()) {
-                payload.job_title = pTitle;
-                setJobTitle(pTitle);
-              }
-              if (pCompany && !company.trim()) {
-                payload.company = pCompany;
-                setCompany(pCompany);
-              }
-              if (pBio && !aboutMe.trim()) {
-                payload.professional_bio = pBio;
-                payload.about = pBio;
-                setAboutMe(pBio);
-              }
-            }
-          }
-        } catch (parseErr) {
-          console.warn("LinkedIn auto-parse attempt failed:", parseErr);
-        }
+        // Trigger background LinkedIn parse non-blockingly
+        triggerBackgroundLinkedInParse(formatted);
       } else if (currentStepId === "designation") {
         if (!jobTitle.trim()) {
           setErrorMsg("Please enter or select your designation / role.");
@@ -514,11 +526,26 @@ export function ProfileWizardModal({
             /* Step Views */
             <div className="flex flex-col gap-4">
               <div>
-                <h4 className="text-sm font-bold text-[var(--color-text)] m-0">{stepConfig?.title}</h4>
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-bold text-[var(--color-text)] m-0">{stepConfig?.title}</h4>
+                  {backgroundParsing && (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] text-[var(--color-primary)] font-medium bg-[var(--color-primary)]/10 px-2 py-0.5 rounded-full shrink-0">
+                      <span className="spinner-sm w-2.5 h-2.5 border-2" />
+                      Auto-filling from LinkedIn...
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-1 m-0 leading-relaxed">
                   {stepConfig?.subtitle}
                 </p>
               </div>
+
+              {autoFilledToast && (
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-800 dark:text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                  <span>✨</span>
+                  <span className="font-medium">{autoFilledToast}</span>
+                </div>
+              )}
 
               {/* Step: LinkedIn Profile URL */}
               {currentStepId === "linkedin_url" && (
@@ -528,7 +555,7 @@ export function ProfileWizardModal({
                     <div>
                       <span className="font-bold block">One-Click Auto-Fill</span>
                       <span className="opacity-90 block mt-0.5 text-[11px] leading-relaxed">
-                        Provide your LinkedIn URL and we&apos;ll automatically import your role, company, and bio to save you time.
+                        Provide your LinkedIn URL and we&apos;ll automatically import your role, company, and bio in the background to save you time.
                       </span>
                     </div>
                   </div>
@@ -556,7 +583,10 @@ export function ProfileWizardModal({
                         }}
                         onBlur={() => {
                           const formatted = formatLinkedInUrl(linkedinUrl);
-                          if (formatted) setLinkedinUrl(formatted);
+                          if (formatted) {
+                            setLinkedinUrl(formatted);
+                            triggerBackgroundLinkedInParse(formatted);
+                          }
                         }}
                         onKeyDown={(e) => e.key === "Enter" && handleSaveStep()}
                         autoFocus
@@ -571,19 +601,13 @@ export function ProfileWizardModal({
                     <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-xs">
                       <div className="flex items-center gap-1.5 overflow-hidden text-[var(--color-text-secondary)]">
                         <span>🔗</span>
-                        <span className="truncate font-mono text-[11px]">
+                        <span className="truncate font-mono text-[11px] text-[var(--color-primary)]">
                           {formatLinkedInUrl(linkedinUrl)}
                         </span>
                       </div>
-                      <a
-                        href={formatLinkedInUrl(linkedinUrl)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 dark:text-blue-400 font-semibold hover:underline shrink-0 ml-2 text-[11px] flex items-center gap-1"
-                      >
-                        <span>Verify</span>
-                        <span>↗</span>
-                      </a>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-[11px] flex items-center gap-1 shrink-0 ml-2">
+                        ✓ Ready
+                      </span>
                     </div>
                   )}
                 </div>
@@ -594,12 +618,11 @@ export function ProfileWizardModal({
                 <div className="flex flex-col gap-3">
                   <div>
                     <label className="label text-xs font-semibold">Your Designation / Job Title *</label>
-                    <input
-                      type="text"
-                      className="input w-full"
+                    <AutocompleteInput
+                      type="designation"
                       placeholder="e.g. Senior Software Engineer"
                       value={jobTitle}
-                      onChange={(e) => setJobTitle(e.target.value)}
+                      onChange={(val) => setJobTitle(val)}
                       onKeyDown={(e) => e.key === "Enter" && handleSaveStep()}
                       autoFocus
                     />
@@ -632,41 +655,16 @@ export function ProfileWizardModal({
               {/* Step: Company */}
               {currentStepId === "company" && (
                 <div className="flex flex-col gap-3">
-                  <div className="relative">
+                  <div>
                     <label className="label text-xs font-semibold">Company or Organization Name *</label>
-                    <input
-                      type="text"
-                      className="input w-full"
+                    <AutocompleteInput
+                      type="company"
                       placeholder="e.g. Google, Flipkart, Infosys"
                       value={company}
-                      onChange={(e) => setCompany(e.target.value)}
+                      onChange={(val) => setCompany(val)}
                       onKeyDown={(e) => e.key === "Enter" && handleSaveStep()}
                       autoFocus
                     />
-                    {fetchingCompanies && (
-                      <span className="absolute right-3 top-8 text-[11px] text-[var(--color-text-tertiary)] animate-pulse">
-                        Searching...
-                      </span>
-                    )}
-
-                    {companySuggestions.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        <span className="text-[11px] text-[var(--color-text-secondary)] w-full">Suggestions:</span>
-                        {companySuggestions.map((sug) => (
-                          <button
-                            key={sug}
-                            type="button"
-                            onClick={() => {
-                              setCompany(sug);
-                              setCompanySuggestions([]);
-                            }}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] text-[var(--color-primary)] font-medium"
-                          >
-                            🏢 {sug}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
@@ -899,14 +897,12 @@ export function ProfileWizardModal({
                     {saving ? (
                       <>
                         <span className="animate-spin inline-block">⏳</span>
-                        <span>{currentStepId === "linkedin_url" ? "Importing from LinkedIn..." : "Saving..."}</span>
+                        <span>Saving...</span>
                       </>
                     ) : (
                       <>
                         <span>
-                          {currentStepId === "linkedin_url"
-                            ? "Import & Next"
-                            : currentStepIndex === totalSteps - 1
+                          {currentStepIndex === totalSteps - 1
                             ? "Save & Finish"
                             : "Save & Next"}
                         </span>

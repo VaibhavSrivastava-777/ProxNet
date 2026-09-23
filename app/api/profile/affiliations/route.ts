@@ -25,21 +25,29 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { institute_id, degree, batch_year } = body;
+    const { institute_id, institute_name, degree, batch_year } = body;
 
     if (!institute_id) {
       return NextResponse.json({ error: "Institute ID is required" }, { status: 400 });
     }
 
+    if (institute_id === "other" && (!institute_name || !institute_name.trim())) {
+      return NextResponse.json({ error: "Institute name is required when choosing 'Others'" }, { status: 400 });
+    }
+
     const affiliation = await addAffiliation({
       userId: user.id,
       instituteId: institute_id,
+      instituteName: institute_name || null,
       degree: degree || null,
       batchYear: batch_year ? Number(batch_year) : null,
       userEmail: user.email,
     });
 
-    return NextResponse.json({ affiliation });
+    return NextResponse.json({
+      affiliation,
+      newInstitute: affiliation?.institute || null,
+    });
   } catch (error: any) {
     console.error("Error in POST /api/profile/affiliations:", error);
     return NextResponse.json({ error: error.message || "Failed to add affiliation" }, { status: 500 });

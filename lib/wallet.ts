@@ -9,13 +9,15 @@ export type CreditReason =
   | "push_notifications_enabled"
   | "shared_job_opportunity"
   | "responded_referral_ask"
-  | "answered_career_question";
+  | "answered_career_question"
+  | "profile_100_percent";
 
 export const CREDIT_REWARDS: Record<CreditReason, { amount: number; label: string }> = {
   push_notifications_enabled: { amount: 5, label: "Enabling Notifications" },
   shared_job_opportunity: { amount: 5, label: "Sharing a Job Opportunity" },
   responded_referral_ask: { amount: 5, label: "Responding to a Referral Ask" },
   answered_career_question: { amount: 3, label: "Answering a Career Question" },
+  profile_100_percent: { amount: 5, label: "Completing 100% of Profile" },
 };
 
 export interface AwardCreditsResult {
@@ -66,6 +68,15 @@ export async function awardWalletCredits(
         message: "Push reward already claimed",
       };
     }
+  } else if (reason === "profile_100_percent") {
+    if (profileDigest.profile_100_reward_claimed || rewardedActions.includes("profile_100_percent")) {
+      return {
+        success: false,
+        creditsAwarded: 0,
+        newBalance: currentWallet,
+        message: "Profile completion reward already claimed",
+      };
+    }
   } else if (referenceId) {
     const actionKey = `${reason}:${referenceId}`;
     if (rewardedActions.includes(actionKey)) {
@@ -90,6 +101,9 @@ export async function awardWalletCredits(
     rewarded_actions: newRewardedActions,
     ...(reason === "push_notifications_enabled"
       ? { push_reward_claimed: true, push_reward_claimed_at: new Date().toISOString() }
+      : {}),
+    ...(reason === "profile_100_percent"
+      ? { profile_100_reward_claimed: true, profile_100_reward_claimed_at: new Date().toISOString() }
       : {}),
     last_reward_at: new Date().toISOString(),
   };

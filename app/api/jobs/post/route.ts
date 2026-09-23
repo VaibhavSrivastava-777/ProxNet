@@ -3,6 +3,8 @@ import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { awardPoints } from "@/lib/award-points";
 import { awardWalletCredits } from "@/lib/wallet";
+import { notifyUsersWithin2km } from "@/lib/notifications";
+import { validateJobPost } from "@/lib/job-posts/validation";
 
 function extractTop5Skills(skills: string): string {
   if (!skills) return "";
@@ -31,22 +33,38 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { type, role, company, experience_years, skills, is_on_behalf, contact_number } = body;
 
-  if (!type || !role) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  const validation = validateJobPost({
+    type,
+    role,
+    company,
+    experience_years,
+    skills,
+    description: body.description,
+    contact_number,
+    is_on_behalf,
+  });
+
+  if (!validation.valid || !validation.sanitized) {
+    return NextResponse.json(
+      { error: validation.errors[0], errors: validation.errors },
+      { status: 400 }
+    );
   }
 
-  const processedSkills = extractTop5Skills(skills);
+  const { sanitized } = validation;
+  const processedSkills = extractTop5Skills(sanitized.skills);
   const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("job_posts")
     .insert({
       user_id: user.id,
-      type,
-      role,
-      company: company || null,
-      experience_years: parseInt(experience_years) || 0,
-      skills: processedSkills || null,
+      type: sanitized.type,
+      role: sanitized.role,
+      company: sanitized.company,
+      experience_years: parseInt(sanitized.experience_years) || 0,
+      skills: processedSkills || sanitized.skills,
+      description: sanitized.description,
       status: "active",
       is_on_behalf: is_on_behalf || false,
       contact_number: contact_number || null
@@ -55,6 +73,21 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Notify neighbors within 2km radius about this Hiring / Looking opportunity
+  const centerLat = user.home_lat ?? user.office_lat;
+  const centerLng = user.home_lng ?? user.office_lng;
+  if (centerLat != null && centerLng != null) {
+    notifyUsersWithin2km({
+      creatorId: user.id,
+      centerLat: Number(centerLat),
+      centerLng: Number(centerLng),
+      title: type === "giver" ? `New Hiring Referral nearby: ${role}` : `Neighbor Looking for Role nearby: ${role}`,
+      body: `${company ? `${company} · ` : ""}${role}`,
+      url: `/jobs`,
+      data: { jobPostId: data.id, type: "job_post_nearby" },
+    }).catch((err) => console.error("2km notification error for job post:", err));
+  }
 
   // Award points to the inviter if this is the invitee's first job post
   if (user.invited_by) {
@@ -249,21 +282,41 @@ export async function PATCH(request: Request) {
   const body = await request.json();
   const { id, type, role, company, experience_years, skills, is_on_behalf, contact_number } = body;
 
-  if (!id || !type || !role) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  if (!id) {
+    return NextResponse.json({ error: "Missing post ID" }, { status: 400 });
   }
 
-  const processedSkills = extractTop5Skills(skills);
+  const validation = validateJobPost({
+    type,
+    role,
+    company,
+    experience_years,
+    skills,
+    description: body.description,
+    contact_number,
+    is_on_behalf,
+  });
+
+  if (!validation.valid || !validation.sanitized) {
+    return NextResponse.json(
+      { error: validation.errors[0], errors: validation.errors },
+      { status: 400 }
+    );
+  }
+
+  const { sanitized } = validation;
+  const processedSkills = extractTop5Skills(sanitized.skills);
   const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("job_posts")
     .update({
-      type,
-      role,
-      company: company || null,
-      experience_years: parseInt(experience_years) || 0,
-      skills: processedSkills || null,
+      type: sanitized.type,
+      role: sanitized.role,
+      company: sanitized.company,
+      experience_years: parseInt(sanitized.experience_years) || 0,
+      skills: processedSkills || sanitized.skills,
+      description: sanitized.description,
       is_on_behalf: is_on_behalf || false,
       contact_number: contact_number || null
     })

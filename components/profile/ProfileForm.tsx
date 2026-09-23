@@ -1,15 +1,23 @@
 "use client";
 
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import { LocationAutocomplete } from "@/components/map/LocationAutocomplete";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import type { User, UserVisibility, Institute, UserInstituteAffiliation } from "@/lib/types";
 import { createBrowserClient } from "@/lib/supabase/client";
-import { isProfileIncomplete } from "@/lib/profile-validation";
+import {
+  isProfileIncomplete,
+  checkOnboardingRequirements,
+  calculateProfileCompleteness,
+  getProfileCompletenessItems,
+  getMissingProfileFields,
+} from "@/lib/profile-validation";
 import { calculateTier } from "@/lib/network-score";
 import { RechargeModal } from "@/components/RechargeModal";
 import { formatLinkedInUrl } from "@/lib/linkedin/normalize-url";
+import { ProfilePreview } from "@/components/profile/ProfilePreview";
 
 /* ----------------------------------------------------------------
    Collapsible Section
@@ -20,12 +28,16 @@ function CollapsibleSection({
   defaultOpen = false,
   children,
   id,
+  badge,
+  onToggle,
 }: {
   icon: ReactNode;
   title: string;
   defaultOpen?: boolean;
   children: ReactNode;
   id?: string;
+  badge?: { text: string; color: "green" | "amber" | "gray" };
+  onToggle?: (isOpen: boolean) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -56,11 +68,17 @@ function CollapsibleSection({
     }
   }, [open]);
 
+  const handleToggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (onToggle) onToggle(next);
+  };
+
   return (
     <div className="card" id={id} style={{ overflow: "hidden" }}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleToggle}
         style={{
           display: "flex",
           alignItems: "center",
@@ -76,8 +94,21 @@ function CollapsibleSection({
         <span style={{ display: "flex", color: "var(--color-accent)", fontSize: 20 }}>
           {icon}
         </span>
-        <span className="text-h3" style={{ flex: 1, textAlign: "left" }}>
+        <span className="text-h3" style={{ flex: 1, textAlign: "left", display: "flex", alignItems: "center", gap: 8 }}>
           {title}
+          {badge && (
+            <span
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                badge.color === "green"
+                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                  : badge.color === "amber"
+                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                  : "bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)] border border-[var(--color-border-light)]"
+              }`}
+            >
+              {badge.text}
+            </span>
+          )}
         </span>
         <svg
           width="20"
@@ -236,6 +267,14 @@ export function ProfileForm({ initialUser }: Props) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasMounted = useRef(false);
+
   const [fetchingHome, setFetchingHome] = useState(false);
   const [fetchingOffice, setFetchingOffice] = useState(false);
   const [uploadingResume, setUploadingResume] = useState(false);
@@ -255,9 +294,163 @@ export function ProfileForm({ initialUser }: Props) {
   const [loadingAffiliations, setLoadingAffiliations] = useState(false);
   const [showAddAffiliation, setShowAddAffiliation] = useState(false);
   const [selectedInstituteId, setSelectedInstituteId] = useState("");
+  const [customInstituteName, setCustomInstituteName] = useState("");
   const [affiliationDegree, setAffiliationDegree] = useState("");
   const [affiliationBatchYear, setAffiliationBatchYear] = useState("");
   const [savingAffiliation, setSavingAffiliation] = useState(false);
+
+  // Photo Upload Handler
+  const handlePhotoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setToast({ message: "Please select an image file (JPEG, PNG, WebP)", type: "error" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setToast({ message: "Image must be under 5MB", type: "error" });
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/profile/upload-photo", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to upload photo");
+      }
+
+      const data = await res.json();
+      setUser((prev: any) => ({ ...prev, profile_photo_url: data.photoUrl }));
+      setToast({ message: "Profile photo updated successfully!", type: "success" });
+      setAutoSaveStatus("saved");
+      setLastSavedAt(new Date());
+    } catch (err: any) {
+      console.error("Photo upload error:", err);
+      setToast({ message: err.message || "Failed to upload photo", type: "error" });
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    }
+  };
+
+  const visibility = (user.visibility || {}) as UserVisibility;
+
+  // Perform Auto-Save in background without redirecting
+  const performAutoSave = useCallback(
+    async (overrideUser?: typeof user) => {
+      const targetUser = overrideUser || user;
+      if (!targetUser.full_name?.trim() && !targetUser.email?.trim()) return;
+
+      setAutoSaveStatus("saving");
+      try {
+        const res = await fetch("/api/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            full_name: targetUser.full_name,
+            company: targetUser.company,
+            job_title: targetUser.job_title,
+            about: targetUser.about,
+            professional_bio: targetUser.professional_bio,
+            resume_url: targetUser.resume_url,
+            resume_text: targetUser.resume_text,
+            phone_number: targetUser.phone_number,
+            profile_photo_url: targetUser.profile_photo_url,
+            linkedin_profile_url: targetUser.linkedin_profile_url,
+            home_name: targetUser.home_name,
+            home_lat: targetUser.home_lat ? Number(targetUser.home_lat) : null,
+            home_lng: targetUser.home_lng ? Number(targetUser.home_lng) : null,
+            office_name: targetUser.office_name,
+            office_lat: targetUser.office_lat ? Number(targetUser.office_lat) : null,
+            office_lng: targetUser.office_lng ? Number(targetUser.office_lng) : null,
+            anonymous_name: targetUser.anonymous_name,
+            tags: targetUser.tags || [],
+            help_offers: helpOffers,
+            tinkering_with: tinkeringWith,
+            ask_me_about: askMeAbout,
+            quick_chat_preference: quickChatPref,
+            society_name: societyName.trim() || null,
+            active_location: "home",
+            visibility,
+          }),
+        });
+
+        if (res.ok) {
+          const resData = await res.json();
+          setAutoSaveStatus("saved");
+          setLastSavedAt(new Date());
+
+          if (resData.completion_reward?.success) {
+            setToast({
+              message: "🎉 100% Profile Completed! +5 credits added to your wallet!",
+              type: "success",
+            });
+            window.dispatchEvent(
+              new CustomEvent("proxnet:wallet-updated", {
+                detail: { newBalance: resData.wallet },
+              })
+            );
+          }
+        } else {
+          setAutoSaveStatus("error");
+        }
+      } catch (e) {
+        console.error("Auto-save error:", e);
+        setAutoSaveStatus("error");
+      }
+    },
+    [user, helpOffers, tinkeringWith, askMeAbout, quickChatPref, societyName, visibility]
+  );
+
+  // Debounced auto-save effect
+  useEffect(() => {
+    if (!hasMounted.current) {
+      hasMounted.current = true;
+      return;
+    }
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    setAutoSaveStatus("saving");
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      performAutoSave();
+    }, 1500);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [
+    user.full_name,
+    user.company,
+    user.job_title,
+    user.about,
+    user.professional_bio,
+    user.linkedin_profile_url,
+    user.home_name,
+    user.home_lat,
+    user.home_lng,
+    user.office_name,
+    user.office_lat,
+    user.office_lng,
+    user.anonymous_name,
+    user.phone_number,
+    helpOffers,
+    tinkeringWith,
+    askMeAbout,
+    quickChatPref,
+    societyName,
+    visibility,
+    performAutoSave,
+  ]);
 
   useEffect(() => {
     // Load institutes directory
@@ -279,13 +472,26 @@ export function ProfileForm({ initialUser }: Props) {
       .finally(() => setLoadingAffiliations(false));
   }, []);
 
-  const showName = !user.full_name?.trim();
-  const showEmail = !user.email?.trim();
-  const showHomeLocation = user.home_lat == null || user.home_lng == null;
+  // Minimum onboarding requirements check (Name, Email, Designation, Company, Home Location)
+  const onboardingReqs = checkOnboardingRequirements(user);
+  const showName = !onboardingReqs.hasName;
+  const showEmail = !onboardingReqs.hasEmail;
+  const showDesignation = !onboardingReqs.hasDesignation;
+  const showCompany = !onboardingReqs.hasCompany;
+  const showHomeLocation = !onboardingReqs.hasHomeLocation;
 
-  const hasMissingFields = showName || showEmail || showHomeLocation;
+  const hasMissingFields = showName || showEmail || showDesignation || showCompany || showHomeLocation;
   const [dismissedModal, setDismissedModal] = useState(false);
-  const showModal = hasMissingFields && !dismissedModal;
+  const showModal = (hasMissingFields || isOnboarding) && !dismissedModal;
+
+  const completeness = calculateProfileCompleteness({
+    ...user,
+    help_offers: helpOffers,
+    tinkering_with: tinkeringWith,
+    ask_me_about: askMeAbout,
+    quick_chat_preference: quickChatPref,
+    society_name: societyName,
+  });
 
   useEffect(() => {
     // Automatically detect current GPS location and set as Home if not yet set
@@ -436,6 +642,10 @@ export function ProfileForm({ initialUser }: Props) {
 
   const handleAddAffiliation = async () => {
     if (!selectedInstituteId) return;
+    if (selectedInstituteId === "other" && !customInstituteName.trim()) {
+      setToast({ message: "Please enter your institute or university name.", type: "error" });
+      return;
+    }
     setSavingAffiliation(true);
     try {
       const res = await fetch("/api/profile/affiliations", {
@@ -443,6 +653,7 @@ export function ProfileForm({ initialUser }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           institute_id: selectedInstituteId,
+          institute_name: selectedInstituteId === "other" ? customInstituteName.trim() : undefined,
           degree: affiliationDegree || null,
           batch_year: affiliationBatchYear ? Number(affiliationBatchYear) : null,
         }),
@@ -454,8 +665,17 @@ export function ProfileForm({ initialUser }: Props) {
             const filtered = prev.filter((a) => a.id !== data.affiliation.id);
             return [data.affiliation, ...filtered];
           });
+          if (data.newInstitute) {
+            setInstitutes((prev) => {
+              const exists = prev.some((i) => i.id === data.newInstitute.id);
+              if (exists) return prev;
+              const next = [...prev, data.newInstitute];
+              return next.sort((a, b) => a.name.localeCompare(b.name));
+            });
+          }
           setShowAddAffiliation(false);
           setSelectedInstituteId("");
+          setCustomInstituteName("");
           setAffiliationDegree("");
           setAffiliationBatchYear("");
           setToast({
@@ -520,8 +740,6 @@ export function ProfileForm({ initialUser }: Props) {
     }
   };
 
-  const visibility = user.visibility as UserVisibility;
-
   const [aliasError, setAliasError] = useState("");
   const [checkingAlias, setCheckingAlias] = useState(false);
 
@@ -572,16 +790,27 @@ export function ProfileForm({ initialUser }: Props) {
 
   const isNameValid = !!user.full_name?.trim();
   const isEmailValid = !!user.email?.trim();
-  const isHomeLocationValid = user.home_lat != null && user.home_lng != null;
+  const isDesignationValid = !!user.job_title?.trim();
+  const isCompanyValid = !!user.company?.trim();
+  const isHomeLocationValid =
+    (user.home_lat != null &&
+      user.home_lng != null &&
+      !isNaN(Number(user.home_lat)) &&
+      !isNaN(Number(user.home_lng))) ||
+    !!user.home_name?.trim();
 
   const missingFields: string[] = [];
   if (!isNameValid) missingFields.push("Full Name");
   if (!isEmailValid) missingFields.push("Email Address");
+  if (!isDesignationValid) missingFields.push("Designation / Role");
+  if (!isCompanyValid) missingFields.push("Company Name");
   if (!isHomeLocationValid) missingFields.push("Home Location");
 
   const canSubmit =
     isNameValid &&
     isEmailValid &&
+    isDesignationValid &&
+    isCompanyValid &&
     isHomeLocationValid &&
     !aliasError;
 
@@ -644,12 +873,27 @@ export function ProfileForm({ initialUser }: Props) {
     if (res.ok) {
       const data = await res.json();
       setUser(data);
+      setAutoSaveStatus("saved");
+      setLastSavedAt(new Date());
       setMessage("Profile saved.");
       setEditing(false);
-      router.push("/");
+      setDismissedModal(true);
+      setToast({ message: "✓ Profile completed successfully!", type: "success" });
+      if (data.completion_reward?.success) {
+        setToast({
+          message: "🎉 100% Profile Completed! +5 credits added to your wallet!",
+          type: "success",
+        });
+        window.dispatchEvent(
+          new CustomEvent("proxnet:wallet-updated", {
+            detail: { newBalance: data.wallet },
+          })
+        );
+      }
     } else {
       const errData = await res.json().catch(() => ({}));
       setMessage(errData.error || "Failed to save profile.");
+      setAutoSaveStatus("error");
     }
   }
 
@@ -749,12 +993,26 @@ export function ProfileForm({ initialUser }: Props) {
     if (res.ok) {
       const data = await res.json();
       setUser(data);
+      setAutoSaveStatus("saved");
+      setLastSavedAt(new Date());
       setMessage("Profile saved.");
       setEditing(false);
-      router.push("/");
+      setToast({ message: "✓ Profile saved successfully!", type: "success" });
+      if (data.completion_reward?.success) {
+        setToast({
+          message: "🎉 100% Profile Completed! +5 credits added to your wallet!",
+          type: "success",
+        });
+        window.dispatchEvent(
+          new CustomEvent("proxnet:wallet-updated", {
+            detail: { newBalance: data.wallet },
+          })
+        );
+      }
     } else {
       const errData = await res.json().catch(() => ({}));
       setMessage(errData.error || "Failed to save profile.");
+      setAutoSaveStatus("error");
     }
   }
 
@@ -800,7 +1058,42 @@ export function ProfileForm({ initialUser }: Props) {
     .toUpperCase()
     .slice(0, 2);
 
-  const subtitle = [user.job_title, user.company].filter(Boolean).join(" at ");
+  if (previewMode) {
+    return (
+      <div className="space-y-6 animate-fadeIn">
+        {/* Toggle Bar */}
+        <div className="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border)] p-4 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">👀</span>
+            <div>
+              <h2 className="text-base font-bold text-[var(--color-text)] m-0">Network Proximity View</h2>
+              <p className="text-xs text-[var(--color-text-secondary)] m-0 mt-0.5">
+                This is how verified neighbors within 2 km see your card on the Proximity Map
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPreviewMode(false)}
+            className="btn btn-primary btn-sm flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>✏️</span> Back to Edit
+          </button>
+        </div>
+
+        {/* Profile Preview Component */}
+        <ProfilePreview
+          user={user}
+          onEditClick={() => setPreviewMode(false)}
+          instituteAffiliation={
+            affiliations.length > 0
+              ? `${affiliations[0].institute?.name || "Institute"}${affiliations[0].degree ? ` • ${affiliations[0].degree}` : ""}`
+              : null
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -862,172 +1155,295 @@ export function ProfileForm({ initialUser }: Props) {
         </div>
       )}
 
-      {/* ---- Profile Header Card ---- */}
-      <div className="card" style={{ overflow: "hidden", position: "relative" }}>
-        {/* Banner */}
+      {/* ---- Smart Profile Header Card with Completeness Ring & Auto-Save ---- */}
+      <div className="card overflow-hidden relative shadow-md rounded-2xl border border-[var(--color-border)] mb-6">
+        {/* Banner with Mode Toggle & Auto-Save Badge */}
         <div
+          className="h-24 sm:h-28 w-full p-4 flex items-start justify-between relative"
           style={{
-            height: 80,
-            background: "linear-gradient(135deg, var(--color-primary), var(--color-accent))",
-          }}
-        />
-
-        {/* Edit button */}
-        <button
-          type="button"
-          onClick={() => setEditing((v) => !v)}
-          className="btn btn-secondary btn-sm"
-          style={{
-            position: "absolute",
-            top: 12,
-            right: 12,
-            background: "rgba(255,255,255,0.85)",
-            backdropFilter: "blur(4px)",
+            background: "linear-gradient(135deg, var(--color-primary), #0891b2, #4f46e5)",
           }}
         >
-          {PencilIcon}
-          <span>{editing ? "Cancel" : "Edit Profile"}</span>
-        </button>
-
-        {/* Profile info */}
-        <div
-          style={{
-            padding: "0 20px 20px",
-            marginTop: -40,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-start",
-            gap: 8,
-          }}
-        >
-          {/* Avatar */}
-          <div
-            className="avatar avatar-xl"
-            style={{
-              border: "3px solid var(--color-surface)",
-              boxShadow: "var(--shadow-md)",
-            }}
-          >
-            {user.profile_photo_url ? (
-              <img src={user.profile_photo_url} alt={user.full_name} />
-            ) : (
-              initials
-            )}
+          {/* Proximity Preview Mode Switcher */}
+          <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md p-1 rounded-xl border border-white/15">
+            <button
+              type="button"
+              onClick={() => setPreviewMode(false)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer border-none flex items-center gap-1.5 ${
+                !previewMode
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "bg-transparent text-white/80 hover:text-white"
+              }`}
+            >
+              <span>✏️</span> Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreviewMode(true)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer border-none flex items-center gap-1.5 ${
+                previewMode
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "bg-transparent text-white/80 hover:text-white"
+              }`}
+            >
+              <span>👀</span> Proximity Card View
+            </button>
           </div>
 
-          <div>
-            <h2 className="text-h2">{user.full_name}</h2>
-            {subtitle && (
-              <p className="text-body-sm" style={{ marginTop: 2 }}>
-                {subtitle}
-              </p>
-            )}
-            {user.email && (
-              <p className="text-caption" style={{ marginTop: 2 }}>
-                {user.email}
-              </p>
-            )}
-            {affiliations.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {affiliations.map((aff) => {
-                  const isVerified = aff.verification_status === "verified_domain";
-                  return (
-                    <span
-                      key={aff.id}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full"
-                      style={{
-                        backgroundColor: isVerified ? "var(--color-success-bg, rgba(16, 185, 129, 0.15))" : "var(--color-surface-secondary)",
-                        color: isVerified ? "var(--color-success, #059669)" : "var(--color-primary)",
-                        border: `1px solid ${isVerified ? "rgba(16, 185, 129, 0.3)" : "var(--color-border-light)"}`,
-                      }}
-                      title={isVerified ? "Verified Alumni via institutional email" : "Claimed Alumni affiliation"}
-                    >
-                      🎓 {aff.institute?.name || "Institute"}
-                      {aff.batch_year ? ` '${String(aff.batch_year).slice(-2)}` : ""}
-                      {isVerified ? " ✓" : ""}
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Network Stats & Grow Nudge */}
-      <div className="flex flex-col gap-3 mb-6 animate-fadeInUp">
-        {/* Follow & Credits Stats Grid */}
-        <div className="card p-4 bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-xl shadow-sm flex items-center justify-around text-center divide-x divide-[var(--color-border-light)]" style={{ display: "flex", flexDirection: "row" }}>
-          <div className="flex-1">
-            <div className="text-xl font-extrabold text-[var(--color-primary)]">{followStats.followingCount}</div>
-            <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider mt-0.5">Following</div>
-          </div>
-          <div className="flex-1">
-            <div className="text-xl font-extrabold text-[var(--color-primary)]">{followStats.followerCount}</div>
-            <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider mt-0.5">Followers</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowRechargeModal(true)}
-            className="flex-1 bg-transparent border-0 cursor-pointer hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors p-1"
-            title="Click to view or recharge wallet credits"
-          >
-            <div className="text-xl font-extrabold text-[var(--color-primary)] flex items-center justify-center gap-1">
-              <span>{user.wallet ?? 0}</span>
-              <span className="text-sm">⚡</span>
-            </div>
-            <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider mt-0.5">
-              Credits <span className="text-[var(--color-primary)] underline ml-0.5">Recharge</span>
-            </div>
-          </button>
-        </div>
-
-        {/* Grow Nudge Card */}
-        <div className="card p-4 bg-[var(--color-accent-subtle)] border border-[var(--color-accent)]/20 rounded-xl shadow-sm flex flex-col gap-2">
-          <div className="flex items-center gap-2" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-            <span style={{ fontSize: 18 }}>🌱</span>
-            <span className="text-sm font-bold text-[var(--color-text)]">Grow your professional neighborhood</span>
-          </div>
-          <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed">
-            Invite colleagues and neighbors to join ProxNet to unlock more job referrals, carpools, and discussions near you!
-          </p>
-          <button
-            type="button"
-            onClick={handleShareInvite}
-            className="btn btn-sm btn-primary self-start mt-1 flex items-center gap-1.5 cursor-pointer border-none"
-            style={{ fontSize: 11, padding: "6px 14px", display: "inline-flex", alignItems: "center", width: "fit-content" }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 6 }}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-            Share Invite Link
-          </button>
-        </div>
-      </div>
-
-      {/* Complete Profile Amber Zone Banner */}
-      {missingFields.length > 0 && (
-        <div className="card p-4 rounded-xl border border-amber-500/20 bg-amber-500/10 text-[var(--color-text)] flex flex-col gap-3 shadow-sm animate-fadeIn mb-6" style={{ display: "flex", flexDirection: "column" }}>
-          <div className="flex items-center gap-2" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-            <span style={{ fontSize: 18 }}>⚠️</span>
-            <span className="text-sm font-bold text-amber-700 dark:text-amber-400">Amber Zone: Complete Your Profile</span>
-          </div>
-          <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed">
-            Your profile is partially complete. To unlock all Proximity matching benefits, please fill in the following:
-          </p>
-          <div className="flex flex-wrap gap-2 mt-1" style={{ display: "flex", flexDirection: "row", flexWrap: "wrap" }}>
-            {missingFields.map((field) => (
-              <span 
-                key={field} 
-                className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30"
-              >
-                {field}
+          {/* Live Auto-Save Indicator */}
+          <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/15 text-xs text-white">
+            {autoSaveStatus === "saving" ? (
+              <span className="flex items-center gap-1.5 text-blue-200">
+                <span className="animate-spin inline-block text-xs">🔄</span>
+                <span>Saving...</span>
               </span>
-            ))}
+            ) : autoSaveStatus === "error" ? (
+              <span className="flex items-center gap-1.5 text-rose-300">
+                <span>⚠️</span>
+                <span>Error saving</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-emerald-300">
+                <span>✓</span>
+                <span>{lastSavedAt ? "Auto-saved" : "All saved"}</span>
+              </span>
+            )}
           </div>
         </div>
-      )}
+
+        {/* Profile info with Circular Completeness Ring around Avatar */}
+        <div className="px-5 pb-5 pt-0 relative -mt-10 sm:-mt-12 flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div className="flex items-end gap-4">
+              {/* Circular Completeness Ring */}
+              <div className="relative flex items-center justify-center shrink-0">
+                <svg className="w-24 h-24 sm:w-28 sm:h-28 -rotate-90">
+                  <circle
+                    cx="50%"
+                    cy="50%"
+                    r="40"
+                    stroke="var(--color-border-light)"
+                    strokeWidth="5"
+                    fill="transparent"
+                  />
+                  <circle
+                    cx="50%"
+                    cy="50%"
+                    r="40"
+                    stroke="var(--color-primary)"
+                    strokeWidth="5"
+                    fill="transparent"
+                    strokeDasharray={2 * Math.PI * 40}
+                    strokeDashoffset={2 * Math.PI * 40 * (1 - completeness / 100)}
+                    strokeLinecap="round"
+                    className="transition-all duration-700 ease-out"
+                  />
+                </svg>
+
+                {/* Avatar with click-to-upload */}
+                <div
+                  onClick={() => photoInputRef.current?.click()}
+                  title="Click to change profile photo"
+                  className="absolute inset-2.5 rounded-full overflow-hidden border-2 border-[var(--color-surface)] shadow-md group cursor-pointer bg-[var(--color-surface-secondary)]"
+                >
+                  {user.profile_photo_url ? (
+                    <img
+                      src={user.profile_photo_url}
+                      alt={user.full_name || "Profile"}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-bold text-xl flex items-center justify-center">
+                      {initials}
+                    </div>
+                  )}
+
+                  {/* Camera overlay hover */}
+                  <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-semibold">
+                    <span>📷</span>
+                    <span>{uploadingPhoto ? "Uploading..." : "Change"}</span>
+                  </div>
+                </div>
+
+                {/* Photo upload camera button */}
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={uploadingPhoto}
+                  className="absolute bottom-1 right-1 w-7 h-7 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center shadow-md hover:scale-105 transition-transform border-2 border-[var(--color-surface)] cursor-pointer"
+                  title="Upload profile photo"
+                >
+                  {uploadingPhoto ? (
+                    <span className="spinner spinner-xs" style={{ borderTopColor: "white" }} />
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  )}
+                </button>
+                <input
+                  type="file"
+                  ref={photoInputRef}
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoFileUpload}
+                />
+              </div>
+
+              {/* Identity summary */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)] m-0">
+                    {user.full_name || "New Professional"}
+                  </h2>
+                  {user.anonymous_name && (
+                    <span className="text-xs text-[var(--color-text-tertiary)] bg-[var(--color-surface-secondary)] px-2 py-0.5 rounded-md border border-[var(--color-border-light)]">
+                      @{user.anonymous_name}
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] font-medium m-0">
+                  {user.job_title || "Designation"} {user.company ? `at ${user.company}` : ""}
+                </p>
+
+                {user.email && (
+                  <p className="text-xs text-[var(--color-text-tertiary)] m-0">
+                    {user.email}
+                  </p>
+                )}
+
+                {affiliations.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {affiliations.map((aff) => {
+                      const isVerified = aff.verification_status === "verified_domain";
+                      return (
+                        <span
+                          key={aff.id}
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                          style={{
+                            backgroundColor: isVerified
+                              ? "var(--color-success-bg, rgba(16, 185, 129, 0.15))"
+                              : "var(--color-surface-secondary)",
+                            color: isVerified ? "var(--color-success, #059669)" : "var(--color-primary)",
+                            border: `1px solid ${
+                              isVerified ? "rgba(16, 185, 129, 0.3)" : "var(--color-border-light)"
+                            }`,
+                          }}
+                        >
+                          🎓 {aff.institute?.name || "Institute"}
+                          {aff.batch_year ? ` '${String(aff.batch_year).slice(-2)}` : ""}
+                          {isVerified ? " ✓" : ""}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Profile Completeness Pill CTA */}
+            <div className="flex flex-col sm:items-end gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const missing = getMissingProfileFields(user);
+                  if (missing.length > 0) {
+                    const firstMissing = getProfileCompletenessItems(user).find((i) => !i.completed);
+                    if (firstMissing?.sectionId) {
+                      document.getElementById(firstMissing.sectionId)?.scrollIntoView({ behavior: "smooth" });
+                    }
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer ${
+                  completeness === 100
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                    : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/25 hover:bg-blue-500/15"
+                }`}
+              >
+                <span>{completeness === 100 ? "🏆" : "⚡"}</span>
+                <span>
+                  {completeness === 100
+                    ? "100% Profile Complete! (+5 Credits Claimed)"
+                    : `${completeness}% Complete — Tap to complete`}
+                </span>
+                {completeness < 100 && <span>&rarr;</span>}
+              </button>
+            </div>
+          </div>
+
+          {/* Consolidated Stats & Neighborhood Grow Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-[var(--color-border-light)]">
+            {/* Following / Followers / Credits */}
+            <div className="bg-[var(--color-surface-secondary)] p-3 rounded-xl border border-[var(--color-border-light)] flex items-center justify-around text-center divide-x divide-[var(--color-border-light)]">
+              <div className="flex-1">
+                <div className="text-lg font-extrabold text-[var(--color-primary)]">
+                  {followStats.followingCount}
+                </div>
+                <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider">
+                  Following
+                </div>
+              </div>
+              <div className="flex-1">
+                <div className="text-lg font-extrabold text-[var(--color-primary)]">
+                  {followStats.followerCount}
+                </div>
+                <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider">
+                  Followers
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRechargeModal(true)}
+                className="flex-1 bg-transparent border-0 cursor-pointer hover:opacity-80 transition-opacity p-0"
+                title="Click to recharge wallet credits"
+              >
+                <div className="text-lg font-extrabold text-[var(--color-primary)] flex items-center justify-center gap-1">
+                  <span>{user.wallet ?? 0}</span>
+                  <span className="text-xs">⚡</span>
+                </div>
+                <div className="text-[10px] text-[var(--color-text-secondary)] font-bold uppercase tracking-wider">
+                  Credits <span className="text-[var(--color-primary)] underline">Top-up</span>
+                </div>
+              </button>
+            </div>
+
+            {/* Neighborhood Grow Nudge */}
+            <div className="bg-[var(--color-accent-subtle)] p-3 rounded-xl border border-[var(--color-accent)]/20 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-[var(--color-text)] flex items-center gap-1">
+                  <span>🌱</span> Grow 2km Neighborhood
+                </div>
+                <p className="text-[11px] text-[var(--color-text-secondary)] m-0 truncate">
+                  Invite nearby colleagues & neighbors to unlock referrals.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleShareInvite}
+                className="px-3 py-1.5 rounded-lg bg-[var(--color-primary)] text-white text-xs font-semibold hover:bg-[var(--color-primary-hover)] transition-colors border-none cursor-pointer shrink-0"
+              >
+                Invite Link
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* ---- Section: Personal Information ---- */}
-      <CollapsibleSection icon={PersonIcon} title="Personal Information" defaultOpen>
+      <CollapsibleSection
+        id="section-personal"
+        icon={PersonIcon}
+        title="Personal Information"
+        defaultOpen
+        badge={
+          user.full_name && user.email && user.job_title && user.company
+            ? { text: "Complete", color: "green" }
+            : { text: "Needs Details", color: "amber" }
+        }
+        onToggle={() => performAutoSave()}
+      >
         <div
           style={{
             display: "grid",
@@ -1142,21 +1558,25 @@ export function ProfileForm({ initialUser }: Props) {
 
           <div>
             <label className="label">Company</label>
-            <input
-              className="input"
+            <AutocompleteInput
+              type="company"
+              className="w-full"
+              inputClassName="input"
               value={user.company ?? ""}
               placeholder="Where do you work?"
-              onChange={(e) => setUser({ ...user, company: e.target.value })}
+              onChange={(val) => setUser({ ...user, company: val })}
             />
           </div>
 
           <div>
             <label className="label">Job title</label>
-            <input
-              className="input"
+            <AutocompleteInput
+              type="designation"
+              className="w-full"
+              inputClassName="input"
               value={user.job_title ?? ""}
               placeholder="Your current role"
-              onChange={(e) => setUser({ ...user, job_title: e.target.value })}
+              onChange={(val) => setUser({ ...user, job_title: val })}
             />
           </div>
 
@@ -1289,7 +1709,17 @@ export function ProfileForm({ initialUser }: Props) {
       </CollapsibleSection>
 
       {/* ---- Section: Location Settings ---- */}
-      <CollapsibleSection icon={MapPinIcon} title="Location Settings">
+      <CollapsibleSection
+        id="section-location"
+        icon={MapPinIcon}
+        title="Location Settings"
+        badge={
+          user.home_lat != null || user.home_name
+            ? { text: "Set", color: "green" }
+            : { text: "Needs Setup", color: "amber" }
+        }
+        onToggle={() => performAutoSave()}
+      >
 
         {/* Location pickers */}
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -1368,9 +1798,16 @@ export function ProfileForm({ initialUser }: Props) {
 
       {/* ---- Section: Institute & Alumni Network ---- */}
       <CollapsibleSection
+        id="section-alumni"
         icon={<span className="text-base">🎓</span>}
         title="Institute & Alumni Network"
         defaultOpen={affiliations.length > 0}
+        badge={
+          affiliations.length > 0
+            ? { text: `${affiliations.length} Linked`, color: "green" }
+            : { text: "Optional", color: "gray" }
+        }
+        onToggle={() => performAutoSave()}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed">
@@ -1455,7 +1892,11 @@ export function ProfileForm({ initialUser }: Props) {
                 <span className="text-xs font-bold text-[var(--color-primary)]">Add Institute Affiliation</span>
                 <button
                   type="button"
-                  onClick={() => setShowAddAffiliation(false)}
+                  onClick={() => {
+                    setShowAddAffiliation(false);
+                    setSelectedInstituteId("");
+                    setCustomInstituteName("");
+                  }}
                   className="text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] border-none bg-transparent cursor-pointer"
                 >
                   Cancel
@@ -1467,7 +1908,12 @@ export function ProfileForm({ initialUser }: Props) {
                 <select
                   className="input w-full text-xs"
                   value={selectedInstituteId}
-                  onChange={(e) => setSelectedInstituteId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedInstituteId(e.target.value);
+                    if (e.target.value !== "other") {
+                      setCustomInstituteName("");
+                    }
+                  }}
                 >
                   <option value="">-- Choose your college or institute --</option>
                   {institutes.map((inst) => (
@@ -1475,7 +1921,29 @@ export function ProfileForm({ initialUser }: Props) {
                       {inst.name} ({inst.short_code || inst.category.toUpperCase()})
                     </option>
                   ))}
+                  <option value="other">➕ Others / Add New Institute</option>
                 </select>
+
+                {selectedInstituteId === "other" && (
+                  <div className="mt-2.5 p-3 rounded-lg bg-[var(--color-bg-subtle,#f8fafc)] dark:bg-[var(--color-surface-hover,#1e293b)] border border-[var(--color-primary)]/20 animate-fadeIn">
+                    <label className="label text-[11px] mb-1 font-semibold text-[var(--color-primary)] flex items-center justify-between">
+                      <span>Institute / University Name *</span>
+                      <span className="text-[10px] font-normal text-[var(--color-text-tertiary)]">Added to directory permanently</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="input w-full text-xs"
+                      placeholder="e.g. Manipal Institute of Technology, PES University, RVCE"
+                      value={customInstituteName}
+                      onChange={(e) => setCustomInstituteName(e.target.value)}
+                      autoFocus
+                    />
+                    <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1.5 flex items-center gap-1">
+                      <span>💡</span>
+                      <span>This institute will be added to the ProxNet directory and will be available in dropdowns for all users.</span>
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1505,14 +1973,22 @@ export function ProfileForm({ initialUser }: Props) {
               <div className="flex justify-end gap-2 mt-1">
                 <button
                   type="button"
-                  onClick={() => setShowAddAffiliation(false)}
+                  onClick={() => {
+                    setShowAddAffiliation(false);
+                    setSelectedInstituteId("");
+                    setCustomInstituteName("");
+                  }}
                   className="btn btn-secondary btn-sm text-xs cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  disabled={!selectedInstituteId || savingAffiliation}
+                  disabled={
+                    !selectedInstituteId ||
+                    (selectedInstituteId === "other" && !customInstituteName.trim()) ||
+                    savingAffiliation
+                  }
                   onClick={handleAddAffiliation}
                   className="btn btn-primary btn-sm text-xs cursor-pointer flex items-center gap-1.5"
                 >
@@ -1532,9 +2008,16 @@ export function ProfileForm({ initialUser }: Props) {
 
       {/* ---- Section: Neighbor Scrapbook & Icebreakers ---- */}
       <CollapsibleSection
+        id="section-scrapbook"
         icon={<span className="text-base">📖</span>}
         title="Neighbor Scrapbook & Icebreakers"
         defaultOpen={true}
+        badge={
+          helpOffers.length > 0 || tinkeringWith.length > 0 || askMeAbout.length > 0
+            ? { text: "Active", color: "green" }
+            : { text: "Quick to add", color: "amber" }
+        }
+        onToggle={() => performAutoSave()}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed">
@@ -2212,22 +2695,54 @@ export function ProfileForm({ initialUser }: Props) {
         </div>
       </CollapsibleSection>
 
-      {/* ---- Save Button ---- */}
-      <button
-        type="submit"
-        disabled={saving}
-        className="btn btn-primary btn-lg"
-        style={{ width: "100%" }}
-      >
-        {saving ? (
-          <>
-            <span className="spinner spinner-sm" style={{ borderTopColor: "var(--color-text-inverse)" }} />
-            Saving…
-          </>
-        ) : (
-          "Save profile"
-        )}
-      </button>
+      {/* ---- Auto-Save Status Bar & Done Actions ---- */}
+      <div className="card p-4 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+        <div className="flex items-center gap-2 text-xs">
+          {autoSaveStatus === "saving" ? (
+            <span className="inline-flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-medium">
+              <span className="animate-spin inline-block">🔄</span> Saving changes automatically...
+            </span>
+          ) : autoSaveStatus === "error" ? (
+            <span className="inline-flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-medium">
+              <span>⚠️</span> Error auto-saving.{" "}
+              <button
+                type="button"
+                onClick={() => performAutoSave()}
+                className="underline font-bold bg-transparent border-0 cursor-pointer p-0 text-rose-600 dark:text-rose-400"
+              >
+                Retry
+              </button>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+              <span>✓</span> Auto-save is active.{" "}
+              {lastSavedAt
+                ? `Saved at ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+                : "All changes are saved."}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setPreviewMode(true)}
+            className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] text-[var(--color-text)] font-semibold text-xs hover:bg-[var(--color-surface-hover)] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <span>👀</span> Preview Card
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              await performAutoSave();
+              router.push("/");
+            }}
+            className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-[var(--color-primary)] text-white font-semibold text-xs hover:bg-[var(--color-primary-hover)] transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer border-none"
+          >
+            <span>✓</span> Done
+          </button>
+        </div>
+      </div>
       </form>
 
       {/* Danger Zone: Account Deletion */}
@@ -2415,30 +2930,99 @@ export function ProfileForm({ initialUser }: Props) {
                 </div>
               )}
 
-              {/* Personal Details Section (if name is missing) */}
-              {showName && (
-                <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-4">
-                  <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5">
-                    💼 Personal Details
-                  </h4>
-                  {showName && (
-                    <div>
-                      <label className="label font-semibold text-xs mb-1">Full Name <span className="text-red-500">*</span></label>
-                      <input
-                        className="input w-full"
-                        style={showErrors && !user.full_name?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-                        value={user.full_name ?? ""}
-                        placeholder="e.g. John Doe"
-                        required
-                        onChange={(e) => setUser({ ...user, full_name: e.target.value })}
-                      />
-                      {showErrors && !user.full_name?.trim() && (
-                        <p className="text-xs text-red-500 mt-1">Full name is required</p>
-                      )}
-                    </div>
+              {/* Minimum Required Profile Details (Name, Email, Designation, Company) */}
+              <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-3.5 bg-[var(--color-surface)]">
+                <h4 className="font-bold text-sm text-[var(--color-primary)] flex items-center gap-1.5 m-0">
+                  💼 Professional Details <span className="text-[11px] font-normal text-[var(--color-text-secondary)]">(Required for 2km matching)</span>
+                </h4>
+
+                {/* Full Name */}
+                <div>
+                  <label className="label font-semibold text-xs mb-1">
+                    Full Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    className="input w-full text-sm"
+                    style={
+                      showErrors && !user.full_name?.trim()
+                        ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" }
+                        : undefined
+                    }
+                    value={user.full_name ?? ""}
+                    placeholder="e.g. John Doe"
+                    required
+                    onChange={(e) => setUser({ ...user, full_name: e.target.value })}
+                  />
+                  {showErrors && !user.full_name?.trim() && (
+                    <p className="text-xs text-red-500 mt-1">Full name is required</p>
                   )}
                 </div>
-              )}
+
+                {/* Email (if missing or editable) */}
+                {(!user.email?.trim() || showEmail) && (
+                  <div>
+                    <label className="label font-semibold text-xs mb-1">
+                      Email Address <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      className="input w-full text-sm"
+                      style={
+                        showErrors && !user.email?.trim()
+                          ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" }
+                          : undefined
+                      }
+                      value={user.email ?? ""}
+                      placeholder="name@example.com"
+                      required
+                      onChange={(e) => setUser({ ...user, email: e.target.value })}
+                    />
+                    {showErrors && !user.email?.trim() && (
+                      <p className="text-xs text-red-500 mt-1">Email is required</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Designation / Role */}
+                <div>
+                  <label className="label font-semibold text-xs mb-1">
+                    Designation / Role <span className="text-red-500">*</span>
+                  </label>
+                  <AutocompleteInput
+                    type="designation"
+                    className="w-full"
+                    inputClassName={`input w-full text-sm ${showErrors && !user.job_title?.trim() ? "border-red-500 ring-2 ring-red-500/20" : ""}`}
+                    value={user.job_title ?? ""}
+                    placeholder="e.g. Senior Software Engineer, Product Manager"
+                    required
+                    onChange={(val) => setUser({ ...user, job_title: val })}
+                    onSelect={(val) => setUser({ ...user, job_title: val })}
+                  />
+                  {showErrors && !user.job_title?.trim() && (
+                    <p className="text-xs text-red-500 mt-1">Designation / Role is required</p>
+                  )}
+                </div>
+
+                {/* Company Name */}
+                <div>
+                  <label className="label font-semibold text-xs mb-1">
+                    Company Name <span className="text-red-500">*</span>
+                  </label>
+                  <AutocompleteInput
+                    type="company"
+                    className="w-full"
+                    inputClassName={`input w-full text-sm ${showErrors && !user.company?.trim() ? "border-red-500 ring-2 ring-red-500/20" : ""}`}
+                    value={user.company ?? ""}
+                    placeholder="e.g. Google, Flipkart, Startup / Freelance"
+                    required
+                    onChange={(val) => setUser({ ...user, company: val })}
+                    onSelect={(val) => setUser({ ...user, company: val })}
+                  />
+                  {showErrors && !user.company?.trim() && (
+                    <p className="text-xs text-red-500 mt-1">Company name is required</p>
+                  )}
+                </div>
+              </div>
 
               {/* Location Settings Section */}
               <div className="border border-[var(--color-border-light)] rounded-xl p-4 flex flex-col gap-3">

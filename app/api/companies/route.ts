@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
 import { resolveUserLocation } from "@/lib/anonymize";
+import { TOP_COMPANIES, searchCompanies } from "@/lib/data/curated-suggestions";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const q = searchParams.get("q");
   const latParam = searchParams.get("lat");
   const lngParam = searchParams.get("lng");
   const radiusParam = searchParams.get("radius");
@@ -12,7 +14,7 @@ export async function GET(request: Request) {
   const supabase = createAdminClient();
   const { data: users, error } = await supabase
     .from("users")
-    .select("*")
+    .select("company, home_lat, home_lng, office_lat, office_lng")
     .eq("is_active", true)
     .not("company", "is", null);
 
@@ -32,7 +34,7 @@ export async function GET(request: Request) {
       (currentLocations ?? []).map((l) => [l.user_id, { lat: Number(l.lat), lng: Number(l.lng) }])
     );
 
-    filteredUsers = (users ?? []).filter((u) => {
+    filteredUsers = (users ?? []).filter((u: any) => {
       const current = locationMap.get(u.id);
       const loc = resolveUserLocation(u, current?.lat, current?.lng);
       if (!loc) return false;
@@ -41,22 +43,39 @@ export async function GET(request: Request) {
     });
   }
 
-  const uniqueCompaniesMap = new Map<string, string>();
+  const dbCompaniesMap = new Map<string, string>();
   for (const d of filteredUsers) {
     if (!d.company) continue;
     const trimmed = d.company.trim();
     if (!trimmed) continue;
     const lower = trimmed.toLowerCase();
-    if (!uniqueCompaniesMap.has(lower)) {
-      uniqueCompaniesMap.set(lower, trimmed);
+    if (!dbCompaniesMap.has(lower)) {
+      dbCompaniesMap.set(lower, trimmed);
     } else {
-      const existing = uniqueCompaniesMap.get(lower)!;
+      const existing = dbCompaniesMap.get(lower)!;
       if (existing === existing.toLowerCase() && trimmed !== trimmed.toLowerCase()) {
-        uniqueCompaniesMap.set(lower, trimmed);
+        dbCompaniesMap.set(lower, trimmed);
       }
     }
   }
-  const companies = Array.from(uniqueCompaniesMap.values()).sort((a, b) => a.localeCompare(b));
+  const dbCompanies = Array.from(dbCompaniesMap.values());
 
+  if (q && q.trim()) {
+    const matched = searchCompanies(q.trim(), dbCompanies, 10);
+    return NextResponse.json({ companies: matched });
+  }
+
+  // Merge dbCompanies with curated TOP_COMPANIES, prioritizing DB entries
+  const allMap = new Map<string, string>();
+  for (const c of dbCompanies) {
+    allMap.set(c.toLowerCase(), c);
+  }
+  for (const c of TOP_COMPANIES) {
+    if (!allMap.has(c.toLowerCase())) {
+      allMap.set(c.toLowerCase(), c);
+    }
+  }
+
+  const companies = Array.from(allMap.values()).sort((a, b) => a.localeCompare(b));
   return NextResponse.json({ companies });
 }

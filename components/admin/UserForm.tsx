@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { LocationPicker } from "@/components/map/LocationPicker";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import type { User } from "@/lib/types";
 import { formatLinkedInUrl } from "@/lib/linkedin/normalize-url";
 
@@ -212,14 +213,50 @@ export function UserForm({ user, onSuccess }: Props) {
     setForm(prev => ({ ...prev, linkedin_profile_url: cleanVal }));
   };
 
+  const handleScrapeProfile = async (urlToScrape: string) => {
+    if (!urlToScrape || !urlToScrape.includes("linkedin.com")) return;
+    setScraping(true);
+    setAutofillSuccess(null);
+    try {
+      const res = await fetch("/api/admin/scrape", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlToScrape }),
+      });
+      const data = await res.json();
+      if (data.full_name || data.company || data.job_title) {
+        setForm((prev) => ({
+          ...prev,
+          full_name: data.full_name || prev.full_name,
+          company: data.company || prev.company,
+          job_title: data.job_title || prev.job_title,
+          about: data.about || prev.about,
+          professional_bio: data.professional_bio || prev.professional_bio,
+        }));
+        setAutofillSuccess(
+          data.full_name
+            ? `Autofilled profile for ${data.full_name} from LinkedIn!`
+            : "Autofilled profile from LinkedIn!"
+        );
+      } else {
+        alert(data.error || "Could not extract data. LinkedIn may have blocked the request.");
+      }
+    } catch (e) {
+      alert("Scraping failed.");
+    } finally {
+      setScraping(false);
+    }
+  };
+
   const handleLinkedInBlurFormatted = (rawVal: string) => {
     const formatted = formatLinkedInUrl(rawVal);
     if (formatted) {
       setLinkedinUrl(formatted);
-      setForm(prev => ({ ...prev, linkedin_profile_url: formatted }));
+      setForm((prev) => ({ ...prev, linkedin_profile_url: formatted }));
+      handleScrapeProfile(formatted);
     } else if (!rawVal.trim()) {
       setLinkedinUrl("");
-      setForm(prev => ({ ...prev, linkedin_profile_url: "" }));
+      setForm((prev) => ({ ...prev, linkedin_profile_url: "" }));
     }
   };
 
@@ -561,34 +598,7 @@ export function UserForm({ user, onSuccess }: Props) {
               />
               <button
                 type="button"
-                onClick={async () => {
-                  if (!form.linkedin_profile_url) return;
-                  setScraping(true);
-                  setAutofillSuccess(null);
-                  try {
-                    const res = await fetch("/api/admin/scrape", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ url: form.linkedin_profile_url }),
-                    });
-                    const data = await res.json();
-                    if (data.full_name) {
-                      setForm((prev) => ({
-                        ...prev,
-                        full_name: data.full_name || prev.full_name,
-                        company: data.company || prev.company,
-                        job_title: data.job_title || prev.job_title,
-                      }));
-                      setAutofillSuccess(`Autofilled profile for ${data.full_name}`);
-                    } else {
-                      alert("Could not extract data. LinkedIn may have blocked the request.");
-                    }
-                  } catch (e) {
-                    alert("Scraping failed.");
-                  } finally {
-                    setScraping(false);
-                  }
-                }}
+                onClick={() => handleScrapeProfile(form.linkedin_profile_url)}
                 disabled={scraping || !form.linkedin_profile_url}
                 className="btn btn-outline whitespace-nowrap text-xs cursor-pointer px-4"
               >
@@ -717,11 +727,16 @@ export function UserForm({ user, onSuccess }: Props) {
                 onChange={(e) => handleLinkedInInputChange(e.target.value)}
                 onBlur={() => handleLinkedInBlurFormatted(linkedinUrl)}
               />
-              {linkedinUrl && linkedinUrl.includes("linkedin.com/in/") && (
+              {scraping ? (
+                <div className="flex items-center pr-3 shrink-0 text-[var(--color-primary)] text-xs font-medium gap-1">
+                  <span className="spinner-sm w-3 h-3 border-2" />
+                  <span>Crawling...</span>
+                </div>
+              ) : linkedinUrl && linkedinUrl.includes("linkedin.com/in/") ? (
                 <div className="flex items-center pr-3 shrink-0 text-emerald-600 dark:text-emerald-400 text-xs font-semibold gap-1">
                   ✓
                 </div>
-              )}
+              ) : null}
             </div>
             <p className="text-[11px] text-[var(--color-text-secondary)] mt-1">
               💡 Tip: Paste the full profile link directly from LinkedIn.
@@ -773,21 +788,25 @@ export function UserForm({ user, onSuccess }: Props) {
 
           <div>
             <label className="label">Company</label>
-            <input
-              className="input"
+            <AutocompleteInput
+              type="company"
+              className="w-full"
+              inputClassName="input"
               value={form.company}
               placeholder="Where do they work?"
-              onChange={(e) => setForm({ ...form, company: e.target.value })}
+              onChange={(val) => setForm({ ...form, company: val })}
             />
           </div>
 
           <div>
             <label className="label">Job title</label>
-            <input
-              className="input"
+            <AutocompleteInput
+              type="designation"
+              className="w-full"
+              inputClassName="input"
               value={form.job_title}
               placeholder="e.g. Senior Software Engineer"
-              onChange={(e) => setForm({ ...form, job_title: e.target.value })}
+              onChange={(val) => setForm({ ...form, job_title: val })}
             />
           </div>
 

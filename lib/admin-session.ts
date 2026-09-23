@@ -28,10 +28,10 @@ export async function createAdminSession(adminId: string, suId: string) {
 }
 
 export async function getAdminSession(): Promise<{ adminId: string; suId: string } | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token) return null;
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(COOKIE_NAME)?.value;
+    if (!token) return null;
     const { payload } = await jwtVerify(token, getSecret());
     if (payload.role !== "admin") return null;
     return { adminId: payload.adminId as string, suId: payload.suId as string };
@@ -41,8 +41,10 @@ export async function getAdminSession(): Promise<{ adminId: string; suId: string
 }
 
 export async function clearAdminSession() {
-  const cookieStore = await cookies();
-  cookieStore.delete(COOKIE_NAME);
+  try {
+    const cookieStore = await cookies();
+    cookieStore.delete(COOKIE_NAME);
+  } catch {}
 }
 
 export async function createNonAdminSession(userId: string, suId: string) {
@@ -63,10 +65,10 @@ export async function createNonAdminSession(userId: string, suId: string) {
 }
 
 export async function getNonAdminSession(): Promise<{ userId: string; suId: string } | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("non_admin_session")?.value;
-  if (!token) return null;
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("non_admin_session")?.value;
+    if (!token) return null;
     const { payload } = await jwtVerify(token, getSecret());
     if (payload.role !== "user") return null;
     return { userId: payload.userId as string, suId: payload.suId as string };
