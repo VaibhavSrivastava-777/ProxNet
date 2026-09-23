@@ -725,25 +725,6 @@ export function ProximityMap() {
         }}
       />
 
-      {/* ── Society Yearbook Shortcut Banner ── */}
-      {profile?.society_name && (
-        <div className="flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-amber-500/10 border border-blue-500/25 shadow-xs animate-fadeIn">
-          <div className="flex items-center gap-2.5">
-            <span className="text-xl">🏢</span>
-            <div>
-              <div className="text-xs font-bold text-[var(--color-text)]">{profile.society_name}</div>
-              <div className="text-[11px] text-[var(--color-text-secondary)]">Society Tech Directory & Yearbook</div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => router.push(`/society/${encodeURIComponent(profile.society_name.toLowerCase().replace(/\s+/g, '-'))}`)}
-            className="text-xs font-bold text-[var(--color-primary)] hover:underline bg-transparent border-none cursor-pointer flex items-center gap-1"
-          >
-            Open Directory &rarr;
-          </button>
-        </div>
-      )}
 
       {/* Error state */}
       {error && (
@@ -1173,16 +1154,9 @@ export function ProximityMap() {
                 {selectedPerson.society_name && (
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-[11px] text-[var(--color-text-secondary)]">🏢 Complex:</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedPerson(null);
-                        router.push(`/society/${encodeURIComponent(selectedPerson.society_name.toLowerCase().replace(/\s+/g, '-'))}`);
-                      }}
-                      className="font-semibold text-xs text-[var(--color-primary)] hover:underline bg-transparent border-none cursor-pointer p-0"
-                    >
-                      {selectedPerson.society_name} &rarr;
-                    </button>
+                    <span className="font-semibold text-xs text-[var(--color-text)]">
+                      {selectedPerson.society_name}
+                    </span>
                   </div>
                 )}
                 {selectedPerson.help_offers?.length > 0 && (

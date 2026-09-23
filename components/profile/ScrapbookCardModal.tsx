@@ -48,9 +48,7 @@ export function ScrapbookCardModal({
     : { label: "Down for a quick chai", icon: "☕" };
 
   const handleCopyProfile = () => {
-    const shareUrl = `${window.location.origin}/society/${encodeURIComponent(
-      person.society_name || "neighborhood"
-    )}`;
+    const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/network` : "https://www.proxnet.in/network";
     navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
