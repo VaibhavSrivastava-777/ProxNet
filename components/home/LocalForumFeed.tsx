@@ -7,6 +7,7 @@ import { EventCard } from "@/components/forum/EventCard";
 import { EventFormModal } from "@/components/forum/EventFormModal";
 import { JobPostCard } from "@/components/forum/JobPostCard";
 import { JobPostModal } from "@/components/forum/JobPostModal";
+import { isPastEvent } from "@/lib/date";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -258,6 +259,11 @@ export function LocalForumFeed({
     return timeB - timeA;
   });
 
+  const upcomingEvents = (eventsData?.events || [])
+    .filter((e: any) => !isPastEvent(e))
+    .sort((a: any, b: any) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
+  const nextEvent = upcomingEvents.length > 0 ? upcomingEvents[0] : null;
+
   return (
     <div className="space-y-6">
       {/* Top Location Selector & Controls Bar */}
@@ -342,6 +348,44 @@ export function LocalForumFeed({
           </span>
         </div>
       </div>
+
+      {/* ── Next Future Meetup Event Banner (Permanent on Forum Tab) ── */}
+      {nextEvent && (
+        <div 
+          onClick={() => router.push(`/event/${nextEvent.id}`)}
+          className="bg-gradient-to-r from-[var(--color-primary-subtle)] via-[var(--color-surface)] to-[var(--color-surface)] border border-[var(--color-primary)]/30 p-3.5 rounded-xl flex items-center justify-between cursor-pointer hover:shadow-md transition-all animate-fadeInUp group my-1"
+        >
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#E56B42] to-[#FF8C61] text-white flex items-center justify-center text-xl shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+              📅
+            </div>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-[#E56B42] uppercase tracking-wider bg-[#E56B42]/10 px-2 py-0.5 rounded-full border border-[#E56B42]/20">
+                  Next Meetup
+                </span>
+                <span className="text-[11px] font-semibold text-[var(--color-primary)]">
+                  {new Date(nextEvent.starts_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                </span>
+              </div>
+              <span className="font-bold text-[var(--color-text)] leading-tight text-sm mt-0.5 truncate">
+                {nextEvent.title}
+              </span>
+              {nextEvent.venue_name && (
+                <span className="text-[11px] text-[var(--color-text-secondary)] mt-0.5 truncate flex items-center gap-1">
+                  <span>📍</span> {nextEvent.venue_name}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0 text-xs font-semibold text-[var(--color-primary)] group-hover:translate-x-0.5 transition-transform">
+            <span>View Meetup</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
+        </div>
+      )}
 
       {/* ProxNet Broadcast Loading Message Banner between Post Submit and Forum List */}
       {(isPosting || isUpdatingPost) && (

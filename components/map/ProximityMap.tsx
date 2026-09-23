@@ -7,7 +7,6 @@ import type { CompanyCluster, MicroStatus } from "@/lib/types";
 import { QuestionForm } from "@/components/qa/QuestionForm";
 import useSWR, { mutate } from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAnimatedPlaceholder } from "@/lib/hooks/useAnimatedPlaceholder";
 import { CompanyLogo } from "@/components/qa/QuestionList";
 import { MicroStatusBeacon } from "./MicroStatusBeacon";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
@@ -126,8 +125,16 @@ const fetcher = (url: string) => fetch(url).then((res) => {
 export function ProximityMap() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [aiQuery, setAiQuery] = useState("");
+  const [showNextMeetupBanner, setShowNextMeetupBanner] = useState(true);
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Auto-dismiss Next Meetup banner after 10 seconds on the Network tab
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowNextMeetupBanner(false);
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, []);
   const [filter2km, setFilter2km] = useState(true);
   const [localError, setLocalError] = useState("");
   const [locationMode, setLocationMode] = useState<"home" | "office">("home");
@@ -170,17 +177,6 @@ export function ProximityMap() {
     window.addEventListener("proxnet_beacon_updated", handleBeaconUpdate);
     return () => window.removeEventListener("proxnet_beacon_updated", handleBeaconUpdate);
   }, []);
-
-  // Typewriter animated search placeholder
-  const placeholderPhrases = [
-    "Google folks?",
-    "Banking roles?",
-    "Manyata offices?",
-    "Amazon workers?",
-    "Fintech developers?",
-    "Indiranagar neighbors?",
-  ];
-  const animatedPlaceholder = useAnimatedPlaceholder(placeholderPhrases, "Ask ProxNet for ");
 
   // Fetch logged-in user profile with instant cache
   useEffect(() => {
@@ -256,15 +252,6 @@ export function ProximityMap() {
     ? people.filter((p: any) => p.company?.toLowerCase() === companyParam.toLowerCase())
     : people;
 
-  const qFilter = aiQuery.trim().toLowerCase();
-  if (qFilter) {
-    filteredPeople = filteredPeople.filter((p: any) => 
-      (p.company && p.company.toLowerCase().includes(qFilter)) ||
-      (p.job_title && p.job_title.toLowerCase().includes(qFilter)) ||
-      (p.full_name && p.full_name.toLowerCase().includes(qFilter)) ||
-      (p.profile_digest?.skills && p.profile_digest.skills.some((s: string) => s.toLowerCase().includes(qFilter)))
-    );
-  }
 
   // Live active beacons tracking
   const [activeBeacons, setActiveBeacons] = useState<MicroStatus[]>([]);
@@ -467,8 +454,8 @@ export function ProximityMap() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       
-      {/* Next Future Meetup Event Banner */}
-      {nextEvent && (
+      {/* Next Future Meetup Event Banner (Shown for 10 seconds only on Network tab) */}
+      {showNextMeetupBanner && nextEvent && (
         <div 
           onClick={() => router.push(`/event/${nextEvent.id}`)}
           className="bg-gradient-to-r from-[var(--color-primary-subtle)] via-[var(--color-surface)] to-[var(--color-surface)] border border-[var(--color-primary)]/30 p-3.5 rounded-xl flex items-center justify-between cursor-pointer hover:shadow-md transition-all animate-fadeInUp group"
@@ -496,72 +483,62 @@ export function ProximityMap() {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0 text-xs font-semibold text-[var(--color-primary)] group-hover:translate-x-0.5 transition-transform">
-            <span>View Meetup</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--color-primary)] group-hover:translate-x-0.5 transition-transform">
+              <span>View Meetup</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowNextMeetupBanner(false);
+              }}
+              className="p-1 rounded-full text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover,#1e293b)] transition-colors border-none bg-transparent cursor-pointer ml-1"
+              title="Dismiss"
+            >
+              ✕
+            </button>
           </div>
         </div>
       )}
 
-      {/* ── 1. Dedicated ProxNet AI Chat Card (Own Line on Network Tab) ── */}
-      <div className="flex flex-col gap-2.5 p-3.5 sm:p-4 rounded-xl border border-[var(--color-primary)]/20 bg-gradient-to-r from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-primary-subtle)]/30 shadow-sm animate-fadeInUp">
-        <div className="flex items-center justify-between cursor-pointer" onClick={() => router.push("/proxnet-ai")}>
-          <div className="flex items-center gap-2.5 min-w-0">
-            <img src="/logo.png" alt="ProxNet AI" className="w-7 h-7 rounded-lg shadow-xs shrink-0" />
-            <div className="min-w-0">
-              <h4 className="text-body font-bold text-[var(--color-text)] flex items-center gap-1.5 m-0 leading-tight">
-                ProxNet AI Chat
-                <span className="text-[10px] font-semibold bg-[var(--color-primary-subtle)] text-[var(--color-primary)] px-2 py-0.5 rounded-full border border-[var(--color-primary)]/20 shrink-0">Assistant</span>
-              </h4>
-              <p className="text-[11px] text-[var(--color-text-secondary)] m-0 mt-0.5 truncate">Ask questions or search nearby professionals</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              router.push("/proxnet-ai");
-            }}
-            className="text-xs font-semibold text-[var(--color-primary)] hover:underline flex items-center gap-1 shrink-0 bg-transparent border-none cursor-pointer"
-          >
-            Open Chat
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </button>
-        </div>
-
-        <form 
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!aiQuery.trim()) return;
-            router.push(`/proxnet-ai?q=${encodeURIComponent(aiQuery.trim())}`);
-          }} 
-          className="relative w-full"
+      {/* ── ProxNet AI Chat Floating Action Button (FAB) Bottom Right ── */}
+      <div className="fixed bottom-20 md:bottom-8 right-4 md:right-8 z-40 animate-fadeIn">
+        <button
+          type="button"
+          onClick={() => router.push("/proxnet-ai")}
+          className="group flex items-center gap-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-[var(--color-primary)] to-indigo-600 text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer border border-white/20 backdrop-blur-md"
+          title="Open ProxNet AI Chat"
+          aria-label="ProxNet AI Chat"
         >
-          <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--color-primary)]">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
+          <div className="relative flex items-center justify-center">
+            <img src="/logo.png" alt="ProxNet AI" className="w-6 h-6 rounded-full shadow-xs object-cover" />
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full ring-2 ring-white animate-pulse" />
           </div>
-          <input
-            type="text"
-            className="w-full pl-10 pr-10 py-2.5 bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded-xl focus:outline-none focus:border-[var(--color-primary)] text-xs font-medium text-[var(--color-text)]"
-            placeholder={animatedPlaceholder}
-            value={aiQuery}
-            onChange={(e) => setAiQuery(e.target.value)}
-          />
-          <button
-            type="submit"
-            disabled={!aiQuery.trim()}
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-lg bg-[var(--color-primary)] text-white disabled:opacity-50 border-none cursor-pointer"
-            title="Send query to ProxNet AI"
+          <div className="flex flex-col text-left pr-1">
+            <span className="text-xs font-bold leading-tight flex items-center gap-1">
+              ProxNet AI
+              <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full font-medium">Chat</span>
+            </span>
+            <span className="text-[10px] text-white/80 leading-none hidden sm:inline">Ask anything</span>
+          </div>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="group-hover:translate-x-0.5 transition-transform"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
-              <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
-            </svg>
-          </button>
-        </form>
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
 
       {/* ── 2. Consolidated Search Scope Card ── */}
