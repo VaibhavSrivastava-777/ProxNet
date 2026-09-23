@@ -56,35 +56,13 @@ export function ProfilePreview({
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-4 animate-fadeIn">
-      {/* Informative Header Banner */}
-      <div className="bg-gradient-to-r from-blue-600/15 via-teal-600/15 to-indigo-600/15 border border-blue-500/25 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
-        <div className="flex items-center gap-2.5">
-          <span className="text-xl">🗺️</span>
-          <div>
-            <div className="text-sm font-bold text-[var(--color-text)]">
-              Network Proximity View
-            </div>
-            <div className="text-xs text-[var(--color-text-secondary)]">
-              This is how other verified professionals within 2km see your profile
-            </div>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onEditClick}
-          className="px-4 py-2 text-xs font-semibold rounded-xl bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-all shadow-sm flex items-center gap-1.5 cursor-pointer border-none"
-        >
-          <span>✏️</span> Return to Edit
-        </button>
-      </div>
-
       {/* Proximity Map Card Preview */}
       <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xl overflow-hidden">
         {/* Banner with proximity badge */}
         <div className="h-28 w-full bg-gradient-to-r from-blue-500/20 via-teal-500/20 to-purple-500/25 p-4 flex items-start justify-between border-b border-[var(--color-border)]">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-black/40 text-white backdrop-blur-sm border border-white/10">
-              <span>📍</span> Network Proximity
+              <span>📍</span> Network Proximity View
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />

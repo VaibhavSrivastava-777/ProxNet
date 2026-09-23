@@ -1060,25 +1060,19 @@ export function ProfileForm({ initialUser }: Props) {
 
   if (previewMode) {
     return (
-      <div className="space-y-6 animate-fadeIn">
-        {/* Toggle Bar */}
-        <div className="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border)] p-4 rounded-2xl shadow-sm">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">👀</span>
-            <div>
-              <h2 className="text-base font-bold text-[var(--color-text)] m-0">Network Proximity View</h2>
-              <p className="text-xs text-[var(--color-text-secondary)] m-0 mt-0.5">
-                This is how verified neighbors within 2 km see your card on the Proximity Map
-              </p>
-            </div>
-          </div>
+      <div className="w-full max-w-2xl mx-auto space-y-4 animate-fadeIn">
+        {/* Small button to return to profile editing */}
+        <div className="flex items-center justify-between pt-1">
           <button
             type="button"
             onClick={() => setPreviewMode(false)}
-            className="btn btn-primary btn-sm flex items-center gap-1.5 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover,#1e293b)] border border-[var(--color-border)] text-[var(--color-text)] transition-all cursor-pointer shadow-xs"
           >
-            <span>✏️</span> Back to Edit
+            <span>←</span> Back to Profile
           </button>
+          <span className="text-xs text-[var(--color-text-tertiary)] flex items-center gap-1 font-medium">
+            <span>👀</span> Network Proximity View
+          </span>
         </div>
 
         {/* Profile Preview Component */}
