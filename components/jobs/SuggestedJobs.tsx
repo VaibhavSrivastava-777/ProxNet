@@ -116,6 +116,8 @@ export function SuggestedJobs() {
   const [activeCompanyModal, setActiveCompanyModal] = useState<CompanyGroup | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserCompany, setCurrentUserCompany] = useState<string | null>(null);
+  const [userInviteCode, setUserInviteCode] = useState<string | null>(null);
+  const [inviteToast, setInviteToast] = useState<string | null>(null);
   const [startingReferralJobId, setStartingReferralJobId] = useState<string | null>(null);
   const [isMatchingCompleted, setIsMatchingCompleted] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -180,6 +182,9 @@ export function SuggestedJobs() {
         if (data.currentUserCompany) {
           setCurrentUserCompany(data.currentUserCompany);
         }
+        if (data.inviteCode) {
+          setUserInviteCode(data.inviteCode);
+        }
         if (data.hasResume !== undefined) {
           setHasResume(data.hasResume);
         }
@@ -214,6 +219,9 @@ export function SuggestedJobs() {
         }
         if (allData.currentUserCompany) {
           setCurrentUserCompany(allData.currentUserCompany);
+        }
+        if (allData.inviteCode) {
+          setUserInviteCode(allData.inviteCode);
         }
         if (allData.hasResume !== undefined) {
           setHasResume(allData.hasResume);
@@ -351,6 +359,34 @@ export function SuggestedJobs() {
       setErrorMsg(err.message || "Failed to ask for referral. Please try again.");
     } finally {
       setStartingReferralJobId(null);
+    }
+  };
+
+  const handleInviteColleague = async (companyName: string) => {
+    const code = userInviteCode || "";
+    const inviteUrl = code ? `${window.location.origin}/join/${code}?company=${encodeURIComponent(companyName)}` : `${window.location.origin}/grow`;
+    const shareText = `Hey! We're building our verified tech network for ${companyName} on ProxNet. Join with my invite link: ${inviteUrl}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Join ${companyName} on ProxNet`,
+          text: shareText,
+          url: inviteUrl,
+        });
+        return;
+      } catch (err) {
+        // Fallback to clipboard
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setInviteToast(`📋 Copied invite link for ${companyName}! You'll earn +10 credits when they join.`);
+      setTimeout(() => setInviteToast(null), 4000);
+    } catch (err) {
+      setInviteToast(`Invite link: ${inviteUrl}`);
+      setTimeout(() => setInviteToast(null), 6000);
     }
   };
 
@@ -948,12 +984,23 @@ export function SuggestedJobs() {
                     <span>🤝</span> {group.contactsCount} Referrar{group.contactsCount > 1 ? "s" : ""} Available
                   </button>
                 ) : (
-                  <button
-                    onClick={() => setActiveCompanyModal(group)}
-                    className="btn btn-sm bg-[var(--color-surface-secondary)] hover:bg-[var(--color-border-light)] text-[var(--color-text)] text-xs cursor-pointer font-bold px-3 py-1.5 rounded-lg border border-[var(--color-border-light)] flex items-center gap-1.5"
-                  >
-                    <span>📂</span> View {group.jobs.length} Opening{group.jobs.length > 1 ? "s" : ""}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleInviteColleague(group.company)}
+                      className="btn btn-sm bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Onboard the first professional from this company to earn +10 credits!"
+                    >
+                      <span>🏆</span>
+                      <span className="hidden sm:inline">Pioneer:</span> +10 pts
+                    </button>
+                    <button
+                      onClick={() => setActiveCompanyModal(group)}
+                      className="btn btn-sm bg-[var(--color-surface-secondary)] hover:bg-[var(--color-border-light)] text-[var(--color-text)] text-xs cursor-pointer font-bold px-3 py-1.5 rounded-lg border border-[var(--color-border-light)] flex items-center gap-1.5"
+                    >
+                      <span>📂</span> View {group.jobs.length} Opening{group.jobs.length > 1 ? "s" : ""}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -996,8 +1043,36 @@ export function SuggestedJobs() {
                   </div>
                 );
               }
-              return null;
+              return (
+                <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-primary/10 to-amber-500/15 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-xl">🏆</span>
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-[var(--color-text)]">Pioneer Bounty: +10 Credits</span>
+                        <span className="badge text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-bold rounded">Unclaimed</span>
+                      </div>
+                      <p className="text-[11px] text-[var(--color-text-secondary)] m-0">
+                        No insiders from {activeCompanyModal.company} on ProxNet yet. Invite a colleague with your invite link and claim +10 credits when they join!
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleInviteColleague(activeCompanyModal.company)}
+                    className="btn btn-sm bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg border-0 cursor-pointer shadow-xs flex items-center gap-1.5 shrink-0 self-start sm:self-center"
+                  >
+                    <span>🎯</span> Invite Colleague
+                  </button>
+                </div>
+              );
             })()}
+
+            {inviteToast && (
+              <div className="p-2.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs font-semibold animate-fadeInUp flex items-center gap-1.5">
+                <span>{inviteToast}</span>
+              </div>
+            )}
 
             {errorMsg && (
               <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs">

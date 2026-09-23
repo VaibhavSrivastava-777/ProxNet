@@ -165,7 +165,7 @@ export async function GET() {
 
     const { data: userProfile } = await supabase
       .from("users")
-      .select("resume_text, resume_url, wallet, company")
+      .select("resume_text, resume_url, wallet, company, invite_code")
       .eq("id", user.id)
       .single();
 
@@ -174,6 +174,7 @@ export async function GET() {
       hasResume: Boolean(userProfile?.resume_text && userProfile.resume_text.trim().length > 50),
       resumeUrl: userProfile?.resume_url || null,
       wallet: userProfile?.wallet ?? 0,
+      inviteCode: userProfile?.invite_code || null,
       currentUserId: user.id,
       currentUserCompany: userProfile?.company || null,
       totalCompanies: companiesArray.length,

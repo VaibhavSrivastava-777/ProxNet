@@ -58,7 +58,7 @@ export async function GET() {
 
     const { data: userProfile, error: profileError } = await supabase
       .from("users")
-      .select("job_title, company, about, resume_text, resume_url, wallet, embedding, profile_digest")
+      .select("job_title, company, about, resume_text, resume_url, wallet, embedding, profile_digest, invite_code")
       .eq("id", user.id)
       .single();
 
@@ -447,6 +447,7 @@ Return ONLY a JSON object with:
       hasResume: Boolean(userProfile?.resume_text && userProfile.resume_text.trim().length > 50),
       resumeUrl: userProfile?.resume_url || null,
       wallet: userProfile?.wallet ?? 0,
+      inviteCode: userProfile?.invite_code || null,
       profileDigest,
       currentUserId: user.id,
       currentUserCompany: userProfile?.company || null,

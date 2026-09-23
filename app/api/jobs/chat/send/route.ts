@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
-import { awardWalletCredits } from "@/lib/wallet";
+import { awardWalletCredits, transferCredits } from "@/lib/wallet";
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -36,6 +36,13 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Get other participant to notify & transfer from
+  const { data: others } = await supabase
+    .from("job_participants")
+    .select("user_id")
+    .eq("thread_id", threadId)
+    .neq("user_id", user.id);
+
   // Check if this is the user's first response to someone else's referral ask
   let creditReward: { creditsAwarded: number; newBalance: number; message?: string } | null = null;
   const { count: userMsgCount } = await supabase
@@ -52,16 +59,21 @@ export async function POST(request: Request) {
       .neq("sender_id", user.id);
 
     if (priorMsgCount && priorMsgCount > 0) {
-      creditReward = await awardWalletCredits(user.id, "responded_referral_ask", threadId);
+      const requesterId = others?.[0]?.user_id;
+      if (requesterId) {
+        const transferRes = await transferCredits(requesterId, user.id, 3, "referral_response_transfer", threadId);
+        if (transferRes.success) {
+          creditReward = {
+            creditsAwarded: 3,
+            newBalance: transferRes.toBalance,
+            message: "+3 credits transferred from requester for responding to referral ask!",
+          };
+        }
+      } else {
+        creditReward = await awardWalletCredits(user.id, "responded_referral_ask", threadId);
+      }
     }
   }
-
-  // Get other participant to notify
-  const { data: others } = await supabase
-    .from("job_participants")
-    .select("user_id")
-    .eq("thread_id", threadId)
-    .neq("user_id", user.id);
 
   if (others && others.length > 0) {
     const targetUserId = others[0].user_id;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
+import { deductWalletCredits } from "@/lib/wallet";
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -13,7 +14,8 @@ export async function POST(request: Request) {
   const supabase = createAdminClient();
 
   const { data: userData } = await supabase.from("users").select("wallet").eq("id", user.id).single();
-  const hasLowWallet = !userData || (userData.wallet ?? 0) < 1;
+  const currentWallet = userData?.wallet ?? 0;
+  const hasLowWallet = currentWallet < 1;
 
   // 1. Ensure a "target post" exists for the referral so the thread logic works.
   // We'll just create a dummy "giver" post for the contact if we need to.
@@ -81,6 +83,9 @@ export async function POST(request: Request) {
     .single();
 
   if (threadError) return NextResponse.json({ error: threadError.message }, { status: 500 });
+
+  // Deduct 1 credit from the requester for placing demand (asking for referral)
+  const deductResult = await deductWalletCredits(user.id, "referral_request_cost", thread.id);
 
   // 4. Create participants with aliases
   const isSameCompany = Boolean(
@@ -172,5 +177,10 @@ export async function POST(request: Request) {
     console.error("Failed to notify referrer:", err);
   }
 
-  return NextResponse.json({ threadId: thread.id, walletWarning: false });
+  return NextResponse.json({
+    threadId: thread.id,
+    walletWarning: hasLowWallet,
+    creditsDeducted: deductResult.creditsDeducted,
+    remainingWallet: deductResult.newBalance,
+  });
 }

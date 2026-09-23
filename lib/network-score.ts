@@ -10,7 +10,7 @@
 
 export const POINTS_CONFIG = {
   /** Someone signs up through your invite */
-  INVITE_SIGNUP: 100,
+  INVITE_SIGNUP: 20,
   /** Your invitee posts their first question or forum post */
   INVITEE_FIRST_POST: 50,
   /** Your invitee gives their first job referral */

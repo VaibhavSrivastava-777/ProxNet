@@ -4,6 +4,7 @@ import { parseLinkedInHeadline } from "./linkedin/parse-headline";
 import { autoVerifyByEmail } from "./institutes";
 import { isSupabaseConfigured } from "./supabase/is-configured";
 import { awardPoints } from "./award-points";
+import { checkAndAwardPioneerBounty } from "./wallet";
 import type { User, UserVisibility } from "./types";
 import { cookies } from "next/headers";
 
@@ -251,10 +252,17 @@ export async function upsertOAuthUser(params: {
 
   // Post-signup: award points to the inviter & update invite_events
   if (invitedBy && data) {
-    // Award 100 points to inviter
+    // Award 20 points to inviter
     awardPoints(invitedBy, "INVITE_SIGNUP", data.id).catch((e) =>
       console.error("Failed to award invite signup points:", e)
     );
+
+    // Pioneer Onboarding Bounty check: if new user has a company, check if first from this company
+    if (data.company) {
+      checkAndAwardPioneerBounty(data.id, data.company).catch((e) =>
+        console.error("Failed to award pioneer bounty on signup:", e)
+      );
+    }
 
     // Mark matching invite_events as signed_up
     supabase

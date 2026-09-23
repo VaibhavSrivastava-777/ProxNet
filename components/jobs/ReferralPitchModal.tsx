@@ -179,34 +179,42 @@ export function ReferralPitchModal({
 
         {/* Footer Actions */}
         <div className="p-4 border-t border-[var(--color-border-light)] flex items-center justify-between gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn btn-sm bg-[var(--color-surface-secondary)] hover:bg-[var(--color-border-light)] text-[var(--color-text)] border border-[var(--color-border-light)] text-xs font-semibold px-4 py-2 rounded-lg cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => onSend(pitch)}
-            disabled={isSending || generating || !pitch.trim()}
-            className="btn btn-sm btn-primary text-xs font-bold px-5 py-2 rounded-lg cursor-pointer flex items-center gap-1.5 shadow-sm disabled:opacity-60"
-          >
-            {isSending ? (
-              <>
-                <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                </svg>
-                <span>Sending...</span>
-              </>
-            ) : (
-              <>
-                <span>🤝</span>
-                <span>Send & Start Chat</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-tertiary)]">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold text-[10px]">
+              -1 Credit
+            </span>
+            <span>to initiate referral</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-sm bg-[var(--color-surface-secondary)] hover:bg-[var(--color-border-light)] text-[var(--color-text)] border border-[var(--color-border-light)] text-xs font-semibold px-4 py-2 rounded-lg cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => onSend(pitch)}
+              disabled={isSending || generating || !pitch.trim()}
+              className="btn btn-sm btn-primary text-xs font-bold px-5 py-2 rounded-lg cursor-pointer flex items-center gap-1.5 shadow-sm disabled:opacity-60"
+            >
+              {isSending ? (
+                <>
+                  <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                  </svg>
+                  <span>Sending...</span>
+                </>
+              ) : (
+                <>
+                  <span>🤝</span>
+                  <span>Send & Start Chat</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

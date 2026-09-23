@@ -5,7 +5,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/is-configured";
 import { normalizeLinkedInUrl } from "@/lib/linkedin/normalize-url";
 import { isProfileIncomplete, calculateProfileCompleteness } from "@/lib/profile-validation";
 import { initiateWelcomeMessage } from "@/lib/ai-chat";
-import { awardWalletCredits } from "@/lib/wallet";
+import { awardWalletCredits, checkAndAwardPioneerBounty } from "@/lib/wallet";
 async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`, {
@@ -229,6 +229,13 @@ export async function PATCH(request: Request) {
     if (completionReward?.success) {
       responseData.wallet = completionReward.newBalance;
     }
+  }
+
+  // Check for Pioneer Onboarding Bounty if company was set/updated and user was invited
+  if (body.company && body.company.trim() && currentUser?.invited_by) {
+    checkAndAwardPioneerBounty(user.id, body.company.trim()).catch(err => {
+      console.error("Failed to check pioneer bounty on profile update:", err);
+    });
   }
 
   return NextResponse.json({

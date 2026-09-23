@@ -31,6 +31,14 @@
     {
       "path": "/api/cron/purge-jobs",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/daily-admin-digest",
+      "schedule": "30 2 * * *"
+    },
+    {
+      "path": "/api/cron/scrape-network-and-competitors",
+      "schedule": "0 1 * * *"
     }
   ]
 }
