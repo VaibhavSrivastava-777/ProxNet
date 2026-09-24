@@ -957,18 +957,19 @@ export function SuggestedJobs() {
               key={group.company}
               className="card p-3 sm:p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)] transition-all flex items-center justify-between gap-4"
             >
-              <div className="flex items-center gap-3 min-w-0">
+              <div 
+                className="flex items-center gap-3 min-w-0 cursor-pointer"
+                onClick={() => setActiveCompanyModal(group)}
+                title="Click to view openings"
+              >
                 <CompanyLogo company={group.company} size={40} />
                 <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-bold text-[var(--color-text)] truncate">
+                  <span className="text-sm font-bold text-[var(--color-text)] truncate hover:text-[var(--color-primary)] transition-colors">
                     {group.company}
                   </span>
-                  <button
-                    onClick={() => setActiveCompanyModal(group)}
-                    className="text-left text-xs font-semibold text-[var(--color-primary)] hover:underline cursor-pointer border-none bg-transparent p-0 mt-0.5"
-                  >
-                    📂 {group.jobs.length} Opening{group.jobs.length > 1 ? "s" : ""} Available
-                  </button>
+                  <span className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                    📂 {group.jobs.length} Opening{group.jobs.length > 1 ? "s" : ""}
+                  </span>
                 </div>
               </div>
 
@@ -981,26 +982,17 @@ export function SuggestedJobs() {
                     }}
                     className="btn btn-sm btn-primary text-xs cursor-pointer font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5"
                   >
-                    <span>🤝</span> {group.contactsCount} Referrar{group.contactsCount > 1 ? "s" : ""} Available
+                    <span>🤝</span> {group.contactsCount} Referrer{group.contactsCount > 1 ? "s" : ""} Available
                   </button>
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleInviteColleague(group.company)}
-                      className="btn btn-sm bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-                      title="Onboard the first professional from this company to earn +10 credits!"
-                    >
-                      <span>🏆</span>
-                      <span className="hidden sm:inline">Pioneer:</span> +10 pts
-                    </button>
-                    <button
-                      onClick={() => setActiveCompanyModal(group)}
-                      className="btn btn-sm bg-[var(--color-surface-secondary)] hover:bg-[var(--color-border-light)] text-[var(--color-text)] text-xs cursor-pointer font-bold px-3 py-1.5 rounded-lg border border-[var(--color-border-light)] flex items-center gap-1.5"
-                    >
-                      <span>📂</span> View {group.jobs.length} Opening{group.jobs.length > 1 ? "s" : ""}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCompanyModal(group)}
+                    className="btn btn-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-lg border-0 shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                    title={`View ${group.jobs.length} opening${group.jobs.length > 1 ? "s" : ""} & claim +10 pts Pioneer Bounty`}
+                  >
+                    <span>🏆</span> Pioneer +10 pts
+                  </button>
                 )}
               </div>
             </div>

@@ -33,7 +33,7 @@ function cleanUrlAndTitle(rawTitle: string, rawUrl: string) {
   return { title: title || "Job Opening", url: cleanUrl };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

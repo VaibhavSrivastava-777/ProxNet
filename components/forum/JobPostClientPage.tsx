@@ -6,6 +6,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import { EventInviteModal } from "@/components/forum/EventInviteModal";
 import { JobPostModal } from "@/components/forum/JobPostModal";
+import { ProximityCardModal } from "@/components/profile/ProximityCardModal";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -25,6 +26,7 @@ export function JobPostClientPage({ id }: { id: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [selectedProfessional, setSelectedProfessional] = useState<any | null>(null);
 
   // Likes state
   const [hasLiked, setHasLiked] = useState(false);
@@ -371,9 +373,13 @@ export function JobPostClientPage({ id }: { id: string }) {
           {interestedList.length === 0 ? (
             <p className="text-sm text-[var(--color-text-secondary)] italic">No one has expressed interest yet. Be the first!</p>
           ) : (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
               {interestedList.map((i: any) => (
-                <div key={i.user?.id} className="flex items-center gap-3">
+                <div 
+                  key={i.user?.id} 
+                  onClick={() => i.user && setSelectedProfessional(i.user)}
+                  className="flex items-center gap-3 p-2 rounded-xl hover:bg-[var(--color-surface-hover)] cursor-pointer transition-colors"
+                >
                   <div className="w-10 h-10 rounded-full bg-[var(--color-primary-subtle)] text-[var(--color-primary)] flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
                     {i.user?.profile_photo_url ? (
                       <img src={i.user.profile_photo_url} alt={i.user.full_name} className="w-full h-full object-cover" />
@@ -381,9 +387,9 @@ export function JobPostClientPage({ id }: { id: string }) {
                       i.user?.full_name?.substring(0, 2).toUpperCase() || "U"
                     )}
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-bold text-[var(--color-text)]">{i.user?.full_name}</span>
-                    <span className="text-xs text-[var(--color-text-secondary)]">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-bold text-[var(--color-text)] truncate">{i.user?.full_name || "Neighbor Professional"}</span>
+                    <span className="text-xs text-[var(--color-text-secondary)] truncate">
                       {i.user?.job_title} @ {i.user?.company}
                     </span>
                   </div>
@@ -468,6 +474,18 @@ export function JobPostClientPage({ id }: { id: string }) {
           onSuccess={() => {
             setIsEditOpen(false);
             mutate();
+          }}
+        />
+      )}
+
+      {selectedProfessional && (
+        <ProximityCardModal
+          person={selectedProfessional}
+          currentUserProfile={profile?.user || profile}
+          onClose={() => setSelectedProfessional(null)}
+          onStartChat={() => {
+            setSelectedProfessional(null);
+            router.push("/qa?tab=network");
           }}
         />
       )}

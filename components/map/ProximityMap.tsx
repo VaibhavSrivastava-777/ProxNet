@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CompanyLogo } from "@/components/qa/QuestionList";
 import { MicroStatusBeacon } from "./MicroStatusBeacon";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
+import { ProximityCardModal } from "@/components/profile/ProximityCardModal";
 
 const ProximityMapInner = dynamic(
   () => import("./ProximityMapInner").then((m) => m.ProximityMapInner),
@@ -1059,151 +1060,20 @@ export function ProximityMap() {
         </div>
       )}
 
-      {/* ── 3. Profile Detail Modal ── */}
+      {/* ── 3. Proximity Card Modal for Selected Professional ── */}
       {selectedPerson && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-          onClick={() => setSelectedPerson(null)}
-        >
-          <div 
-            className="bg-[var(--color-surface)] w-full max-w-sm rounded-xl shadow-xl border border-[var(--color-border)] p-5 animate-scaleIn flex flex-col gap-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-start">
-              <div className="flex items-center gap-3">
-                <CompanyLogo company={selectedPerson.company} size={48} />
-                <div className="flex flex-col min-w-0">
-                  <h4 className="text-body font-bold m-0 text-[var(--color-text)] truncate">
-                    {selectedPerson.anonymous_name}
-                  </h4>
-                  <span className="text-xs font-bold text-[var(--color-text-secondary)] mt-0.5 truncate">
-                    {selectedPerson.company}
-                  </span>
-                  <span className="text-[11px] text-[var(--color-text-tertiary)] mt-0.5 truncate">
-                    {selectedPerson.job_title}
-                  </span>
-                  {selectedPerson.institute_name && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full w-fit mt-1">
-                      🎓 {selectedPerson.institute_name}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <button 
-                onClick={() => setSelectedPerson(null)} 
-                className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border-0 bg-transparent text-lg cursor-pointer"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-1.5 p-3 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)]">
-              <div className="flex justify-between text-xs">
-                <span className="text-[var(--color-text-secondary)]">Proximity distance:</span>
-                <span className="font-semibold text-xs" style={{ color: selectedPerson.distance !== null && selectedPerson.distance !== undefined ? "var(--color-text)" : "var(--color-warning)" }}>
-                  {selectedPerson.distance !== null && selectedPerson.distance !== undefined ? (
-                    selectedPerson.distance >= 1000 ? `${(selectedPerson.distance / 1000).toFixed(1)} km` : `${Math.round(selectedPerson.distance)} m`
-                  ) : (
-                    "Location not specified"
-                  )}
-                </span>
-              </div>
-            </div>
-
-            {/* Professional Bio */}
-            {selectedPerson.professional_bio && (
-              <div className="p-3 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)]">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-[var(--color-primary)]">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                  </svg>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-secondary)]">Professional Bio</span>
-                </div>
-                <p className="text-xs text-[var(--color-text)] leading-relaxed m-0">
-                  {selectedPerson.professional_bio}
-                </p>
-              </div>
-            )}
-
-            {/* Scrapbook: Help Offers, Tinkering & Society Directory Link */}
-            {(selectedPerson.help_offers?.length > 0 || selectedPerson.tinkering_with?.length > 0 || selectedPerson.society_name) && (
-              <div className="p-3 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col gap-2">
-                {selectedPerson.society_name && (
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[11px] text-[var(--color-text-secondary)]">🏢 Complex:</span>
-                    <span className="font-semibold text-xs text-[var(--color-text)]">
-                      {selectedPerson.society_name}
-                    </span>
-                  </div>
-                )}
-                {selectedPerson.help_offers?.length > 0 && (
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
-                      🤝 Can Help With
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedPerson.help_offers.slice(0, 3).map((o: string) => (
-                        <span key={o} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                          {o}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {selectedPerson.tinkering_with?.length > 0 && (
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
-                      ⚡ Tinkering With
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedPerson.tinkering_with.slice(0, 3).map((t: string) => (
-                        <span key={t} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Reason to Engage Callout (if a genuine common connection exists) */}
-            {(() => {
-              const engagement = getReasonToEngage(profile, selectedPerson);
-              if (!engagement) return null;
-
-              return (
-                <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 shadow-sm animate-fadeIn">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm">✨</span>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
-                      Reason to Engage
-                    </span>
-                  </div>
-                  <p className="text-xs font-serif italic leading-relaxed m-0 text-amber-800 dark:text-amber-100">
-                    "{engagement.reason}"
-                  </p>
-                </div>
-              );
-            })()}
-
-            <div className="flex items-center gap-3 mt-1">
-              <button
-                onClick={(e) => handleFollowToggle(e, selectedPerson)}
-                className={`flex-1 py-2 text-xs font-semibold rounded-lg border cursor-pointer transition-colors ${selectedPerson.is_followed ? 'bg-[var(--color-primary-subtle)] text-[var(--color-primary)] border-[var(--color-primary)]/20' : 'bg-[var(--color-primary)] text-white border-0 hover:bg-[var(--color-primary-hover)]'}`}
-              >
-                {selectedPerson.is_followed ? "Unfollow" : "Follow"}
-              </button>
-              <button
-                onClick={() => { const p = selectedPerson; setSelectedPerson(null); openDirectChat(p); }}
-                className="flex-1 py-2 text-xs font-semibold rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                Chat
-              </button>
-            </div>
-          </div>
-        </div>
+        <ProximityCardModal
+          person={selectedPerson}
+          currentUserProfile={profile}
+          userBeacon={activeBeaconMap.get(selectedPerson.id)}
+          onClose={() => setSelectedPerson(null)}
+          onStartChat={(p) => {
+            setSelectedPerson(null);
+            openDirectChat(p);
+          }}
+          onFollowToggle={handleFollowToggle}
+          onJoinBeacon={handleJoinBeacon}
+        />
       )}
 
       {/* ── 4. Chat/Question Dialog Modal with suggested prefill message ── */}

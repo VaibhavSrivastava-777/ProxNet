@@ -1,15 +1,20 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 
-export interface CompetitorResult {
-  companyName: string;
-  competitors: Array<{
-    name: string;
-    industry?: string;
-    source: "canonical" | "openai";
-  }>;
+export interface DiscoveredCompetitor {
+  name: string;
+  industry?: string;
+  careers_url?: string;
+  provider?: string;
+  boardTokenOrUrl?: string;
+  source: "claude" | "openai" | "canonical";
 }
 
-// Canonical high-accuracy mapping for common Indian & Global companies in ProxNet
+export interface CompetitorResult {
+  companyName: string;
+  competitors: DiscoveredCompetitor[];
+}
+
+// Canonical high-accuracy mapping kept as a reference and emergency fallback
 export const CANONICAL_COMPETITORS: Record<string, string[]> = {
   // Food & Quick-Commerce
   "swiggy": ["Zomato", "Zepto", "Blinkit", "BigBasket"],
@@ -134,6 +139,182 @@ export function isValidEnterprise(name: string | null | undefined): boolean {
 }
 
 /**
+ * Extracts ATS provider and board token or URL from a career link
+ */
+export function extractAtsFromUrl(rawUrl: string, companyName: string): { provider: string; boardTokenOrUrl: string } {
+  if (!rawUrl || typeof rawUrl !== "string") {
+    return { provider: "custom", boardTokenOrUrl: "" };
+  }
+  const cleanUrl = rawUrl.trim();
+  try {
+    const u = new URL(cleanUrl);
+    const host = u.hostname.toLowerCase();
+    const pathname = u.pathname;
+
+    // Greenhouse
+    if (host.includes("greenhouse.io") || host.includes("gh.io")) {
+      const searchToken = u.searchParams.get("for");
+      if (searchToken) return { provider: "greenhouse", boardTokenOrUrl: searchToken.trim() };
+      const parts = pathname.split("/").filter(Boolean);
+      if (parts.length > 0) return { provider: "greenhouse", boardTokenOrUrl: parts[parts.length - 1].trim() };
+    }
+
+    // Lever
+    if (host.includes("lever.co")) {
+      const parts = pathname.split("/").filter(Boolean);
+      if (parts.length > 0) return { provider: "lever", boardTokenOrUrl: parts[0].trim() };
+    }
+
+    // Ashby
+    if (host.includes("ashbyhq.com")) {
+      const parts = pathname.split("/").filter(Boolean);
+      if (parts.length > 0) return { provider: "ashby", boardTokenOrUrl: parts[0].trim() };
+    }
+
+    // Workday
+    if (host.includes("myworkdayjobs.com")) {
+      return { provider: "workday", boardTokenOrUrl: cleanUrl };
+    }
+
+    // Oracle Cloud HCM
+    if (host.includes("oraclecloud.com")) {
+      return { provider: "oracle", boardTokenOrUrl: cleanUrl };
+    }
+
+    return { provider: "custom", boardTokenOrUrl: cleanUrl };
+  } catch {
+    return { provider: "custom", boardTokenOrUrl: cleanUrl };
+  }
+}
+
+/**
+ * Discovers competitors and their career portal links using Claude (Anthropic Messages API)
+ */
+async function discoverCompetitorsViaClaude(
+  companyName: string,
+  apiKey: string
+): Promise<DiscoveredCompetitor[]> {
+  const modelName = process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-20241022";
+  const prompt = `You are an industry market intelligence expert. For the company "${companyName}", identify 3 to 5 direct competitors and their official career portal or job board URLs (e.g. direct Greenhouse board, Lever board, Workday jobs URL, Ashby board, or official company careers page).
+Respond ONLY with a valid JSON object matching this schema:
+{
+  "company": "${companyName}",
+  "competitors": [
+    {
+      "name": "Competitor Name",
+      "industry": "Industry or Domain",
+      "careers_url": "https://..."
+    }
+  ]
+}`;
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: modelName,
+      max_tokens: 600,
+      messages: [{ role: "user", content: prompt }],
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Claude API error: ${response.statusText} (${response.status})`);
+  }
+
+  const data = await response.json();
+  const text = data.content?.[0]?.text;
+  if (!text) return [];
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return [];
+
+  const parsed = JSON.parse(jsonMatch[0]);
+  const rawList = Array.isArray(parsed.competitors) ? parsed.competitors : [];
+
+  return rawList
+    .map((item: any) => {
+      const name = typeof item === "string" ? item.trim() : (item.name || "").trim();
+      const careersUrl = typeof item === "object" ? item.careers_url : undefined;
+      const ats = extractAtsFromUrl(careersUrl || "", name);
+      return {
+        name,
+        industry: typeof item === "object" ? item.industry : undefined,
+        careers_url: careersUrl,
+        provider: ats.provider,
+        boardTokenOrUrl: ats.boardTokenOrUrl,
+        source: "claude" as const,
+      };
+    })
+    .filter((c: any) => c.name && isValidEnterprise(c.name) && normalizeCompanyName(c.name) !== normalizeCompanyName(companyName));
+}
+
+/**
+ * Discovers competitors and their career portal links using OpenAI (gpt-4o-mini structured JSON)
+ */
+async function discoverCompetitorsViaOpenAI(
+  companyName: string,
+  apiKey: string
+): Promise<DiscoveredCompetitor[]> {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an industry market intelligence expert. Given a company name, identify 3 to 5 direct competitors and their official career portal or job board links (e.g. Greenhouse, Lever, Workday, Ashby, or company careers page). Return a JSON object with a 'competitors' array of objects with 'name', 'industry', and 'careers_url' properties.",
+        },
+        {
+          role: "user",
+          content: `Identify top 3 to 5 direct competitors and official career portal URLs for company: "${companyName}".`,
+        },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.2,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI API error: ${response.statusText} (${response.status})`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) return [];
+
+  const parsed = JSON.parse(content);
+  const rawList = Array.isArray(parsed.competitors) ? parsed.competitors : [];
+
+  return rawList
+    .map((item: any) => {
+      const name = typeof item === "string" ? item.trim() : (item.name || "").trim();
+      const careersUrl = typeof item === "object" ? item.careers_url : undefined;
+      const ats = extractAtsFromUrl(careersUrl || "", name);
+      return {
+        name,
+        industry: typeof item === "object" ? item.industry : undefined,
+        careers_url: careersUrl,
+        provider: ats.provider,
+        boardTokenOrUrl: ats.boardTokenOrUrl,
+        source: "openai" as const,
+      };
+    })
+    .filter((c: any) => c.name && isValidEnterprise(c.name) && normalizeCompanyName(c.name) !== normalizeCompanyName(companyName));
+}
+
+/**
  * Fetch all distinct valid network companies where active ProxNet members work
  */
 export async function getNetworkCompanies(supabase: SupabaseClient): Promise<string[]> {
@@ -164,118 +345,170 @@ export async function getNetworkCompanies(supabase: SupabaseClient): Promise<str
 }
 
 /**
- * Discovers competitors for a single company using canonical rules first,
- * falling back to OpenAI structured completions.
+ * Discovers competitors for a single company dynamically using GenAI (Claude with OpenAI fallback).
  */
 export async function discoverCompetitorsForCompany(
   companyName: string,
   openaiKey?: string
 ): Promise<CompetitorResult> {
-  const normalizedKey = normalizeCompanyName(companyName);
+  const normName = companyName.trim();
+  const claudeKey = process.env.ANTHROPIC_API_KEY?.trim();
 
-  // 1. Check canonical dictionary
-  if (CANONICAL_COMPETITORS[normalizedKey]) {
-    const comps = CANONICAL_COMPETITORS[normalizedKey].map((c) => ({
-      name: c,
-      source: "canonical" as const,
-    }));
-    return { companyName, competitors: comps };
-  }
-
-  // Check partial match in canonical dictionary
-  for (const [key, comps] of Object.entries(CANONICAL_COMPETITORS)) {
-    if (normalizedKey.includes(key) || key.includes(normalizedKey)) {
-      return {
-        companyName,
-        competitors: comps.map((c) => ({ name: c, source: "canonical" as const })),
-      };
+  // 1. Dynamic GenAI: Try Claude first if key is configured
+  if (claudeKey) {
+    try {
+      const claudeComps = await discoverCompetitorsViaClaude(normName, claudeKey);
+      if (claudeComps.length > 0) {
+        return { companyName: normName, competitors: claudeComps };
+      }
+    } catch (err: any) {
+      console.warn(`[Competitor Discovery - Claude] Falling back to OpenAI for ${normName}:`, err.message);
     }
   }
 
-  // 2. Fallback to OpenAI gpt-4o-mini
-  const keyToUse = openaiKey || process.env.OPENAI_API_KEY;
-  if (!keyToUse) {
-    return { companyName, competitors: [] };
-  }
-
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${keyToUse}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an industry market intelligence expert. Given a company name, identify 3 to 5 direct competitors that operate in similar sectors, especially those with tech/corporate offices in India or globally. Return a JSON object with a 'competitors' array of objects with 'name' and 'industry' properties.",
-          },
-          {
-            role: "user",
-            content: `Identify top 3 to 5 direct competitors for company: "${companyName}".`,
-          },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.2,
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!response.ok) {
-      console.warn(`[OpenAI Competitor Discovery] HTTP ${response.status} for ${companyName}`);
-      return { companyName, competitors: [] };
+  // 2. Dynamic GenAI: Fallback to OpenAI gpt-4o-mini
+  const keyToUse = openaiKey || process.env.OPENAI_API_KEY?.trim();
+  if (keyToUse) {
+    try {
+      const openAiComps = await discoverCompetitorsViaOpenAI(normName, keyToUse);
+      if (openAiComps.length > 0) {
+        return { companyName: normName, competitors: openAiComps };
+      }
+    } catch (err: any) {
+      console.warn(`[Competitor Discovery - OpenAI] Failed for ${normName}:`, err.message);
     }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) return { companyName, competitors: [] };
-
-    const parsed = JSON.parse(content);
-    const rawList = Array.isArray(parsed.competitors) ? parsed.competitors : [];
-
-    const competitors = rawList
-      .map((item: any) => ({
-        name: typeof item === "string" ? item.trim() : (item.name || "").trim(),
-        industry: typeof item === "object" ? item.industry : undefined,
-        source: "openai" as const,
-      }))
-      .filter((c: any) => c.name && isValidEnterprise(c.name) && normalizeCompanyName(c.name) !== normalizedKey);
-
-    return { companyName, competitors };
-  } catch (err: any) {
-    console.warn(`[OpenAI Competitor Discovery] Failed for ${companyName}:`, err.message);
-    return { companyName, competitors: [] };
   }
+
+  // 3. Graceful fallback to canonical map if LLM is unavailable
+  const normKey = normalizeCompanyName(normName);
+  const fallbackList = CANONICAL_COMPETITORS[normKey] || [];
+  const competitors: DiscoveredCompetitor[] = fallbackList.map((c) => ({
+    name: c,
+    source: "canonical" as const,
+  }));
+
+  return { companyName: normName, competitors };
 }
 
 /**
- * Master function to map competitors for all network companies and return a deduplicated list
+ * Master function to map competitors for network companies dynamically in a loop,
+ * persist competitor relationships to `company_competitors`, and seed `company_ats_config`.
  */
 export async function mapAllNetworkCompetitors(
   supabase: SupabaseClient,
-  openaiKey?: string
+  openaiKey?: string,
+  limit?: number
 ): Promise<{
   networkCompanies: string[];
   competitorMap: Map<string, string[]>;
   allCompetitors: string[];
+  recordsInserted: number;
 }> {
-  const networkCompanies = await getNetworkCompanies(supabase);
+  let networkCompanies = await getNetworkCompanies(supabase);
+  if (typeof limit === "number" && limit > 0) {
+    networkCompanies = networkCompanies.slice(0, limit);
+  }
+
   const competitorMap = new Map<string, string[]>();
   const allCompetitorSet = new Map<string, string>();
 
+  const recordsToInsert: Array<{
+    company_name: string;
+    competitor_name: string;
+    industry?: string | null;
+    discovery_source: string;
+    is_active: boolean;
+    updated_at: string;
+  }> = [];
+
+  const atsConfigsToUpsert: Array<{
+    company_name: string;
+    provider: string;
+    board_token_or_url: string;
+    scrape_notes: string;
+  }> = [];
+
   for (const company of networkCompanies) {
+    console.log(`[mapAllNetworkCompetitors] Discovering competitors dynamically for: "${company}"...`);
     const res = await discoverCompetitorsForCompany(company, openaiKey);
     const compNames = res.competitors.map((c) => c.name);
     competitorMap.set(company, compNames);
 
     for (const c of res.competitors) {
+      recordsToInsert.push({
+        company_name: company,
+        competitor_name: c.name,
+        industry: c.industry || null,
+        discovery_source: c.source,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      });
+
       const key = normalizeCompanyName(c.name);
       if (!allCompetitorSet.has(key)) {
         allCompetitorSet.set(key, c.name);
       }
+
+      // If career portal URL or ATS provider was discovered, prepare ATS config
+      if (c.boardTokenOrUrl && c.provider) {
+        atsConfigsToUpsert.push({
+          company_name: c.name,
+          provider: c.provider,
+          board_token_or_url: c.boardTokenOrUrl,
+          scrape_notes: `Discovered as competitor of ${company} via GenAI (${c.source}) | Career portal: ${c.careers_url || c.boardTokenOrUrl}`,
+        });
+      }
+    }
+  }
+
+  // Persist all discovered competitor relationships directly into company_competitors table
+  if (recordsToInsert.length > 0) {
+    try {
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < recordsToInsert.length; i += CHUNK_SIZE) {
+        const chunk = recordsToInsert.slice(i, i + CHUNK_SIZE);
+        const { error: upsertErr } = await supabase
+          .from("company_competitors")
+          .upsert(chunk, { onConflict: "company_name,competitor_name" });
+        if (upsertErr) {
+          console.warn("[mapAllNetworkCompetitors] Warning saving to company_competitors:", upsertErr.message);
+        }
+      }
+      console.log(`[mapAllNetworkCompetitors] Successfully persisted ${recordsToInsert.length} competitor relationships into company_competitors.`);
+    } catch (dbErr: any) {
+      console.warn("[mapAllNetworkCompetitors] Database error saving company_competitors:", dbErr.message);
+    }
+  }
+
+  // Upsert into company_ats_config for newly discovered competitor career portals if not already configured
+  for (const ats of atsConfigsToUpsert) {
+    try {
+      const { data: existing } = await supabase
+        .from("company_ats_config")
+        .select("id, provider, board_token_or_url")
+        .ilike("company_name", ats.company_name)
+        .maybeSingle();
+
+      if (!existing) {
+        await supabase.from("company_ats_config").insert({
+          company_name: ats.company_name,
+          provider: ats.provider,
+          board_token_or_url: ats.board_token_or_url,
+          scrape_notes: ats.scrape_notes,
+          total_jobs_found: 0,
+        });
+      } else if (existing.provider === "none" || !existing.board_token_or_url) {
+        await supabase
+          .from("company_ats_config")
+          .update({
+            provider: ats.provider,
+            board_token_or_url: ats.board_token_or_url,
+            scrape_notes: ats.scrape_notes,
+          })
+          .eq("id", existing.id);
+      }
+    } catch (atsErr: any) {
+      console.warn(`[mapAllNetworkCompetitors] Could not save ATS config for ${ats.company_name}:`, atsErr.message);
     }
   }
 
@@ -283,5 +516,6 @@ export async function mapAllNetworkCompetitors(
     networkCompanies,
     competitorMap,
     allCompetitors: Array.from(allCompetitorSet.values()),
+    recordsInserted: recordsToInsert.length,
   };
 }

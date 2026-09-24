@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   // Fetch all active users (omit embedding completely)
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("id, company, job_title, professional_bio, tags, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility")
+    .select("id, full_name, company, job_title, about, professional_bio, tags, help_offers, tinkering_with, ask_me_about, quick_chat_preference, society_name, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility")
     .eq("is_active", true)
     .neq("id", user.id);
 
@@ -105,11 +105,19 @@ export async function GET(request: Request) {
     if (unfiltered || minDistance <= radius) {
       nearbyPeople.push({
         id: u.id,
+        full_name: u.full_name || null,
         anonymous_name: u.anonymous_name || `Neighbour-${u.id.slice(0, 4)}`,
         job_title: u.job_title.trim(),
         company: u.company.trim(),
+        about: (u as any).about || null,
         professional_bio: (u as any).professional_bio || null,
         tags: u.tags || [],
+        help_offers: (u as any).help_offers || [],
+        tinkering_with: (u as any).tinkering_with || [],
+        ask_me_about: (u as any).ask_me_about || [],
+        quick_chat_preference: (u as any).quick_chat_preference || null,
+        society_name: (u as any).society_name || null,
+        visibility: u.visibility,
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
         distance: minDistance === Infinity ? null : minDistance,
         is_followed: followingIds.has(u.id),
