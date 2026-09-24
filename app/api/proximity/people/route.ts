@@ -44,7 +44,7 @@ export async function GET(request: Request) {
   // Fetch all active users (omit embedding completely)
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("id, full_name, company, job_title, about, professional_bio, tags, help_offers, tinkering_with, ask_me_about, quick_chat_preference, society_name, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility")
+    .select("id, full_name, company, job_title, about, professional_bio, tags, profile_digest, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility")
     .eq("is_active", true)
     .neq("id", user.id);
 
@@ -78,7 +78,7 @@ export async function GET(request: Request) {
 
   const nearbyPeople: any[] = [];
 
-  for (const u of (users ?? []) as User[]) {
+  for (const u of (users ?? []) as any[]) {
     // If user has no job title or company, don't show in proximity list
     if (!u.job_title?.trim() || !u.company?.trim()) continue;
 
@@ -114,6 +114,7 @@ export async function GET(request: Request) {
     }
 
     if (effectiveUnfiltered || minDistance <= radius) {
+      const digest = (u as any).profile_digest || {};
       nearbyPeople.push({
         id: u.id,
         full_name: u.full_name || null,
@@ -123,11 +124,11 @@ export async function GET(request: Request) {
         about: (u as any).about || null,
         professional_bio: (u as any).professional_bio || null,
         tags: u.tags || [],
-        help_offers: (u as any).help_offers || [],
-        tinkering_with: (u as any).tinkering_with || [],
-        ask_me_about: (u as any).ask_me_about || [],
-        quick_chat_preference: (u as any).quick_chat_preference || null,
-        society_name: (u as any).society_name || null,
+        help_offers: digest.help_offers || [],
+        tinkering_with: digest.tinkering_with || [],
+        ask_me_about: digest.ask_me_about || [],
+        quick_chat_preference: digest.quick_chat_preference || null,
+        society_name: digest.society_name || null,
         visibility: u.visibility,
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
         distance: minDistance === Infinity ? null : minDistance,
@@ -142,7 +143,7 @@ export async function GET(request: Request) {
   let autoExpanded = false;
   if (!effectiveUnfiltered && nearbyPeople.length === 0) {
     autoExpanded = true;
-    for (const u of (users ?? []) as User[]) {
+    for (const u of (users ?? []) as any[]) {
       const title = (u.job_title || "").trim();
       const comp = (u.company || "").trim();
       if ((!title || title === "null") && (!comp || comp === "null")) continue;
@@ -162,6 +163,7 @@ export async function GET(request: Request) {
         }
       }
 
+      const digest = (u as any).profile_digest || {};
       nearbyPeople.push({
         id: u.id,
         full_name: u.full_name || null,
@@ -171,11 +173,11 @@ export async function GET(request: Request) {
         about: (u as any).about || null,
         professional_bio: (u as any).professional_bio || null,
         tags: u.tags || [],
-        help_offers: (u as any).help_offers || [],
-        tinkering_with: (u as any).tinkering_with || [],
-        ask_me_about: (u as any).ask_me_about || [],
-        quick_chat_preference: (u as any).quick_chat_preference || null,
-        society_name: (u as any).society_name || null,
+        help_offers: digest.help_offers || [],
+        tinkering_with: digest.tinkering_with || [],
+        ask_me_about: digest.ask_me_about || [],
+        quick_chat_preference: digest.quick_chat_preference || null,
+        society_name: digest.society_name || null,
         visibility: u.visibility,
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
         distance: minDistance === Infinity ? null : minDistance,
