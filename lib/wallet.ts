@@ -24,11 +24,13 @@ export const CREDIT_REWARDS: Record<CreditReason, { amount: number; label: strin
 
 export type DebitReason =
   | "referral_request_cost"
-  | "referral_response_transfer";
+  | "referral_response_transfer"
+  | "deep_ats_fetch";
 
 export const CREDIT_COSTS: Record<DebitReason, { amount: number; label: string }> = {
   referral_request_cost: { amount: 1, label: "Initiating a Referral Request" },
   referral_response_transfer: { amount: 3, label: "Transfer for Referral Response" },
+  deep_ats_fetch: { amount: 1, label: "Deep ATS Match Hunter" },
 };
 
 export interface AwardCreditsResult {

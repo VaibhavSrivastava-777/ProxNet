@@ -7,6 +7,7 @@ import { ResumeCard } from "./ResumeCard";
 import { ReferralPitchModal } from "./ReferralPitchModal";
 import { TargetCompanyManager } from "./TargetCompanyManager";
 import { ApplicationPipeline } from "./ApplicationPipeline";
+import { DeepFetchModal } from "./DeepFetchModal";
 import { playNotificationSound } from "@/lib/sound";
 import { cleanJobTitle } from "@/lib/jobs/job-filters";
 
@@ -136,11 +137,69 @@ export function SuggestedJobs() {
   const [pitchModalJob, setPitchModalJob] = useState<{ job: SuggestedJob; group: CompanyGroup } | null>(null);
   // New: Target Company Manager Modal
   const [showTargetCompanyModal, setShowTargetCompanyModal] = useState(false);
+  // Deep ATS Hunter State
+  const [showDeepFetchModal, setShowDeepFetchModal] = useState(false);
+  const [deepHunterMatches, setDeepHunterMatches] = useState<any[]>([]);
   // Save job feedback & state tracking
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [savedJobKeys, setSavedJobKeys] = useState<Set<string>>(new Set());
   const [savingJobId, setSavingJobId] = useState<string | null>(null);
   const router = useRouter();
+
+  const handleMatchesFetched = (matches: any[], newWallet: number) => {
+    setDeepHunterMatches(matches);
+    setUserWallet(newWallet);
+    window.dispatchEvent(new CustomEvent("wallet-updated", { detail: newWallet }));
+    try {
+      playNotificationSound("job_match");
+    } catch {}
+    setMatchAddedToast({
+      show: true,
+      message: `🎯 Fetched ${matches.length} high-conviction roles (>70% fit) directly from live ATS boards!`,
+      score: matches[0]?.score || 85,
+    });
+
+    // Also auto-merge these matches into existing companies state if matched
+    if (matches.length > 0) {
+      setCompanies((prev) => {
+        const updated = [...prev];
+        for (const m of matches) {
+          const compIdx = updated.findIndex(
+            (c) => c.company.toLowerCase().trim() === m.company.toLowerCase().trim()
+          );
+          const jobObj: SuggestedJob = {
+            id: m.id,
+            title: cleanJobTitle(m.title),
+            location: m.location || "Remote",
+            url: m.url || "",
+            description: m.description || "",
+            posted_at: m.posted_at || "",
+            keywords: m.keywords || [],
+            matchRate: m.score,
+            score: m.score,
+            label: m.label,
+            reason: m.reason,
+          };
+
+          if (compIdx !== -1) {
+            const existingComp = updated[compIdx];
+            const existingJobs = existingComp.jobs.filter((j) => j.id !== m.id);
+            existingJobs.unshift(jobObj);
+            existingJobs.sort((a, b) => (b.score ?? b.matchRate ?? 0) - (a.score ?? a.matchRate ?? 0));
+            updated[compIdx] = { ...existingComp, jobs: existingJobs };
+          } else {
+            updated.unshift({
+              company: m.company,
+              contactsCount: m.referralContacts?.length || 0,
+              referralContacts: m.referralContacts || [],
+              jobs: [jobObj],
+            });
+          }
+        }
+        return updated.sort((a, b) => (b.jobs[0]?.score ?? 0) - (a.jobs[0]?.score ?? 0));
+      });
+    }
+  };
 
   const fetchSavedApplications = useCallback(async () => {
     try {
@@ -712,6 +771,145 @@ export function SuggestedJobs() {
             <span>Updating match evaluation in background...</span>
           </span>
           <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">Active</span>
+        </div>
+      )}
+
+      {/* 🎯 Deep ATS Match Hunter Action Banner */}
+      <div className="p-3.5 sm:p-4 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 via-[var(--color-surface)] to-emerald-500/10 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center text-lg shrink-0 shadow-2xs">
+            🎯
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs sm:text-sm font-bold text-[var(--color-text)] m-0">
+                Deep ATS Match Hunter
+              </h3>
+              <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-semibold text-[10px] border border-emerald-500/20">
+                &gt;70% Fit Guaranteed
+              </span>
+            </div>
+            <p className="text-[11px] text-[var(--color-text-secondary)] mt-0.5 m-0">
+              Live crawl across Greenhouse, Lever & Ashby boards with AI resume reranking
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          <div className="px-2.5 py-1.5 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-[11px] font-bold text-[var(--color-text)] flex items-center gap-1.5">
+            <span>🪙</span>
+            <span>{userWallet ?? 0} Credits</span>
+          </div>
+
+          <button
+            id="btn-deep-ats-fetch"
+            type="button"
+            onClick={() => setShowDeepFetchModal(true)}
+            className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-primary to-emerald-600 hover:opacity-95 text-white font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>⚡ Fetch Matches</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 🎯 Deep Hunter Matches Section (Rendered when live matches fetched) */}
+      {deepHunterMatches.length > 0 && (
+        <div id="deep-hunter-results" className="p-4 rounded-xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/5 to-transparent space-y-3 animate-fadeIn">
+          <div className="flex items-center justify-between pb-2 border-b border-emerald-500/20">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🔥</span>
+              <h3 className="text-xs sm:text-sm font-bold text-[var(--color-text)] m-0">
+                Deep Hunter Matches ({deepHunterMatches.length} Roles with &gt;70% Fit)
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                Sorted by Match Fit ↓
+              </span>
+              <button
+                type="button"
+                onClick={() => setDeepHunterMatches([])}
+                className="text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] underline ml-2 cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {deepHunterMatches.map((m, idx) => (
+              <div
+                key={m.id || idx}
+                className="p-3.5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-xs hover:border-emerald-500/40 transition-all flex flex-col gap-2.5"
+              >
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <CompanyLogo company={m.company} size={36} />
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-[var(--color-text)] m-0">
+                        {cleanJobTitle(m.title)}
+                      </h4>
+                      <div className="flex items-center gap-2 text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+                        <span className="font-semibold text-[var(--color-text)]">{m.company}</span>
+                        <span>•</span>
+                        <span>{m.location || "Remote"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-1">
+                      <span>🎯</span>
+                      <span>{m.score}% Match</span>
+                    </span>
+                    <span className="text-[9px] text-[var(--color-text-tertiary)]">
+                      ⚡ Live from {m.source || "ATS"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* AI Fit Reason */}
+                {m.reason && (
+                  <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-[var(--color-text)] leading-relaxed">
+                    <span className="font-bold text-emerald-700 dark:text-emerald-300 mr-1.5">💡 Fit Reason:</span>
+                    <span>{m.reason}</span>
+                  </div>
+                )}
+
+                {/* Footer Actions: Pioneer vs Referrer + Apply */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--color-border-light)]/40">
+                  {m.isPioneer ? (
+                    <button
+                      type="button"
+                      onClick={() => handleInviteColleague(m.company)}
+                      className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-[11px] font-bold hover:bg-amber-500/25 transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
+                      title="No members from this company yet. Invite a colleague and earn +10 credits!"
+                    >
+                      <span>🏆 Pioneer +10 pts</span>
+                      <span className="text-[10px] font-normal text-amber-600 dark:text-amber-400">• Invite Colleague</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
+                      <span>🤝</span>
+                      <span>{m.referralContacts?.length || 1} Insider Referrer(s) Available</span>
+                    </div>
+                  )}
+
+                  {m.url && (
+                    <a
+                      href={m.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1 rounded-lg bg-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity ml-auto"
+                    >
+                      Apply on ATS →
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1534,6 +1732,19 @@ export function SuggestedJobs() {
           </div>
         </div>
       )}
+
+      {/* Deep ATS Match Hunter Modal */}
+      <DeepFetchModal
+        isOpen={showDeepFetchModal}
+        onClose={() => setShowDeepFetchModal(false)}
+        wallet={userWallet ?? 0}
+        hasResume={hasResume}
+        onMatchesFetched={handleMatchesFetched}
+        onOpenResumeUpload={() => {
+          const el = document.getElementById("resume-upload-input");
+          if (el) el.click();
+        }}
+      />
     </div>
   );
 }
