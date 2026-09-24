@@ -480,8 +480,8 @@ function AIChatInner() {
       {/* WhatsApp-Style Input Bar */}
       <form
         onSubmit={handleSend}
-        className="flex items-end gap-2 border-t border-[var(--color-border-light)] px-3 py-2 bg-[var(--whatsapp-bg)]/95 backdrop-blur-sm sticky bottom-0 z-10 w-full animate-fadeIn shrink-0"
-        style={{ paddingBottom: "calc(8px + env(safe-area-inset-bottom, 0px))" }}
+        className="flex items-end gap-2 border-t border-[var(--color-border-light)] px-3 py-2 bg-[var(--color-surface)] shadow-[0_-2px_10px_rgba(0,0,0,0.05)] sticky bottom-0 z-30 w-full animate-fadeIn shrink-0"
+        style={{ paddingBottom: "max(10px, env(safe-area-inset-bottom, 10px))" }}
       >
         <div className="flex-1 relative flex items-center">
           <textarea

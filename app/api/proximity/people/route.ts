@@ -24,8 +24,19 @@ export async function GET(request: Request) {
   const unfiltered = searchParams.get("unfiltered") === "true";
   const tagFilter = searchParams.get("tag")?.trim().toLowerCase() || null;
 
-  if (Number.isNaN(lat) || Number.isNaN(lng)) {
-    return NextResponse.json({ error: "Invalid location parameters" }, { status: 400 });
+  let effectiveLat = lat;
+  let effectiveLng = lng;
+  let effectiveUnfiltered = unfiltered;
+
+  if (Number.isNaN(effectiveLat) || Number.isNaN(effectiveLng)) {
+    if (user.home_lat != null && user.home_lng != null) {
+      effectiveLat = Number(user.home_lat);
+      effectiveLng = Number(user.home_lng);
+    } else {
+      effectiveLat = 12.9716;
+      effectiveLng = 77.5946;
+      effectiveUnfiltered = true;
+    }
   }
 
   const supabase = createAdminClient();
@@ -96,19 +107,67 @@ export async function GET(request: Request) {
     if (current?.lat != null && current?.lng != null) locsToCheck.push({ lat: current.lat, lng: current.lng });
 
     for (const loc of locsToCheck) {
-      const distance = haversineDistanceMeters(lat, lng, loc.lat, loc.lng);
+      const distance = haversineDistanceMeters(effectiveLat, effectiveLng, loc.lat, loc.lng);
       if (distance < minDistance) {
         minDistance = distance;
       }
     }
 
-    if (unfiltered || minDistance <= radius) {
+    if (effectiveUnfiltered || minDistance <= radius) {
       nearbyPeople.push({
         id: u.id,
         full_name: u.full_name || null,
         anonymous_name: u.anonymous_name || `Neighbour-${u.id.slice(0, 4)}`,
         job_title: u.job_title.trim(),
         company: u.company.trim(),
+        about: (u as any).about || null,
+        professional_bio: (u as any).professional_bio || null,
+        tags: u.tags || [],
+        help_offers: (u as any).help_offers || [],
+        tinkering_with: (u as any).tinkering_with || [],
+        ask_me_about: (u as any).ask_me_about || [],
+        quick_chat_preference: (u as any).quick_chat_preference || null,
+        society_name: (u as any).society_name || null,
+        visibility: u.visibility,
+        profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
+        distance: minDistance === Infinity ? null : minDistance,
+        is_followed: followingIds.has(u.id),
+        institute_name: affiliationMap.get(u.id) ?? null,
+      });
+    }
+  }
+
+  // If strict radius (e.g. 2km) yielded 0 people for users in a new or developing neighborhood,
+  // auto-expand so NO user is greeted with a blank screen!
+  let autoExpanded = false;
+  if (!effectiveUnfiltered && nearbyPeople.length === 0) {
+    autoExpanded = true;
+    for (const u of (users ?? []) as User[]) {
+      const title = (u.job_title || "").trim();
+      const comp = (u.company || "").trim();
+      if ((!title || title === "null") && (!comp || comp === "null")) continue;
+
+      const current = locationMap.get(u.id);
+      let minDistance = Infinity;
+
+      const locsToCheck = [];
+      if (u.home_lat != null && u.home_lng != null) locsToCheck.push({ lat: Number(u.home_lat), lng: Number(u.home_lng) });
+      if (u.office_lat != null && u.office_lng != null) locsToCheck.push({ lat: Number(u.office_lat), lng: Number(u.office_lng) });
+      if (current?.lat != null && current?.lng != null) locsToCheck.push({ lat: current.lat, lng: current.lng });
+
+      for (const loc of locsToCheck) {
+        const distance = haversineDistanceMeters(effectiveLat, effectiveLng, loc.lat, loc.lng);
+        if (distance < minDistance) {
+          minDistance = distance;
+        }
+      }
+
+      nearbyPeople.push({
+        id: u.id,
+        full_name: u.full_name || null,
+        anonymous_name: u.anonymous_name || `Neighbour-${u.id.slice(0, 4)}`,
+        job_title: title && title !== "null" ? title : "Professional",
+        company: comp && comp !== "null" ? comp : "Nearby Company",
         about: (u as any).about || null,
         professional_bio: (u as any).professional_bio || null,
         tags: u.tags || [],
@@ -136,5 +195,5 @@ export async function GET(request: Request) {
     return a.company.localeCompare(b.company);
   });
 
-  return NextResponse.json({ people: nearbyPeople });
+  return NextResponse.json({ people: nearbyPeople, autoExpanded });
 }

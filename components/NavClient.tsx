@@ -49,7 +49,8 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   const isChatRoom =
     pathname.startsWith("/chat/") ||
     pathname.startsWith("/jobs/chat/") ||
-    pathname.startsWith("/carpool/chat/");
+    pathname.startsWith("/carpool/chat/") ||
+    pathname === "/proxnet-ai";
   const { theme, resolved, setTheme } = useTheme();
   const isIosUser = typeof window !== "undefined" && (/iphone|ipad|ipod/i.test(window.navigator.userAgent) || (window.navigator.userAgent.includes("Mac") && window.navigator.maxTouchPoints > 0));
 

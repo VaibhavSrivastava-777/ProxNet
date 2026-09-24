@@ -83,32 +83,17 @@ async function main() {
 
   // Step 4A: Static code assertion on QAContent.tsx
   const qaContentCode = fs.readFileSync(path.join(process.cwd(), "app/qa/QAContent.tsx"), "utf-8");
-  if (!qaContentCode.includes("minDisplayDurationMs={5000}")) {
-    throw new Error("Test 4 Failed: QAContent.tsx does not specify minDisplayDurationMs={5000}");
-  }
-  if (!qaContentCode.includes("const [isTransitioning, setIsTransitioning] = useState<boolean>(true)")) {
-    throw new Error("Test 4 Failed: QAContent.tsx does not initialize isTransitioning to true for initial tab load");
-  }
   if (!qaContentCode.includes("key={activeTab}")) {
     throw new Error("Test 4 Failed: QAContent.tsx does not set key={activeTab} on TabValueTransition");
   }
-  if (!qaContentCode.includes("setIsTransitioning(true);\n        setActiveTab(targetTab);")) {
-    throw new Error("Test 4 Failed: QAContent.tsx does not trigger isTransitioning on tab change");
-  }
-  console.log("  ✓ QAContent.tsx re-enables 5s transition on initial load and each tab change with key={activeTab}.");
+  console.log("  ✓ QAContent.tsx integrates TabValueTransition cleanly with key={activeTab}.");
 
   // Step 4B: Static code assertion on TabValueTransition.tsx
   const tabTransitionCode = fs.readFileSync(path.join(process.cwd(), "components/common/TabValueTransition.tsx"), "utf-8");
-  if (!tabTransitionCode.includes("minDisplayDurationMs = 5000")) {
-    throw new Error("Test 4 Failed: TabValueTransition.tsx default minDisplayDurationMs is not 5000");
+  if (!tabTransitionCode.includes("isFirstTimeScreenOpening(activeTab)")) {
+    throw new Error("Test 4 Failed: TabValueTransition.tsx does not check isFirstTimeScreenOpening");
   }
-  if (!tabTransitionCode.includes("Math.max(5000")) {
-    throw new Error("Test 4 Failed: TabValueTransition.tsx does not enforce at least 5000ms duration");
-  }
-  if (tabTransitionCode.includes("const firstTime = isFirstTimeScreenOpening(activeTab);\n    if (!firstTime")) {
-    throw new Error("Test 4 Failed: TabValueTransition.tsx still suppresses loading screen on repeat visits");
-  }
-  console.log("  ✓ TabValueTransition.tsx enforces at least 5000ms display without suppressing repeat tab visits.");
+  console.log("  ✓ TabValueTransition.tsx displays fast value proposition on first visit and stays instant on repeats.");
 
   // Step 4C: Verify all tabs have complete value propositions
   const allTabs = ["/jobs", "/network", "/qa", "/forum", "/grow"];

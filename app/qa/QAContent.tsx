@@ -6,7 +6,7 @@ import { JobsClient } from "@/components/jobs/JobsClient";
 import { LocalForumFeed } from "@/components/home/LocalForumFeed";
 import { ProximityMap } from "@/components/map/ProximityMap";
 import { GrowClient } from "@/components/grow/GrowClient";
-import { TabValueTransition } from "@/components/common/TabValueTransition";
+import { TabValueTransition, isFirstTimeScreenOpening } from "@/components/common/TabValueTransition";
 import { useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -36,8 +36,10 @@ export function QAContent({ initialTab }: QAContentProps) {
   // Lazy-mount tabs: only initialize tabs that have been visited
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => new Set([getComputedInitialTab()]));
 
-  // Screen-specific animated value proposition transition state (5s loading message on each tab)
-  const [isTransitioning, setIsTransitioning] = useState<boolean>(true);
+  // Screen-specific animated value proposition transition state (only on first-time screen opening)
+  const [isTransitioning, setIsTransitioning] = useState<boolean>(() => {
+    return isFirstTimeScreenOpening(getComputedInitialTab());
+  });
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -59,7 +61,11 @@ export function QAContent({ initialTab }: QAContentProps) {
     const tabPaths = ["/jobs", "/network", "/qa", "/forum", "/grow"];
 
     if (currentParamTab && tabPaths.includes(currentParamTab) && currentParamTab !== activeTab) {
-      setIsTransitioning(true);
+      if (isFirstTimeScreenOpening(currentParamTab)) {
+        setIsTransitioning(true);
+      } else {
+        setIsTransitioning(false);
+      }
       setActiveTab(currentParamTab);
       const companyParam = searchParams.get("company");
       const suffix = companyParam ? `?company=${encodeURIComponent(companyParam)}` : "";
@@ -69,14 +75,22 @@ export function QAContent({ initialTab }: QAContentProps) {
     const handleTabChange = (e: Event) => {
       const targetTab = (e as CustomEvent).detail;
       if (tabPaths.includes(targetTab) && targetTab !== activeTab) {
-        setIsTransitioning(true);
+        if (isFirstTimeScreenOpening(targetTab)) {
+          setIsTransitioning(true);
+        } else {
+          setIsTransitioning(false);
+        }
         setActiveTab(targetTab);
       }
     };
 
     const handlePopState = () => {
       if (tabPaths.includes(window.location.pathname) && window.location.pathname !== activeTab) {
-        setIsTransitioning(true);
+        if (isFirstTimeScreenOpening(window.location.pathname)) {
+          setIsTransitioning(true);
+        } else {
+          setIsTransitioning(false);
+        }
         setActiveTab(window.location.pathname);
       }
     };

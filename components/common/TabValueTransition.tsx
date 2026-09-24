@@ -122,24 +122,25 @@ export function resetScreenOpeningSeen(tab?: string) {
 interface TabValueTransitionProps {
   activeTab: string;
   isLoading?: boolean;
-  minDisplayDurationMs?: number; // Defaults to 5000ms (5s) for first-time screen opening
+  minDisplayDurationMs?: number; // Defaults to 1500ms for first-time screen opening
   onTransitionComplete?: () => void;
 }
 
 export function TabValueTransition({
   activeTab,
   isLoading = true,
-  minDisplayDurationMs = 5000,
+  minDisplayDurationMs = 1500,
   onTransitionComplete,
 }: TabValueTransitionProps) {
-  const [visible, setVisible] = useState(isLoading);
+  const [visible, setVisible] = useState(false);
   const [fadingOut, setFadingOut] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(5);
+  const [secondsLeft, setSecondsLeft] = useState(2);
   const [progress, setProgress] = useState(0);
   const completeFiredRef = useRef(false);
 
   useEffect(() => {
-    if (!isLoading) {
+    // Only display on the FIRST time the user opens this screen, or if loading is active
+    if (!isLoading || !isFirstTimeScreenOpening(activeTab)) {
       setVisible(false);
       if (!completeFiredRef.current) {
         completeFiredRef.current = true;
@@ -148,11 +149,10 @@ export function TabValueTransition({
       return;
     }
 
-    // Always display 5-second value proposition loading screen on tab load/switch
     completeFiredRef.current = false;
     setVisible(true);
     setFadingOut(false);
-    const duration = Math.max(5000, minDisplayDurationMs);
+    const duration = minDisplayDurationMs || 1500;
     setSecondsLeft(Math.ceil(duration / 1000));
     setProgress(0);
 

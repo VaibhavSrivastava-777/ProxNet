@@ -186,8 +186,14 @@ export function ProximityMap() {
       if (cached) {
         const data = JSON.parse(cached);
         setProfile(data);
-        if (locationMode === "home" && data.home_lat && data.home_lng) {
-          setCenter({ lat: Number(data.home_lat), lng: Number(data.home_lng) });
+        if (locationMode === "home") {
+          if (data.home_lat && data.home_lng) {
+            setCenter({ lat: Number(data.home_lat), lng: Number(data.home_lng) });
+          } else {
+            // Default center so network immediately loads rather than hanging
+            setCenter({ lat: 12.9716, lng: 77.5946 });
+            setFilter2km(false);
+          }
         }
       }
     } catch (e) {}
@@ -200,7 +206,16 @@ export function ProximityMap() {
         if (locationMode === "home") {
           if (data.home_lat && data.home_lng) {
             setCenter({ lat: Number(data.home_lat), lng: Number(data.home_lng) });
+          } else {
+            setCenter({ lat: 12.9716, lng: 77.5946 });
+            setFilter2km(false);
           }
+        }
+      })
+      .catch(() => {
+        if (!center) {
+          setCenter({ lat: 12.9716, lng: 77.5946 });
+          setFilter2km(false);
         }
       });
   }, []);
@@ -243,7 +258,7 @@ export function ProximityMap() {
     : null;
 
   const { data: clusterData, isLoading: clustersLoading, mutate: mutateClusters } = useSWR<{ clusters: CompanyCluster[] }>(aggregateApiUrl, fetcher, { revalidateOnFocus: false, keepPreviousData: true });
-  const { data: peopleData, isLoading: peopleLoading, mutate: mutatePeople } = useSWR<{ people: any[] }>(peopleApiUrl, fetcher, { revalidateOnFocus: false, keepPreviousData: true });
+  const { data: peopleData, isLoading: peopleLoading, mutate: mutatePeople } = useSWR<{ people: any[]; autoExpanded?: boolean }>(peopleApiUrl, fetcher, { revalidateOnFocus: false, keepPreviousData: true });
   const { data: eventsData } = useSWR(eventsApiUrl, fetcher, { revalidateOnFocus: false, keepPreviousData: true });
 
   const clusters = clusterData?.clusters ?? [];
@@ -353,8 +368,8 @@ export function ProximityMap() {
     });
   }, [filteredPeople, activeBeacons, activeBeaconMap, profile, center]);
 
-  const isInitializing = !profile || !center;
-  const loading = isInitializing || clustersLoading || peopleLoading || (!peopleData && !localError);
+  const isInitializing = !profile && !center;
+  const loading = isInitializing || Boolean(peopleLoading && !peopleData);
   const error = localError;
 
   const refreshAll = () => {
@@ -762,6 +777,17 @@ export function ProximityMap() {
                     className="underline cursor-pointer border-none bg-transparent font-bold text-[var(--color-primary)] text-xs"
                   >
                     Clear Filter
+                  </button>
+                </div>
+              )}
+              {peopleData?.autoExpanded && (
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 font-medium text-xs mb-2">
+                  <span>📍 Showing nearest verified professionals in your city/network (expanded beyond 2 km)</span>
+                  <button
+                    onClick={() => setFilter2km(false)}
+                    className="underline cursor-pointer border-none bg-transparent font-bold text-amber-700 dark:text-amber-300 text-xs ml-2 shrink-0"
+                  >
+                    View All
                   </button>
                 </div>
               )}
