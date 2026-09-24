@@ -83,9 +83,21 @@ async function runValidationTests() {
     const routePath = path.join(process.cwd(), "app", "api", "jobs", "deep-fetch", "route.ts");
     const routeSrc = fs.readFileSync(routePath, "utf-8");
     assert(routeSrc.includes("score >= 70"), "Must strictly enforce score >= 70 threshold");
-    assert(routeSrc.includes("verifiedMatches.sort((a, b) => b.score - a.score)"), "Must sort matches descending");
+    assert(routeSrc.includes(".sort((a, b) => b.score - a.score)"), "Must sort matches descending");
     assert(routeSrc.includes("isPioneer"), "Must tag company Pioneer status");
     assert(routeSrc.includes("bountyCredits = 10"), "Must attach +10 credits Pioneer bounty");
+  });
+
+  test("API route and UI strictly exclude candidate's own current employer from outputs", () => {
+    const routePath = path.join(process.cwd(), "app", "api", "jobs", "deep-fetch", "route.ts");
+    const routeSrc = fs.readFileSync(routePath, "utf-8");
+    assert(routeSrc.includes("isSameCompany"), "Route must define isSameCompany helper");
+    assert(routeSrc.includes("!isSameCompany(m.company)"), "Route must filter candidate's own company before delivering");
+
+    const suggestedJobsPath = path.join(process.cwd(), "components", "jobs", "SuggestedJobs.tsx");
+    const uiSrc = fs.readFileSync(suggestedJobsPath, "utf-8");
+    assert(uiSrc.includes("currentUserCompany"), "UI must check currentUserCompany");
+    assert(uiSrc.includes("cleanComp !== cleanUser"), "UI must exclude currentUserCompany from deepHunterMatches");
   });
 
   // ── TEST 3: UI Components Integration ────────────────────────────────────────
@@ -161,6 +173,82 @@ async function runValidationTests() {
     for (let i = 0; i < filtered.length - 1; i++) {
       assert(filtered[i].score >= filtered[i + 1].score, "Must be sorted in strict descending order");
     }
+  });
+
+  // ── TEST 6: Region (India) & Date (30-day) Filter Enforcement ───────────────
+  console.log("\n>>> [TEST 6] Validating Region (India) and Date (30-Day) Filter Enforcement...");
+  test("API route strictly applies isJobEligible (region & date) across all candidate sources", () => {
+    const routePath = path.join(process.cwd(), "app", "api", "jobs", "deep-fetch", "route.ts");
+    const routeSrc = fs.readFileSync(routePath, "utf-8");
+    assert(routeSrc.includes("isJobEligible"), "Must import and use isJobEligible");
+    // Verify eligibility is checked on live jobs, vector jobs, fallback jobs, and final delivery
+    const eligibleMatches = routeSrc.match(/isJobEligible\(/g);
+    assert(eligibleMatches && eligibleMatches.length >= 4, `Expected at least 4 isJobEligible checks across sources, found ${eligibleMatches?.length}`);
+  });
+
+  test("isJobEligible enforces India location, 30-day freshness, and senior level correctly", () => {
+    const { isJobEligible } = require("../lib/jobs/job-filters");
+
+    // 1. Valid India job posted 5 days ago -> Eligible
+    const fiveDaysAgo = new Date();
+    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+    const validJob = isJobEligible({
+      title: "Senior Backend Engineer",
+      location: "Bengaluru, India",
+      description: "Looking for an engineer with 5+ years of experience in distributed systems.",
+      posted_at: fiveDaysAgo.toISOString(),
+    });
+    assert(validJob.eligible, `Expected valid India job to be eligible, got: ${validJob.reason}`);
+
+    // 2. Foreign location (e.g. San Francisco) -> Ineligible
+    const foreignJob = isJobEligible({
+      title: "Staff Platform Engineer",
+      location: "San Francisco, CA",
+      description: "Lead our cloud infrastructure team in the US.",
+      posted_at: fiveDaysAgo.toISOString(),
+    });
+    assert(!foreignJob.eligible, "Foreign location must be rejected");
+    assert(foreignJob.reason?.includes("India criteria"), "Reason must mention India criteria");
+
+    // 3. Stale job posted 45 days ago -> Ineligible
+    const fortyFiveDaysAgo = new Date();
+    fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
+    const staleJob = isJobEligible({
+      title: "Senior Product Manager",
+      location: "Gurugram, India",
+      description: "Lead fintech product strategy.",
+      posted_at: fortyFiveDaysAgo.toISOString(),
+    });
+    assert(!staleJob.eligible, "Job older than 30 days must be rejected");
+    assert(staleJob.reason?.includes("30 days ago"), "Reason must mention 30 days");
+
+    // 4. Junior / intern job -> Ineligible
+    const juniorJob = isJobEligible({
+      title: "Software Engineering Intern",
+      location: "Hyderabad, India",
+      description: "Summer 2026 internship for university graduates.",
+      posted_at: fiveDaysAgo.toISOString(),
+    });
+    assert(!juniorJob.eligible, "Junior / intern role must be rejected");
+    assert(juniorJob.reason?.includes("Junior or intern"), "Reason must mention junior/intern role");
+  });
+
+  // ── TEST 7: Real-Time URL Validation (Pruning 404s & Dead Links) ────────────
+  console.log("\n>>> [TEST 7] Testing Real-Time URL Validation (Pruning 404s & Closed Requisitions)...");
+  test("lib/jobs/url-validator.ts exists and detects dead URLs and closed redirects", () => {
+    const validatorPath = path.join(process.cwd(), "lib", "jobs", "url-validator.ts");
+    assert(fs.existsSync(validatorPath), "lib/jobs/url-validator.ts must exist");
+    const valSrc = fs.readFileSync(validatorPath, "utf-8");
+    assert(valSrc.includes("verifyJobUrlLive"), "Must export verifyJobUrlLive");
+    assert(valSrc.includes("CLOSED_MARKERS"), "Must check for closed marker text in HTML");
+    assert(valSrc.includes("res.status === 404"), "Must check for HTTP 404 / 410");
+  });
+
+  await testAsync("verifyJobUrlLive correctly identifies invalid/404 URLs", async () => {
+    const { verifyJobUrlLive } = await import("../lib/jobs/url-validator");
+    const deadCheck = await verifyJobUrlLive("https://boards.greenhouse.io/nonexistent_board_999/jobs/999999999", 3000);
+    assert(!deadCheck.live, "Non-existent job URL must be flagged as not live (404/redirect)");
+    console.log(`     Dead URL correctly pruned: [Reason: ${deadCheck.reason}]`);
   });
 
   console.log("\n================================================================================");

@@ -147,7 +147,15 @@ export function SuggestedJobs() {
   const router = useRouter();
 
   const handleMatchesFetched = (matches: any[], newWallet: number) => {
-    setDeepHunterMatches(matches);
+    // Exclude candidate's own current employer from output
+    const externalMatches = (matches || []).filter((m) => {
+      if (!currentUserCompany) return true;
+      const cleanUser = currentUserCompany.toLowerCase().trim();
+      const cleanComp = (m.company || "").toLowerCase().trim();
+      return cleanComp !== cleanUser && !cleanComp.includes(cleanUser) && !cleanUser.includes(cleanComp);
+    });
+
+    setDeepHunterMatches(externalMatches);
     setUserWallet(newWallet);
     window.dispatchEvent(new CustomEvent("wallet-updated", { detail: newWallet }));
     try {
@@ -155,15 +163,15 @@ export function SuggestedJobs() {
     } catch {}
     setMatchAddedToast({
       show: true,
-      message: `🎯 Fetched ${matches.length} high-conviction roles (>70% fit) directly from live ATS boards!`,
-      score: matches[0]?.score || 85,
+      message: `🎯 Fetched ${externalMatches.length} high-conviction roles (>70% fit) directly from live ATS boards!`,
+      score: externalMatches[0]?.score || 85,
     });
 
     // Also auto-merge these matches into existing companies state if matched
-    if (matches.length > 0) {
+    if (externalMatches.length > 0) {
       setCompanies((prev) => {
         const updated = [...prev];
-        for (const m of matches) {
+        for (const m of externalMatches) {
           const compIdx = updated.findIndex(
             (c) => c.company.toLowerCase().trim() === m.company.toLowerCase().trim()
           );

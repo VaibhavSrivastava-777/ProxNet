@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { STRATEGIES, stripHtml } from "@/lib/scrape-strategies";
 import { isJobEligible, cleanJobTitle, normalizeJobTitle, normalizeJobUrl } from "@/lib/jobs/job-filters";
 import { deductWalletCredits } from "@/lib/wallet";
+import { verifyJobUrlLive } from "@/lib/jobs/url-validator";
 
 export const maxDuration = 60;
 
@@ -64,6 +65,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "AI matching service is temporarily unavailable" }, { status: 503 });
     }
 
+    // Helper to identify and strictly exclude the candidate's own current employer
+    const userCompany = (userData.company || "").trim().toLowerCase();
+    const cleanUserCompany = userCompany.replace(/\b(inc|llc|ltd|limited|corp|corporation|technologies|solutions|india|pvt|services)\b/gi, "").trim();
+
+    const isSameCompany = (compName?: string | null): boolean => {
+      if (!userCompany || !compName) return false;
+      const c = compName.trim().toLowerCase();
+      if (c === userCompany) return true;
+      const cleanTarget = c.replace(/\b(inc|llc|ltd|limited|corp|corporation|technologies|solutions|india|pvt|services)\b/gi, "").trim();
+      if (cleanUserCompany.length >= 3 && cleanTarget.length >= 3) {
+        if (cleanUserCompany === cleanTarget || cleanUserCompany.startsWith(cleanTarget) || cleanTarget.startsWith(cleanUserCompany)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     // 2. Fetch candidate's target companies & priority ATS configurations
     const { data: userTargetRows } = await supabase
       .from("user_target_companies")
@@ -72,7 +90,9 @@ export async function POST(request: Request) {
 
     const userTargetCompanyNames = new Set<string>();
     for (const r of userTargetRows || []) {
-      if (r.company_name) userTargetCompanyNames.add(r.company_name.toLowerCase().trim());
+      if (r.company_name && !isSameCompany(r.company_name)) {
+        userTargetCompanyNames.add(r.company_name.toLowerCase().trim());
+      }
     }
 
     // Fetch high-yield ATS configurations (Greenhouse, Lever, Ashby, Workable, SmartRecruiters)
@@ -92,10 +112,10 @@ export async function POST(request: Request) {
     const targetBoards: BoardTarget[] = [];
     const seenCompanies = new Set<string>();
 
-    // Add user target companies first
+    // Add user target companies first (excluding own company)
     for (const r of userTargetRows || []) {
       const cKey = r.company_name.toLowerCase().trim();
-      if (!seenCompanies.has(cKey) && r.ats_provider && r.ats_board_token && r.ats_provider !== "none") {
+      if (!isSameCompany(r.company_name) && !seenCompanies.has(cKey) && r.ats_provider && r.ats_board_token && r.ats_provider !== "none") {
         seenCompanies.add(cKey);
         targetBoards.push({
           company: r.company_name,
@@ -105,10 +125,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // Add high-yield ATS configs
+    // Add high-yield ATS configs (excluding own company)
     for (const cfg of atsConfigs || []) {
       const cKey = cfg.company_name.toLowerCase().trim();
-      if (!seenCompanies.has(cKey) && cfg.board_token_or_url) {
+      if (!isSameCompany(cfg.company_name) && !seenCompanies.has(cKey) && cfg.board_token_or_url) {
         seenCompanies.add(cKey);
         targetBoards.push({
           company: cfg.company_name,
@@ -206,8 +226,9 @@ export async function POST(request: Request) {
     const allCandidateJobs: LiveScrapedItem[] = [];
     const seenJobKeys = new Set<string>();
 
-    // Add live jobs first (priority to fresh live ATS postings)
+    // Add live jobs first (priority to fresh live ATS postings, excluding candidate's own company)
     for (const j of liveScrapedJobs) {
+      if (isSameCompany(j.company)) continue;
       const key = `${j.company.toLowerCase().trim()}:::${j.title.toLowerCase().trim()}`;
       if (!seenJobKeys.has(key)) {
         seenJobKeys.add(key);
@@ -215,9 +236,19 @@ export async function POST(request: Request) {
       }
     }
 
-    // Add vector jobs
+    // Add vector jobs (excluding candidate's own company & enforcing region/freshness eligibility)
     for (const vj of vectorJobs) {
+      if (isSameCompany(vj.company)) continue;
       const cleanTitle = cleanJobTitle(normalizeJobTitle(vj.title));
+
+      const eligibility = isJobEligible({
+        title: cleanTitle,
+        location: vj.location,
+        description: vj.description,
+        posted_at: vj.posted_at,
+      });
+      if (!eligibility.eligible) continue;
+
       const key = `${(vj.company || "").toLowerCase().trim()}:::${cleanTitle.toLowerCase().trim()}`;
       if (!seenJobKeys.has(key)) {
         seenJobKeys.add(key);
@@ -235,17 +266,31 @@ export async function POST(request: Request) {
       }
     }
 
-    // If candidate pool is still sparse, fetch recent active scraped jobs
+    // If candidate pool is still sparse, fetch recent active scraped jobs (excluding candidate's own company & enforcing region/freshness eligibility)
     if (allCandidateJobs.length < 20) {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
       const { data: fallbackRecent } = await supabase
         .from("scraped_jobs")
         .select("id, title, company, location, url, description, posted_at, keywords")
         .eq("is_active", true)
+        .gte("posted_at", thirtyDaysAgo.toISOString())
         .order("posted_at", { ascending: false })
-        .limit(40);
+        .limit(100);
 
       for (const fj of fallbackRecent || []) {
+        if (isSameCompany(fj.company)) continue;
         const cleanTitle = cleanJobTitle(normalizeJobTitle(fj.title));
+
+        const eligibility = isJobEligible({
+          title: cleanTitle,
+          location: fj.location,
+          description: fj.description,
+          posted_at: fj.posted_at,
+        });
+        if (!eligibility.eligible) continue;
+
         const key = `${(fj.company || "").toLowerCase().trim()}:::${cleanTitle.toLowerCase().trim()}`;
         if (!seenJobKeys.has(key)) {
           seenJobKeys.add(key);
@@ -402,11 +447,77 @@ Output valid JSON ONLY with format:
       }
     }
 
-    // 7. Sort verified matches strictly in DESCENDING ORDER of score
-    verifiedMatches.sort((a, b) => b.score - a.score);
+    // 7. Sort verified matches strictly in DESCENDING ORDER of score (excluding candidate's own current company & verifying region/date filters)
+    const externalMatches = verifiedMatches.filter((m) => {
+      if (!isSameCompany(m.company)) {
+        const { eligible } = isJobEligible({
+          title: m.title,
+          location: m.location,
+          description: m.description,
+          posted_at: m.posted_at,
+        });
+        return eligible;
+      }
+      return false;
+    });
+    externalMatches.sort((a, b) => b.score - a.score);
 
-    // 8. Fair Credit Deduction: Deliver up to requestedCredits (or actual found)
-    const deliveredMatches = verifiedMatches.slice(0, requestedCredits);
+    // 8. Real-time Live URL Verification: Prune 404s, 410s, and closed redirects
+    const liveDeliveredMatches: EvaluatedMatch[] = [];
+    const deadJobIds: string[] = [];
+
+    // Probe the top candidate matches concurrently (pool of up to requestedCredits + 8)
+    const candidatesToProbe = externalMatches.slice(0, requestedCredits + 8);
+    const probeResults = await Promise.allSettled(
+      candidatesToProbe.map(async (m) => {
+        const check = await verifyJobUrlLive(m.url, 2500);
+        return { match: m, live: check.live, reason: check.reason };
+      })
+    );
+
+    for (const res of probeResults) {
+      if (res.status === "fulfilled") {
+        if (res.value.live) {
+          if (liveDeliveredMatches.length < requestedCredits) {
+            liveDeliveredMatches.push(res.value.match);
+          }
+        } else {
+          console.warn(`[deep-fetch] Pruning 404/dead job: ${res.value.match.company} - ${res.value.match.title} (${res.value.match.url}) [${res.value.reason}]`);
+          if (res.value.match.id && !res.value.match.id.startsWith("live_")) {
+            deadJobIds.push(res.value.match.id);
+          }
+        }
+      }
+    }
+
+    // If still need matches, backfill from remaining external matches
+    if (liveDeliveredMatches.length < requestedCredits && externalMatches.length > candidatesToProbe.length) {
+      for (const remaining of externalMatches.slice(candidatesToProbe.length)) {
+        if (liveDeliveredMatches.length >= requestedCredits) break;
+        const check = await verifyJobUrlLive(remaining.url, 2000);
+        if (check.live) {
+          liveDeliveredMatches.push(remaining);
+        } else if (remaining.id && !remaining.id.startsWith("live_")) {
+          deadJobIds.push(remaining.id);
+        }
+      }
+    }
+
+    // Automatically deactivate confirmed 404/dead jobs in database (fire-and-forget)
+    if (deadJobIds.length > 0) {
+      (async () => {
+        try {
+          await supabase
+            .from("scraped_jobs")
+            .update({ is_active: false })
+            .in("id", deadJobIds);
+        } catch {
+          // Non-critical: ignore deactivation errors
+        }
+      })();
+    }
+
+    const deliveredMatches = liveDeliveredMatches;
     const actualCharged = deliveredMatches.length;
 
     let updatedWallet = currentWallet;
