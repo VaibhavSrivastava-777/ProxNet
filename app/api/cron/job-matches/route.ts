@@ -41,8 +41,8 @@ async function handleJobMatches(request: Request) {
   let notificationsSentCount = 0;
   const auditDetails: Array<{ userId: string; email: string; jobId: string; jobTitle: string; score: number; label: string; reason: string }> = [];
 
-  const twoWeeksAgo = new Date();
-  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
   const { rerankJobsForCandidate } = await import("@/lib/jobs/reranker");
 
@@ -89,28 +89,41 @@ async function handleJobMatches(request: Request) {
       continue;
     }
 
-    // 3. Stage 1: Fast vector retrieval with broad threshold (0.25)
+    // 3. Stage 1: Fast vector retrieval with broad threshold (0.25, expanded pool of 150)
     const { data: matchedJobs, error: matchError } = await supabase.rpc("match_scraped_jobs", {
       query_embedding: userEmbedding,
       match_threshold: 0.25,
-      match_count: 50,
+      match_count: 150,
     });
 
     if (matchError || !matchedJobs || matchedJobs.length === 0) {
       continue;
     }
 
-    // Filter candidate jobs by date & seniority before reranking
+    // Filter candidate jobs by date (30 days) & seniority before reranking
     const candidateJobs: any[] = [];
     for (const job of matchedJobs) {
       if (job.posted_at) {
         const jobDate = new Date(job.posted_at);
-        if (!isNaN(jobDate.getTime()) && jobDate < twoWeeksAgo) continue;
+        if (!isNaN(jobDate.getTime()) && jobDate < thirtyDaysAgo) continue;
       }
       candidateJobs.push(job);
     }
 
     if (candidateJobs.length === 0) continue;
+
+    // Pick diverse companies (max 2 jobs per company in candidate pool)
+    const companyJobCounts = new Map<string, number>();
+    const diverseJobs: any[] = [];
+    for (const job of candidateJobs) {
+      const cKey = ((job.company || job.company_name || "") as string).toLowerCase().trim();
+      const count = companyJobCounts.get(cKey) || 0;
+      if (count < 2) {
+        diverseJobs.push(job);
+        companyJobCounts.set(cKey, count + 1);
+      }
+      if (diverseJobs.length >= 25) break;
+    }
 
     // 4. Stage 2: Intelligent LLM Reranking
     const candidateProfile = {
@@ -123,7 +136,7 @@ async function handleJobMatches(request: Request) {
       tags: user.tags,
     };
 
-    const jobsToRerank = candidateJobs.slice(0, 25).map((j: any) => ({
+    const jobsToRerank = diverseJobs.map((j: any) => ({
       id: j.id,
       title: j.title || j.role || "",
       company: (j.company || j.company_name || "").trim(),

@@ -41,7 +41,8 @@ export function SuggestedJobs() {
     if (typeof window === "undefined") return [];
     try {
       sessionStorage.removeItem("proxnet_suggested_jobs_cache"); // purge legacy
-      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache_v2");
+      sessionStorage.removeItem("proxnet_suggested_jobs_cache_v2"); // purge legacy
+      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache_v3");
       if (cached) return JSON.parse(cached).companies || [];
     } catch {
       // ignore
@@ -63,7 +64,7 @@ export function SuggestedJobs() {
   const [profileDigest, setProfileDigest] = useState<ProfileDigest | null>(() => {
     if (typeof window === "undefined") return null;
     try {
-      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache_v2");
+      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache_v3");
       if (cached) return JSON.parse(cached).profileDigest || null;
     } catch {
       // ignore
@@ -164,6 +165,16 @@ export function SuggestedJobs() {
     return () => window.removeEventListener("job_application_updated", onUpdated);
   }, [fetchSavedApplications]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && activeCompanyModal) {
+        setActiveCompanyModal(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeCompanyModal]);
+
   const loadData = useCallback(async () => {
     try {
       const t = Date.now();
@@ -198,7 +209,7 @@ export function SuggestedJobs() {
           setProfileDigest(data.profileDigest);
         }
         try {
-          sessionStorage.setItem("proxnet_suggested_jobs_cache_v2", JSON.stringify({
+          sessionStorage.setItem("proxnet_suggested_jobs_cache_v3", JSON.stringify({
             companies: data.companies || [],
             profileDigest: data.profileDigest || null,
             hasResume: data.hasResume ?? true,
@@ -1003,22 +1014,37 @@ export function SuggestedJobs() {
       {/* Openings Detail Modal */}
       {activeCompanyModal && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto"
           onClick={() => setActiveCompanyModal(null)}
         >
           <div 
-            className="bg-[var(--color-surface)] w-full max-w-lg rounded-xl shadow-xl border border-[var(--color-border)] p-6 animate-scaleIn flex flex-col gap-4"
+            className="bg-[var(--color-surface)] w-full max-w-lg rounded-2xl shadow-2xl border border-[var(--color-border)] animate-scaleIn flex flex-col max-h-[85vh] overflow-hidden my-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center border-b border-[var(--color-border-light)] pb-2">
-              <h3 className="text-h3 font-bold text-text m-0">Openings at {activeCompanyModal.company}</h3>
+            {/* Pinned Sticky Header */}
+            <div className="flex justify-between items-center px-5 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 z-20">
+              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                <CompanyLogo company={activeCompanyModal.company} size={28} />
+                <h3 className="text-base sm:text-lg font-bold text-[var(--color-text)] m-0 truncate">
+                  Openings at {activeCompanyModal.company}
+                </h3>
+              </div>
               <button 
+                type="button"
                 onClick={() => setActiveCompanyModal(null)} 
-                className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border-0 bg-transparent text-xl cursor-pointer"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] bg-[var(--color-surface)] cursor-pointer transition-colors shrink-0 shadow-2xs"
+                aria-label="Close modal"
+                title="Close (Esc)"
               >
-                &times;
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
               </button>
             </div>
+
+            {/* Scrollable Content Area */}
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 flex flex-col gap-3.5 min-h-0">
 
             {(() => {
               const count = (activeCompanyModal.referralContacts || []).filter(c => !currentUserId || c.id !== currentUserId).length;
@@ -1076,7 +1102,7 @@ export function SuggestedJobs() {
                 <span>{saveToast}</span>
               </div>
             )}
-            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+            <div className="space-y-3 pr-1">
               {[...activeCompanyModal.jobs]
                 .sort((a, b) => {
                   const scoreA = a.score ?? a.matchRate ?? 0;
@@ -1313,6 +1339,7 @@ export function SuggestedJobs() {
                     </div>
                   );
                 })}
+            </div>
             </div>
           </div>
         </div>

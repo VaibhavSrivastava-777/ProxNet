@@ -160,11 +160,11 @@ Return ONLY a JSON object with:
       });
     }
 
-    // 3. Stage 1: Fast vector retrieval using Supabase RPC function (threshold 0.25 to catch all possible candidates)
+    // 3. Stage 1: Fast vector retrieval using Supabase RPC function (broad threshold 0.25, expanded pool of 250)
     const { data: matchedJobs, error: matchError } = await supabase.rpc("match_scraped_jobs", {
       query_embedding: userEmbedding,
       match_threshold: 0.25,
-      match_count: 100
+      match_count: 250
     });
 
     if (matchError) {
@@ -172,8 +172,8 @@ Return ONLY a JSON object with:
       return NextResponse.json({ error: "Failed to match jobs" }, { status: 500 });
     }
 
-    const twoWeeksAgo = new Date();
-    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     interface ScrapedJobRow {
       id: string;
@@ -189,18 +189,18 @@ Return ONLY a JSON object with:
       contact_alias?: string | null;
     }
 
-    // Pre-filter candidate jobs by freshness and seniority before reranking
+    // Pre-filter candidate jobs by freshness (30-day window) and seniority before reranking
     const candidateJobs: ScrapedJobRow[] = [];
     for (const row of (matchedJobs as ScrapedJobRow[] | null) || []) {
       if (row.posted_at) {
         const jobDate = new Date(row.posted_at);
-        if (!isNaN(jobDate.getTime()) && jobDate < twoWeeksAgo) continue;
+        if (!isNaN(jobDate.getTime()) && jobDate < thirtyDaysAgo) continue;
       }
       if (isJuniorJob(row.title, row.description || "")) continue;
       candidateJobs.push(row);
     }
 
-    // 4. Stage 2: Intelligent LLM Reranking
+    // 4. Stage 2: Intelligent LLM Reranking with Company Diversity
     const candidateProfile = {
       id: user.id,
       job_title: userProfile.job_title,
@@ -210,7 +210,20 @@ Return ONLY a JSON object with:
       profile_digest: profileDigest,
     };
 
-    const jobsToRerank = candidateJobs.slice(0, 40).map(j => ({
+    // Pick up to 3 best-matching jobs per company to guarantee rich cross-company diversity in reranking
+    const companyJobCounts = new Map<string, number>();
+    const diverseCandidateJobs: ScrapedJobRow[] = [];
+    for (const job of candidateJobs) {
+      const cKey = (job.company || "").toLowerCase().trim();
+      const count = companyJobCounts.get(cKey) || 0;
+      if (count < 3) {
+        diverseCandidateJobs.push(job);
+        companyJobCounts.set(cKey, count + 1);
+      }
+      if (diverseCandidateJobs.length >= 45) break;
+    }
+
+    const jobsToRerank = diverseCandidateJobs.map(j => ({
       id: j.id,
       title: j.title,
       company: j.company,
