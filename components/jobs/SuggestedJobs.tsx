@@ -561,12 +561,14 @@ export function SuggestedJobs() {
   if (loading) {
     return (
       <div className="space-y-4 max-w-3xl mx-auto pb-8">
-        {/* Default/Prominent Message */}
-        <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-bold text-center animate-pulse">
-          ⏳ GENERATING THE LATEST MATCH LIST IN THE BACKGROUD
+        <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-medium">
+          <span className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
+            <span>Loading verified openings & AI match scores...</span>
+          </span>
         </div>
         {[1, 2, 3].map((i) => (
-          <div key={i} className="card p-6 skeleton h-24 animate-pulse" />
+          <div key={i} className="card p-4 rounded-xl skeleton h-20 animate-pulse" />
         ))}
       </div>
     );
@@ -702,10 +704,14 @@ export function SuggestedJobs() {
         </div>
       )}
 
-      {/* Default/Prominent Message */}
+      {/* Background Matching Status Pill */}
       {!isMatchingCompleted && (
-        <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-bold text-center animate-pulse">
-          ℹ️ GENERATING THE LATEST MATCH LIST IN THE BACKGROUND
+        <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-medium animate-fadeIn">
+          <span className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
+            <span>Updating match evaluation in background...</span>
+          </span>
+          <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">Active</span>
         </div>
       )}
 
@@ -716,30 +722,109 @@ export function SuggestedJobs() {
         onResumeUpdated={loadData}
       />
 
-      {/* 📊 Market Pulse Summary */}
+      {/* 📊 Interactive Hiring Pulse */}
       {(totalMatchedJobs > 0 || totalAllJobs > 0) && (
-        <div className="p-4 rounded-xl border border-[var(--color-border-light)] bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] shadow-xs">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-base">📊</span>
-            <span className="text-xs font-bold text-[var(--color-text)] uppercase tracking-wider">Hiring Pulse</span>
+        <div className="p-3 sm:p-3.5 rounded-xl border border-[var(--color-border-light)] bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] shadow-2xs">
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm">📊</span>
+              <span className="text-xs font-bold text-[var(--color-text)] uppercase tracking-wider">Hiring Pulse</span>
+            </div>
+            <span className="text-[10px] text-[var(--color-text-tertiary)] font-medium">Click to filter</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="flex flex-col items-center p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)]">
-              <span className="text-lg font-bold text-[var(--color-primary)]">{totalAllJobs}</span>
-              <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Active Roles</span>
-            </div>
-            <div className="flex flex-col items-center p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)]">
-              <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{strongMatchCount}</span>
-              <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Strong Matches</span>
-            </div>
-            <div className="flex flex-col items-center p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)]">
-              <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{totalReferrers}</span>
-              <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Insider Referrers</span>
-            </div>
-            <div className="flex flex-col items-center p-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)]">
-              <span className="text-lg font-bold text-[var(--color-text)]">{allCompanies.length}</span>
-              <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">Companies</span>
-            </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {/* Card 1: Active Roles */}
+            <button
+              id="pulse-active-roles"
+              type="button"
+              onClick={() => {
+                setJobsViewMode("all");
+                setHasReferrersOnly(false);
+                setMinScoreFilter(0);
+                setSearchQuery("");
+              }}
+              className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95 ${
+                jobsViewMode === "all" && !hasReferrersOnly && minScoreFilter === 0
+                  ? "bg-primary/10 border-primary text-primary shadow-xs ring-1 ring-primary/30"
+                  : "bg-[var(--color-surface)] border-[var(--color-border-light)] hover:border-primary/50 text-[var(--color-text)]"
+              }`}
+              title="Click to view all active scraped openings"
+            >
+              <span className="text-base sm:text-lg font-bold text-[var(--color-primary)]">{totalAllJobs}</span>
+              <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Active Roles</span>
+              <span className="text-[9px] text-[var(--color-text-tertiary)]">
+                {jobsViewMode === "all" && !hasReferrersOnly && minScoreFilter === 0 ? "Viewing All ✓" : "View all →"}
+              </span>
+            </button>
+
+            {/* Card 2: Strong Matches */}
+            <button
+              id="pulse-strong-matches"
+              type="button"
+              onClick={() => {
+                setJobsViewMode("matched");
+                setMinScoreFilter((prev) => (prev >= 70 ? 0 : 70));
+              }}
+              className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95 ${
+                jobsViewMode === "matched" && minScoreFilter >= 70
+                  ? "bg-emerald-500/15 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-xs ring-1 ring-emerald-500/30"
+                  : "bg-[var(--color-surface)] border-[var(--color-border-light)] hover:border-emerald-500/50 text-[var(--color-text)]"
+              }`}
+              title="Click to filter by high-confidence matches (70%+ fit)"
+            >
+              <span className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                {strongMatchCount || totalMatchedJobs}
+              </span>
+              <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Strong Matches</span>
+              <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">
+                {minScoreFilter >= 70 ? "70%+ Active ✓" : "Filter 70%+ →"}
+              </span>
+            </button>
+
+            {/* Card 3: Insider Referrers */}
+            <button
+              id="pulse-insider-referrers"
+              type="button"
+              onClick={() => {
+                setHasReferrersOnly((prev) => !prev);
+              }}
+              className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95 ${
+                hasReferrersOnly
+                  ? "bg-blue-500/15 border-blue-500 text-blue-700 dark:text-blue-300 shadow-xs ring-1 ring-blue-500/30"
+                  : "bg-[var(--color-surface)] border-[var(--color-border-light)] hover:border-blue-500/50 text-[var(--color-text)]"
+              }`}
+              title="Click to filter companies with active insider referrers"
+            >
+              <span className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400">{totalReferrers}</span>
+              <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Insider Referrers</span>
+              <span className="text-[9px] text-blue-600 dark:text-blue-400 font-medium">
+                {hasReferrersOnly ? "Referrers Active ✓" : `${companiesWithReferrers} Cos • Filter →`}
+              </span>
+            </button>
+
+            {/* Card 4: Companies */}
+            <button
+              id="pulse-companies"
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setHasReferrersOnly(false);
+                setMinScoreFilter(0);
+                const el = document.getElementById("jobs-company-list");
+                if (el) el.scrollIntoView({ behavior: "smooth" });
+              }}
+              className="p-2.5 rounded-lg border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-purple-500/50 text-[var(--color-text)] text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95"
+              title="Click to browse all companies"
+            >
+              <span className="text-base sm:text-lg font-bold text-[var(--color-text)]">
+                {jobsViewMode === "matched" ? companies.length : allCompanies.length}
+              </span>
+              <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Companies</span>
+              <span className="text-[9px] text-[var(--color-text-tertiary)]">
+                Browse list ↓
+              </span>
+            </button>
           </div>
         </div>
       )}
@@ -747,36 +832,30 @@ export function SuggestedJobs() {
       {/* 📋 Application Pipeline Tracker */}
       <ApplicationPipeline />
 
-      {/* Bio Digest (Minimal Header) */}
-      <div className="flex flex-col gap-4">
-        {profileDigest && showSummary && (
-          <div className="p-3.5 rounded-lg bg-surface-elevated/40 border border-border/50 text-caption flex flex-col gap-2 animate-fadeIn relative">
-            <button 
-              className="absolute top-2 right-2 text-text-tertiary hover:text-text"
-              onClick={() => setShowSummary(false)}
-              title="Dismiss"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-            <div>
-              <span className="font-semibold text-text-secondary uppercase tracking-wider text-[10px]">Candidate Profile Summary</span>
-              <p className="text-text mt-0.5">{profileDigest.summary || "No summary generated yet"}</p>
-            </div>
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              {profileDigest.skills?.map((s, idx) => (
-                <span key={idx} className="badge bg-primary/10 text-primary border border-primary/20 text-[10px] px-2 font-medium">
-                  {s}
-                </span>
-              ))}
-              {profileDigest.experienceYears !== undefined && (
-                <span className="badge bg-accent/10 text-accent border border-accent/20 text-[10px] px-2 font-medium">
-                  {profileDigest.experienceYears} Years Exp
-                </span>
-              )}
-            </div>
+      {/* Bio Digest (Minimal Collapsible) */}
+      {profileDigest && profileDigest.summary && (
+        <details className="group rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)]/60 text-xs overflow-hidden">
+          <summary className="px-3.5 py-2 font-semibold text-[var(--color-text-secondary)] cursor-pointer flex items-center justify-between select-none hover:text-[var(--color-text)]">
+            <span className="flex items-center gap-1.5">
+              <span>🎯</span>
+              <span>Candidate Match Profile</span>
+            </span>
+            <span className="text-[10px] text-[var(--color-text-tertiary)] group-open:rotate-180 transition-transform">▼</span>
+          </summary>
+          <div className="p-3 pt-1 border-t border-[var(--color-border-light)]/40 flex flex-col gap-2">
+            <p className="text-[var(--color-text)] leading-relaxed m-0 text-xs">{profileDigest.summary}</p>
+            {profileDigest.skills && profileDigest.skills.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {profileDigest.skills.map((s, idx) => (
+                  <span key={idx} className="px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 text-[10px] font-medium">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </details>
+      )}
 
       {/* Segmented View Switcher: Matched vs All Jobs */}
       <div className="flex items-center justify-between gap-2">
@@ -965,7 +1044,7 @@ export function SuggestedJobs() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div id="jobs-company-list" className="space-y-3">
           {displayedCompanies.map((group) => (
             <div
               key={group.company}

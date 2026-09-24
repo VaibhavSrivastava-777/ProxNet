@@ -149,34 +149,28 @@ export function ResumeCard({ hasResume, resumeUrl, onResumeUpdated }: ResumeCard
           onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
           onDragLeave={() => setIsDragOver(false)}
           onDrop={handleDrop}
-          className={`bg-gradient-to-r from-primary/15 via-primary/5 to-transparent border ${
-            isDragOver ? "border-primary bg-primary/20 scale-[1.01]" : "border-primary/30"
-          } rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm transition-all animate-fadeInUp`}
+          className={`px-3.5 py-2.5 rounded-xl border ${
+            isDragOver ? "border-primary bg-primary/20 scale-[1.01]" : "border-primary/25 bg-primary/5"
+          } flex items-center justify-between gap-3 shadow-2xs transition-all`}
         >
-          <div className="flex items-start gap-3">
-            <span className="text-2xl sm:text-3xl shrink-0 mt-0.5">📄</span>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="font-bold text-sm sm:text-base text-[var(--color-text)] m-0">
-                  Upload Resume for Automated Job Alerts & 90%+ Match Accuracy
-                </h4>
-                <span className="badge bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] px-2 py-0.5 font-bold">
-                  Recommended
-                </span>
-              </div>
-              <p className="text-xs text-[var(--color-text-secondary)] mt-1.5 m-0 leading-relaxed max-w-xl">
-                Your uploaded resume enables ProxNet to generate automated job alerts, calculate skill fit scores, and match you with internal referrers whenever new jobs are scraped across network companies.
-              </p>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-base shrink-0">📄</span>
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-bold text-[var(--color-text)] truncate">
+                Upload Resume for AI Match Alerts
+              </span>
+              <span className="text-[11px] text-[var(--color-text-secondary)] truncate">
+                Unlock 90%+ match accuracy and automated referral nudges
+              </span>
             </div>
           </div>
 
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="btn btn-primary btn-sm shrink-0 shadow-sm font-semibold flex items-center gap-2 self-stretch sm:self-auto justify-center px-4 py-2 cursor-pointer"
+            className="btn btn-primary btn-xs shrink-0 font-semibold px-3 py-1.5 rounded-lg cursor-pointer"
           >
-            <span>🚀</span>
-            <span>Upload Resume (PDF)</span>
+            Upload (PDF)
           </button>
         </div>
       )}
@@ -187,52 +181,42 @@ export function ResumeCard({ hasResume, resumeUrl, onResumeUpdated }: ResumeCard
           onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
           onDragLeave={() => setIsDragOver(false)}
           onDrop={handleDrop}
-          className={`p-3.5 sm:p-4 rounded-xl border ${
+          className={`px-3.5 py-2 rounded-xl border ${
             isDragOver ? "border-primary bg-primary/10" : "border-[var(--color-border-light)] bg-[var(--color-surface)]"
-          } shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all animate-fadeIn`}
+          } shadow-2xs flex items-center justify-between gap-3 transition-all`}
         >
-          <div className="flex items-start sm:items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 shrink-0">
-              <span className="text-base">📄</span>
-            </div>
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-bold text-[var(--color-text)]">
-                  Active Resume Linked
-                </span>
-                <span className="badge bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-[10px] px-2 py-0.2 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Active for Match Alerts
-                </span>
-              </div>
-              <p className="text-[11px] text-[var(--color-text-secondary)] m-0 mt-0.5 leading-snug">
-                Powering daily automated job alerts, AI match scoring, and referrer recommendations.
-              </p>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-base shrink-0">📄</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-semibold text-[var(--color-text)] truncate">
+                Active Resume Linked
+              </span>
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Job Alerts Active
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 self-stretch sm:self-auto justify-end">
+          <div className="flex items-center gap-3 shrink-0">
             {resumeUrl && (
               <a
                 href={resumeUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn btn-sm bg-[var(--color-surface-secondary)] hover:bg-[var(--color-border-light)] text-[var(--color-text)] border border-[var(--color-border-light)] text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 no-underline"
+                className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] underline font-medium"
                 title="View uploaded resume PDF"
               >
-                <span>👁️</span>
-                <span>View</span>
+                View PDF
               </a>
             )}
-
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="btn btn-sm btn-primary text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs"
-              title="Upload an updated resume to replace current file"
+              className="text-xs text-[var(--color-primary)] hover:underline font-semibold bg-transparent border-0 cursor-pointer p-0"
+              title="Upload updated resume"
             >
-              <span>🔄</span>
-              <span>Replace Resume</span>
+              Update
             </button>
           </div>
         </div>

@@ -104,16 +104,9 @@ export const ApplicationPipeline: React.FC<ApplicationPipelineProps> = ({ onRefr
     return null;
   }
 
-  // If user has 0 saved applications and pipeline is collapsed, show subtle prompt
-  if (totalCount === 0 && !isExpanded) {
-    return (
-      <div className="p-3.5 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/60 flex items-center justify-between text-xs text-[var(--color-text-secondary)]">
-        <div className="flex items-center gap-2">
-          <span>📋</span>
-          <span><strong>Application Tracker:</strong> Bookmark jobs with 🔖 <em>Save</em> to track referrals and interviews.</span>
-        </div>
-      </div>
-    );
+  // If user has 0 saved applications, don't clutter the screen
+  if (totalCount === 0) {
+    return null;
   }
 
   const displayedApps = activeStageFilter
