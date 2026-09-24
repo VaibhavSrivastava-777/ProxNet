@@ -212,10 +212,122 @@ export function normalizeJobUrl(rawUrl: string): string {
   }
 }
 
+const TITLE_DICTIONARY_WORDS = new Set([
+  "senior", "sr", "junior", "jr", "lead", "principal", "staff", "associate", "director", "manager", "head", "vp",
+  "vice", "president", "consultant", "advisory", "architect", "engineer", "engineering", "developer", "specialist",
+  "analyst", "administrator", "admin", "executive", "representative", "officer", "coordinator", "intern", "trainee",
+  "founder", "general", "chief", "deputy", "assistant", "product", "program", "project", "technical", "technology",
+  "data", "software", "hardware", "cloud", "security", "devops", "platform", "infrastructure", "systems", "network",
+  "qa", "quality", "test", "testing", "automation", "frontend", "front", "end", "backend", "back", "fullstack",
+  "full", "stack", "mobile", "ios", "android", "ai", "ml", "machine", "learning", "deep", "nlp", "llm", "genai",
+  "computer", "vision", "research", "scientist", "science", "analytics", "business", "operations", "ops", "sales",
+  "marketing", "growth", "customer", "success", "support", "service", "services", "experience", "gtm", "commercial",
+  "enterprise", "strategic", "strategy", "account", "partner", "partnerships", "finance", "financial", "accounting",
+  "talent", "people", "hr", "human", "resources", "recruiter", "recruiting", "legal", "compliance", "procurement",
+  "supply", "chain", "logistics", "warehouse", "brand", "creative", "design", "designer", "content", "writer",
+  "communications", "relations", "pr", "merchandiser", "merchandising", "vendor", "retail", "solutions", "office",
+  "ceo", "cto", "cfo", "coo", "cpo", "with", "and", "of", "for", "in", "at", "to", "the", "ii", "iii", "iv", "v",
+  "1", "2", "3", "4", "5", "6", "contract", "contractor", "months", "month", "management", "digital", "global",
+  "regional", "local", "core", "group", "team", "billing", "payments", "revenue", "inbound", "outbound", "field",
+  "inside", "retention", "engagement", "lifecycle", "media", "social", "seo", "sem", "crm", "erp", "saas", "b2b",
+  "b2c", "fintech", "edtech", "healthtech", "web", "app", "database", "dba", "site", "reliability", "sre", "secops",
+  "infosec", "cyber", "systrack", "ahmedabad", "bangalore", "bengaluru", "hyderabad", "delhi", "mumbai", "pune",
+  "spanish", "german", "french", "italian", "japanese", "mandarin", "chinese", "apac", "emea", "latam", "americas"
+]);
+
 /**
- * Generates a normalized title fingerprint for duplicate detection.
+ * Splits concatenated unspaced titles like "enterprisecustomersuccessmanager" into clean English words.
+ */
+export function splitUnspacedTitle(str: string): string {
+  if (!str) return str;
+  const s = str.toLowerCase().trim();
+  const n = s.length;
+
+  const dp: Array<string[] | null> = new Array(n + 1).fill(null);
+  dp[0] = [];
+
+  for (let i = 0; i < n; i++) {
+    if (dp[i] === null) continue;
+
+    for (let j = i + 1; j <= n; j++) {
+      const word = s.substring(i, j);
+      if (TITLE_DICTIONARY_WORDS.has(word)) {
+        if (dp[j] === null || dp[j]!.length > dp[i]!.length + 1) {
+          dp[j] = [...dp[i]!, word];
+        }
+      }
+    }
+  }
+
+  if (dp[n] !== null) {
+    return dp[n]!
+      .map(w => {
+        if (["ai", "ml", "hr", "pr", "qa", "vp", "ceo", "cto", "cfo", "coo", "cpo", "gtm", "ii", "iii", "iv", "sre", "dba", "erp", "crm", "seo", "sem", "apac", "emea", "latam"].includes(w)) {
+          return w.toUpperCase();
+        }
+        if (["of", "and", "in", "at", "to", "for", "with", "the"].includes(w)) {
+          return w.toLowerCase();
+        }
+        return w.charAt(0).toUpperCase() + w.slice(1);
+      })
+      .join(" ");
+  }
+
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+/**
+ * Normalizes a job title for display with proper spacing and title casing,
+ * while automatically repairing unspaced titles.
+ */
+export function cleanJobTitle(title: string): string {
+  if (!title) return "Job Opening";
+
+  // 1. Separate camelCase / PascalCase transitions (e.g. "CustomerSuccess" -> "Customer Success")
+  let cleaned = title
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_\t\n\r]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // 2. If title was stripped of spaces (like 'enterprisecustomersuccessmanager'), segment words
+  if (cleaned.length > 10 && !cleaned.includes(" ")) {
+    cleaned = splitUnspacedTitle(cleaned);
+  }
+
+  // 3. If all lowercase or all uppercase (and > 4 chars), title-case appropriately
+  const isAllLower = cleaned === cleaned.toLowerCase();
+  const isAllUpper = cleaned === cleaned.toUpperCase() && cleaned.length > 4;
+  if ((isAllLower || isAllUpper) && cleaned.includes(" ")) {
+    cleaned = cleaned
+      .split(" ")
+      .map(w => {
+        const lower = w.toLowerCase();
+        if (["ai", "ml", "hr", "pr", "qa", "vp", "ceo", "cto", "cfo", "coo", "cpo", "gtm", "ii", "iii", "iv", "sre", "dba", "erp", "crm", "seo", "sem", "apac", "emea", "latam"].includes(lower)) {
+          return lower.toUpperCase();
+        }
+        if (["of", "and", "in", "at", "to", "for", "with", "the"].includes(lower)) {
+          return lower;
+        }
+        return lower.charAt(0).toUpperCase() + lower.slice(1);
+      })
+      .join(" ");
+  }
+
+  return cleaned.trim();
+}
+
+/**
+ * Normalizes a job title for display with proper word spacing.
  */
 export function normalizeJobTitle(title: string): string {
+  return cleanJobTitle(title);
+}
+
+/**
+ * Generates an alphanumeric fingerprint solely for duplicate detection.
+ */
+export function getJobTitleFingerprint(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
 }
 

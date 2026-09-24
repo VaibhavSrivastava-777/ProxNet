@@ -8,6 +8,7 @@ import { ReferralPitchModal } from "./ReferralPitchModal";
 import { TargetCompanyManager } from "./TargetCompanyManager";
 import { ApplicationPipeline } from "./ApplicationPipeline";
 import { playNotificationSound } from "@/lib/sound";
+import { cleanJobTitle } from "@/lib/jobs/job-filters";
 
 interface SuggestedJob {
   id: string;
@@ -42,7 +43,8 @@ export function SuggestedJobs() {
     try {
       sessionStorage.removeItem("proxnet_suggested_jobs_cache"); // purge legacy
       sessionStorage.removeItem("proxnet_suggested_jobs_cache_v2"); // purge legacy
-      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache_v3");
+      sessionStorage.removeItem("proxnet_suggested_jobs_cache_v3"); // purge legacy
+      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache_v4");
       if (cached) return JSON.parse(cached).companies || [];
     } catch {
       // ignore
@@ -53,7 +55,8 @@ export function SuggestedJobs() {
     if (typeof window === "undefined") return [];
     try {
       sessionStorage.removeItem("proxnet_all_jobs_cache"); // purge legacy
-      const cached = sessionStorage.getItem("proxnet_all_jobs_cache_v2");
+      sessionStorage.removeItem("proxnet_all_jobs_cache_v2"); // purge legacy
+      const cached = sessionStorage.getItem("proxnet_all_jobs_cache_v3");
       if (cached) return JSON.parse(cached).companies || [];
     } catch {
       // ignore
@@ -209,7 +212,7 @@ export function SuggestedJobs() {
           setProfileDigest(data.profileDigest);
         }
         try {
-          sessionStorage.setItem("proxnet_suggested_jobs_cache_v3", JSON.stringify({
+          sessionStorage.setItem("proxnet_suggested_jobs_cache_v4", JSON.stringify({
             companies: data.companies || [],
             profileDigest: data.profileDigest || null,
             hasResume: data.hasResume ?? true,
@@ -244,7 +247,7 @@ export function SuggestedJobs() {
           setUserWallet(allData.wallet);
         }
         try {
-          sessionStorage.setItem("proxnet_all_jobs_cache_v2", JSON.stringify({
+          sessionStorage.setItem("proxnet_all_jobs_cache_v3", JSON.stringify({
             companies: allData.companies || [],
             hasResume: allData.hasResume ?? true,
             resumeUrl: allData.resumeUrl || null,
@@ -529,7 +532,7 @@ export function SuggestedJobs() {
 
         setMatchAddedToast({
           show: true,
-          message: `🔥 High Match (${data.score}%): ${evaluatedJobItem.title} at ${evaluatedCompanyName} is now in your "Matched" tab!`,
+          message: `🔥 High Match (${data.score}%): ${cleanJobTitle(evaluatedJobItem.title)} at ${evaluatedCompanyName} is now in your "Matched" tab!`,
           score: data.score,
         });
       } else {
@@ -591,7 +594,7 @@ export function SuggestedJobs() {
     const alreadySaved = (idKey && savedJobKeys.has(idKey)) || savedJobKeys.has(textKey);
 
     if (alreadySaved) {
-      setSaveToast(`Already saved "${job.title}" to your pipeline`);
+      setSaveToast(`Already saved "${cleanJobTitle(job.title)}" to your pipeline`);
       setTimeout(() => setSaveToast(null), 2500);
       return;
     }
@@ -618,7 +621,7 @@ export function SuggestedJobs() {
           next.add(textKey);
           return next;
         });
-        setSaveToast(`🔖 Saved "${job.title}" to your pipeline`);
+        setSaveToast(`🔖 Saved "${cleanJobTitle(job.title)}" to your pipeline`);
         setTimeout(() => setSaveToast(null), 3000);
         window.dispatchEvent(new CustomEvent("job_application_updated"));
       } else {
@@ -1117,7 +1120,7 @@ export function SuggestedJobs() {
                   return (
                     <div key={job.id} className="p-4 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col gap-2.5">
                       <div className="flex justify-between items-start gap-2">
-                        <h4 className="font-semibold text-sm text-[var(--color-text)] m-0 leading-snug">{job.title}</h4>
+                        <h4 className="font-semibold text-sm text-[var(--color-text)] m-0 leading-snug">{cleanJobTitle(job.title)}</h4>
                         {job.label === "Strong Match" ? (
                           <span className="badge bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
                             🔥 Strong Match • {job.score || job.matchRate}%

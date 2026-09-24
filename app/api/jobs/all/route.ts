@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cleanJobTitle } from "@/lib/jobs/job-filters";
 
 function cleanUrlAndTitle(rawTitle: string, rawUrl: string) {
   const cleanUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
@@ -30,7 +31,7 @@ function cleanUrlAndTitle(rawTitle: string, rawUrl: string) {
     }
   }
 
-  return { title: title || "Job Opening", url: cleanUrl };
+  return { title: cleanJobTitle(title || "Job Opening"), url: cleanUrl };
 }
 
 export async function GET(request: Request) {

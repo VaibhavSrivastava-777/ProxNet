@@ -8,6 +8,8 @@ import {
   isJuniorJob,
   normalizeJobUrl,
   normalizeJobTitle,
+  cleanJobTitle,
+  getJobTitleFingerprint,
   isJobEligible
 } from '../lib/jobs/job-filters';
 
@@ -187,7 +189,9 @@ async function main() {
 
   const title1 = 'Senior Software Engineer - Backend (Go / Python)';
   const title2 = 'Senior Software Engineer, Backend (Go/Python)';
-  assert(normalizeJobTitle(title1) === normalizeJobTitle(title2), 'Titles with varying punctuation normalize to same fingerprint');
+  assert(getJobTitleFingerprint(title1) === getJobTitleFingerprint(title2), 'Titles with varying punctuation normalize to same fingerprint');
+  assert(cleanJobTitle('enterprisecustomersuccessmanager') === 'Enterprise Customer Success Manager', 'Unspaced concatenated title is segmented into spaced words');
+  assert(cleanJobTitle('seniorconsultant') === 'Senior Consultant', 'Unspaced seniorconsultant is segmented into Senior Consultant');
 
   // -------------------------------------------------------------
   // TEST GROUP 5: End-to-End Filter Pipeline Simulation

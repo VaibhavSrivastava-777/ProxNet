@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cleanJobTitle } from "@/lib/jobs/job-filters";
 
 function isJuniorJob(title: string, description: string): boolean {
   const t = title.toLowerCase();
@@ -293,7 +294,7 @@ Return ONLY a JSON object with:
       if (!group.jobs.find(j => j.id === row.id)) {
         group.jobs.push({
           id: row.id,
-          title: row.title,
+          title: cleanJobTitle(row.title),
           location: row.location || "Remote",
           url: row.url || "",
           description: row.description || "",
@@ -351,7 +352,7 @@ Return ONLY a JSON object with:
           if (!companyGroups[compKey].jobs.some(j => j.id === job.id)) {
             companyGroups[compKey].jobs.push({
               id: job.id,
-              title: job.title,
+              title: cleanJobTitle(job.title),
               location: job.location || "Remote",
               url: job.url || "",
               description: job.description || "",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { cleanJobTitle } from "@/lib/jobs/job-filters";
 
 interface ReferralPitchModalProps {
   isOpen: boolean;
@@ -51,7 +52,7 @@ export function ReferralPitchModal({
         body: JSON.stringify({
           jobId: job.id,
           company,
-          jobTitle: job.title,
+          jobTitle: cleanJobTitle(job.title),
           jobDescription: job.description || "",
           jobKeywords: job.keywords || [],
           referrerAlias,
@@ -67,7 +68,7 @@ export function ReferralPitchModal({
     } catch (err) {
       console.error("Failed to generate pitch:", err);
       // Set a basic fallback
-      setPitch(`Hi! I came across the ${job.title} role at ${company} and believe my background aligns well. Would you be open to referring my profile or sharing insights about the team? I'd really appreciate it!`);
+      setPitch(`Hi! I came across the ${cleanJobTitle(job.title)} role at ${company} and believe my background aligns well. Would you be open to referring my profile or sharing insights about the team? I'd really appreciate it!`);
       setGenerated(true);
     } finally {
       setGenerating(false);
@@ -108,7 +109,7 @@ export function ReferralPitchModal({
           <div className="p-3 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex flex-col gap-1.5">
             <div className="flex items-start justify-between gap-2">
               <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-sm font-semibold text-[var(--color-text)] truncate">{job.title}</span>
+                <span className="text-sm font-semibold text-[var(--color-text)] truncate">{cleanJobTitle(job.title)}</span>
                 <span className="text-xs text-[var(--color-text-secondary)]">🏢 {company}</span>
               </div>
               {job.score && job.label && (
