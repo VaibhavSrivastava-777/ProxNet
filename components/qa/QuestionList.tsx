@@ -234,9 +234,9 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[], aiSession?: any }>(`/api/questions?locationMode=${locationMode}&_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000, revalidateOnFocus: false, keepPreviousData: true });
-  const { data: jobInboxData } = useSWR<{ threads: any[] }>("/api/jobs/inbox", fetcher, { refreshInterval: 10000, revalidateOnFocus: false, keepPreviousData: true });
-  const { data: notificationsData, mutate: mutateNotifications } = useSWR<{ notifications: any[] }>("/api/notifications", fetcher, { refreshInterval: 5000, revalidateOnFocus: false, keepPreviousData: true });
+  const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[], aiSession?: any }>(`/api/questions?locationMode=${locationMode}&_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000, revalidateOnFocus: true, keepPreviousData: true });
+  const { data: jobInboxData, mutate: mutateJobInbox } = useSWR<{ threads: any[] }>("/api/jobs/inbox", fetcher, { refreshInterval: 10000, revalidateOnFocus: true, keepPreviousData: true });
+  const { data: notificationsData, mutate: mutateNotifications } = useSWR<{ notifications: any[] }>("/api/notifications", fetcher, { refreshInterval: 5000, revalidateOnFocus: true, keepPreviousData: true });
 
   // Instant hydration from sessionStorage to eliminate chat list reload latency
   const [cachedData, setCachedData] = useState<{ asked?: any[]; incoming?: any[]; aiSession?: any; suggestions?: any[] } | null>(() => {
@@ -429,9 +429,10 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
     if (item.type === "referral") {
       const t = item.data;
       const alias = (t.otherAlias || "").toLowerCase();
-      const role = (t.postRole || "").toLowerCase();
+      const role = (t.jobTitle || t.postRole || "").toLowerCase();
+      const comp = (t.postCompany || "").toLowerCase();
       const msg = (t.latestMessage || "").toLowerCase();
-      return alias.includes(query) || role.includes(query) || msg.includes(query);
+      return alias.includes(query) || role.includes(query) || comp.includes(query) || msg.includes(query);
     } else if (item.type === "asked") {
       const q = item.data;
       const hasResponse = q.question_targets?.some((t: any) => t.status === "responded");
@@ -787,13 +788,21 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 shrink-0">
                               Referral
                             </span>
+                            {t.unread && (
+                              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-pulse" title="Unread message" />
+                            )}
                           </div>
                           <span className="text-[11px] text-[var(--color-text-tertiary)] font-normal whitespace-nowrap ml-2">
                             {formatWhatsAppTime(t.latestMessageAt || t.created_at)}
                           </span>
                         </div>
+                        {/* Target Role & Company badge */}
+                        <div className="text-xs font-semibold text-[var(--color-primary)] truncate mb-0.5 flex items-center gap-1.5">
+                          <span>🎯</span>
+                          <span className="truncate">{t.jobTitle || t.postRole}{t.postCompany ? ` @ ${t.postCompany}` : ""}</span>
+                        </div>
                         <div className="text-body-sm text-[var(--color-text-secondary)] truncate">
-                          {t.latestMessage || `Regarding: ${t.postRole}`}
+                          {t.latestMessage || `Regarding: ${t.jobTitle || t.postRole}`}
                         </div>
                       </div>
                     </div>

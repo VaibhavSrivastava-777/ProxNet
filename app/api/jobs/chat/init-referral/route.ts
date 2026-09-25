@@ -37,14 +37,14 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
 
-  // Create an implicit seeker post for the current user
+  // Create an implicit seeker post for the current user representing their referral target
   const { data: myPost, error: p1Err } = await supabase
     .from("job_posts")
     .insert({
       user_id: user.id,
       type: "seeker",
-      role: currentUserDb?.job_title || "Professional",
-      company: currentUserDb?.company || "",
+      role: jobTitle || currentUserDb?.job_title || "Professional",
+      company: company || currentUserDb?.company || "",
       experience_years: 0,
       skills: "",
       status: "active"

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-// Fetch the user's latest 20 notifications
+// Fetch the user's latest 30 notifications
 export async function GET(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -14,9 +14,9 @@ export async function GET(request: Request) {
   const { data, error } = await supabase
     .from("in_app_notifications")
     .select("*")
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(30);
 
   if (error) {
     console.error("Failed to fetch notifications:", error);
@@ -28,15 +28,15 @@ export async function GET(request: Request) {
 
 // Mark a notification (or all) as read
 export async function PATCH(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const supabase = createAdminClient();
   const { id, ids, url } = await request.json();
 
-  let query = supabase.from("in_app_notifications").update({ is_read: true }).eq("user_id", session.user.id);
+  let query = supabase.from("in_app_notifications").update({ is_read: true }).eq("user_id", user.id);
 
   if (id) {
     query = query.eq("id", id);

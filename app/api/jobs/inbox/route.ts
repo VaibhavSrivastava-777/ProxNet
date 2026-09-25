@@ -10,13 +10,14 @@ export async function GET() {
 
   const { data: myParticipants, error } = await supabase
     .from("job_participants")
-    .select("thread_id")
+    .select("thread_id, last_read_at")
     .eq("user_id", user.id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!myParticipants || myParticipants.length === 0) return NextResponse.json({ threads: [] });
 
   const threadIds = myParticipants.map(p => p.thread_id);
+  const myReadMap = new Map(myParticipants.map(p => [p.thread_id, p.last_read_at]));
 
   const { data: threads } = await supabase
     .from("job_threads")
@@ -26,23 +27,44 @@ export async function GET() {
       created_at,
       post:job_posts!post_id(type, role, company, skills),
       responder:job_posts!responder_post_id(type, role, company, skills),
-      job_participants(user_id, alias),
-      job_messages(body, created_at)
+      job_participants(user_id, alias, last_read_at),
+      job_messages(id, sender_id, body, created_at)
     `)
     .in("id", threadIds)
     .order("created_at", { ascending: false });
 
   const formatted = (threads || []).map(t => {
-    // Sort messages to get the latest
-    const messages = t.job_messages || [];
+    // Sort messages descending to get the latest
+    const messages = (t.job_messages || []).slice();
     messages.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    const latestMessage = messages.length > 0 ? messages[0].body : "No messages yet";
-    const latestMessageAt = messages.length > 0 ? messages[0].created_at : t.created_at;
+    const latestMsg = messages.length > 0 ? messages[0] : null;
+    const latestMessage = latestMsg ? latestMsg.body : "No messages yet";
+    const latestMessageAt = latestMsg ? latestMsg.created_at : t.created_at;
 
     const otherParticipant = t.job_participants?.find((p: any) => p.user_id !== user.id);
     const postObj = Array.isArray(t.post) ? t.post[0] : t.post;
     const responderObj = Array.isArray(t.responder) ? t.responder[0] : t.responder;
-    const postCompany = postObj?.company || responderObj?.company || "";
+    
+    // Parse target role and company with backward-compatibility for automated initial messages
+    let targetRole = responderObj?.role || postObj?.role || "Referral Opportunity";
+    const oldestMessage = messages.length > 0 ? messages[messages.length - 1].body : "";
+    const roleMatch = oldestMessage?.match(/📌\s*Role:\s*([^\n\r]+)/i);
+    if (roleMatch && roleMatch[1]) {
+      targetRole = roleMatch[1].trim();
+    }
+
+    let postCompany = postObj?.company || responderObj?.company || "";
+    const compMatch = oldestMessage?.match(/🏢\s*Company:\s*([^\n\r]+)/i);
+    if (compMatch && compMatch[1] && (!postCompany || postCompany.toLowerCase().includes("colleague"))) {
+      postCompany = compMatch[1].trim();
+    }
+
+    // Accurate unread status: latest message is from the other party and newer than user's last_read_at
+    const myLastRead = myReadMap.get(t.id);
+    const isFromOther = Boolean(latestMsg && latestMsg.sender_id !== user.id);
+    const isUnread = Boolean(
+      isFromOther && (!myLastRead || new Date(latestMsg!.created_at).getTime() > new Date(myLastRead).getTime())
+    );
 
     return {
       id: t.id,
@@ -51,8 +73,10 @@ export async function GET() {
       latestMessage,
       latestMessageAt,
       postType: postObj?.type,
-      postRole: postObj?.role || responderObj?.role,
+      postRole: targetRole,
+      jobTitle: targetRole,
       postCompany,
+      unread: isUnread,
     };
   });
 

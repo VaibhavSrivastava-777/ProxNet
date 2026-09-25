@@ -14,15 +14,17 @@ export async function POST(request: Request) {
   return handleEventReminders(request);
 }
 
-async function handleEventReminders(request: Request) {
+export async function handleEventReminders(request?: Request | null, bypassAuth = false) {
   // Authorization check (Vercel Cron Secret or Admin Session)
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET?.trim();
-  const isCron = !!cronSecret && authHeader === `Bearer ${cronSecret}`;
-  const adminSession = await getAdminSession();
+  if (!bypassAuth && request) {
+    const authHeader = request.headers.get("authorization");
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    const isCron = !!cronSecret && authHeader === `Bearer ${cronSecret}`;
+    const adminSession = await getAdminSession();
 
-  if (!isCron && !adminSession) {
-    return new Response("Unauthorized", { status: 401 });
+    if (!isCron && !adminSession) {
+      return new Response("Unauthorized", { status: 401 });
+    }
   }
 
   const supabase = createAdminClient();
@@ -101,20 +103,23 @@ async function handleEventReminders(request: Request) {
     }
 
     // -------------------------------------------------------------
-    // Branch 1: Daily 2 km Radius Discovery (Days 7 through > 24 Hours)
+    // Branch 1: Daily 2 km Radius Discovery (Days 7 through Event Start)
     // -------------------------------------------------------------
-    if (hoursUntilStart <= 7 * 24 && hoursUntilStart > 24) {
+    if (hoursUntilStart <= 7 * 24 && hoursUntilStart > 0) {
       const daysLeft = Math.ceil(hoursUntilStart / 24);
-      const radiusNotifType = `radius_2km_${daysLeft}d`;
-      const venueLat = Number(event.venue_lat ?? event.center_lat);
-      const venueLng = Number(event.venue_lng ?? event.center_lng);
+      const radiusNotifType = hoursUntilStart > 24 
+        ? `radius_2km_${daysLeft}d`
+        : (hoursUntilStart > 4 ? `radius_2km_24h` : `radius_2km_today`);
 
-      if (venueLat && venueLng && !isNaN(venueLat) && !isNaN(venueLng)) {
+      const venueLat = Number(event.venue_lat || event.center_lat || 0);
+      const venueLng = Number(event.venue_lng || event.center_lng || 0);
+
+      if (venueLat !== 0 && venueLng !== 0 && !isNaN(venueLat) && !isNaN(venueLng)) {
         for (const user of activeUsers || []) {
           // Skip event creator and users who have already RSVPed
           if (user.id === event.creator_id || rsvpMap.has(user.id)) continue;
 
-          // Check if already notified for this countdown day
+          // Check if already notified for this countdown tier
           if (sentLogSet.has(`${user.id}_${radiusNotifType}`)) continue;
 
           const currentLoc = locationMap.get(user.id);
@@ -140,7 +145,12 @@ async function handleEventReminders(request: Request) {
           const isMatch = minDistance <= 2000 || locsToCheck.length === 0;
 
           if (isMatch) {
-            const title = `Meetup in ${daysLeft} Day${daysLeft > 1 ? "s" : ""}: ${event.title} @ ${event.venue_name}`;
+            const title = hoursUntilStart > 24
+              ? `Meetup in ${daysLeft} Day${daysLeft > 1 ? "s" : ""}: ${event.title} @ ${event.venue_name}`
+              : (hoursUntilStart > 4 
+                  ? `Meetup Tomorrow: ${event.title} @ ${event.venue_name}` 
+                  : `Meetup Today: ${event.title} @ ${event.venue_name}`);
+
             const body = agendaText
               ? `${agendaText} • Happening near you on ${dateStr} at ${timeStr}. Tap to RSVP!`
               : `Happening near you on ${dateStr} at ${timeStr} @ ${event.venue_name}. Tap to view details & RSVP!`;
@@ -149,7 +159,7 @@ async function handleEventReminders(request: Request) {
               title,
               body,
               url: `/event/${event.id}`,
-              data: { type: "event_radius", eventId: event.id, daysLeft }
+              data: { type: "event_radius", eventId: event.id, daysLeft, hoursUntilStart: Math.round(hoursUntilStart) }
             });
 
             await supabase.from("event_notifications_log").insert({

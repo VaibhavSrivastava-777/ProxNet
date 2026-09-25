@@ -8,18 +8,23 @@ export async function sendNotification(
 ) {
   const supabase = createAdminClient();
 
-  // 0. Persist to in_app_notifications table
-  const { error: insertError } = await supabase
-    .from("in_app_notifications")
-    .insert({
-      user_id: userId,
-      title,
-      body,
-      url
-    });
+  const sanitizedUrl = url || "/";
+  // 0. Persist to in_app_notifications table (Guaranteed first step for all notifications)
+  try {
+    const { error: insertError } = await supabase
+      .from("in_app_notifications")
+      .insert({
+        user_id: userId,
+        title: title || "Notification",
+        body: body || "",
+        url: sanitizedUrl
+      });
 
-  if (insertError) {
-    console.error("Failed to insert in-app notification:", insertError);
+    if (insertError) {
+      console.error("[sendNotification] Failed to insert in-app notification:", insertError, { userId, title, url: sanitizedUrl });
+    }
+  } catch (err) {
+    console.error("[sendNotification] Unexpected error inserting in-app notification:", err);
   }
 
   // 1. Fetch user's FCM tokens

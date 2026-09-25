@@ -18,11 +18,7 @@
     },
     {
       "path": "/api/cron/event-reminders",
-      "schedule": "0 10 * * *"
-    },
-    {
-      "path": "/api/cron/daily-engagement",
-      "schedule": "0 12 * * *"
+      "schedule": "30 2,7,12 * * *"
     },
     {
       "path": "/api/cron/morning-reminders",

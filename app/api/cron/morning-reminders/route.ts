@@ -36,7 +36,8 @@ export async function handleMorningReminders(request?: Request | null, bypassAut
 
   const supabase = createAdminClient();
   const now = Date.now();
-  const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+  // Use a 20-hour window so daily morning runs (e.g., 9:00 AM) are never skipped due to minor cron invocation drift
+  const twentyFourHoursAgo = new Date(now - 20 * 60 * 60 * 1000).toISOString();
 
   let profileRemindersSent = 0;
   let starterRemindersSent = 0;

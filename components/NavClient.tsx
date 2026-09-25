@@ -743,33 +743,6 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
       window.dispatchEvent(new CustomEvent("tabchange", { detail: tabHref }));
       window.history.pushState(null, "", tabHref);
     }
-
-    let targetNotifs = [];
-    if (tabHref === "/qa") {
-      targetNotifs = inAppNotifications.filter(
-        (n) => !n.is_read && (n.url?.includes("/chat") || n.url === "/qa" || n.url === "/proxnet-ai")
-      );
-    } else if (tabHref === "/forum") {
-      targetNotifs = inAppNotifications.filter(
-        (n) => !n.is_read && n.url?.includes("/forum")
-      );
-    }
-
-    if (targetNotifs.length > 0) {
-      const ids = targetNotifs.map((n) => n.id);
-      setInAppNotifications((prev) =>
-        prev.map((n) => (ids.includes(n.id) ? { ...n, is_read: true } : n))
-      );
-      try {
-        await fetch("/api/notifications", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids }),
-        });
-      } catch (err) {
-        console.error("Failed to mark notifications as read", err);
-      }
-    }
   };
 
   // Fetch initial incoming open count

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { mutate } from "swr";
 
 interface Referrar {
   id: string;
@@ -217,8 +218,11 @@ export function JobFeed({ refreshKey }: { refreshKey: number }) {
                             });
                             const data = await res.json();
                             if (data.walletWarning) alert("Insufficient credits, but opening chat anyway.");
-                            if (data.threadId) window.open(`/jobs/chat/${data.threadId}`, '_blank', 'noopener,noreferrer');
-                            else throw new Error(data.error || "Failed to start chat");
+                            if (data.threadId) {
+                              try { sessionStorage.removeItem("proxnet_inbox_cache"); } catch (e) {}
+                              mutate("/api/jobs/inbox");
+                              window.open(`/jobs/chat/${data.threadId}`, '_blank', 'noopener,noreferrer');
+                            } else throw new Error(data.error || "Failed to start chat");
                           } catch (err: any) {
                             setErrorMsg("Failed to start referral: " + (err.message || ""));
                             setTimeout(() => setErrorMsg(""), 5000);

@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { mutate } from "swr";
 import { CompanyLogo } from "@/components/qa/QuestionList";
 import { ResumeCard } from "./ResumeCard";
 import { ReferralPitchModal } from "./ReferralPitchModal";
 import { TargetCompanyManager } from "./TargetCompanyManager";
 import { ApplicationPipeline } from "./ApplicationPipeline";
 import { DeepFetchModal } from "./DeepFetchModal";
+import { JobInbox } from "./JobInbox";
 import { playNotificationSound } from "@/lib/sound";
 import { cleanJobTitle } from "@/lib/jobs/job-filters";
 
@@ -432,6 +434,10 @@ export function SuggestedJobs() {
       const data = await res.json();
       if (data.threadId) {
         setActiveCompanyModal(null);
+        try {
+          sessionStorage.removeItem("proxnet_inbox_cache");
+        } catch (e) {}
+        mutate("/api/jobs/inbox");
         // Direct transition into the chat session without intermediate screens
         router.push(`/jobs/chat/${data.threadId}`);
       }
@@ -781,6 +787,9 @@ export function SuggestedJobs() {
           <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">Active</span>
         </div>
       )}
+
+      {/* 🤝 Active Referral Conversations (Only displays if active threads exist) */}
+      <JobInbox />
 
       {/* 🎯 Deep ATS Match Hunter Action Banner */}
       <div className="p-3.5 sm:p-4 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 via-[var(--color-surface)] to-emerald-500/10 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1677,6 +1686,10 @@ export function SuggestedJobs() {
                 const data = await res.json();
                 if (data.threadId) {
                   setActiveCompanyModal(null);
+                  try {
+                    sessionStorage.removeItem("proxnet_inbox_cache");
+                  } catch (e) {}
+                  mutate("/api/jobs/inbox");
                   router.push(`/jobs/chat/${data.threadId}`);
                 }
               }
