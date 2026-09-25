@@ -45,12 +45,14 @@ export async function POST(request: Request) {
       .from("job_posts")
       .insert({
         user_id: user.id,
+        creator_id: user.id,
         type: implicitType,
         role: currentUserDb?.job_title || "Professional",
         company: currentUserDb?.company || "",
         experience_years: 0,
         skills: "",
-        status: "active"
+        status: "implicit",
+        is_public: false
       })
       .select("id")
       .single();

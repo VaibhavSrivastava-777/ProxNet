@@ -231,7 +231,7 @@ export function JobPostClientPage({ id }: { id: string }) {
                 <span className={`px-3 py-1 rounded-full text-xs font-bold text-white ${badgeBg}`}>
                   {badgeText}
                 </span>
-                {jobPost.experience_years && (
+                {Boolean(jobPost.experience_years && jobPost.experience_years !== "0" && jobPost.experience_years !== 0) && (
                   <span className="px-3 py-1 rounded-full text-xs font-bold bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border border-[var(--color-border-light)]">
                     ⏳ {jobPost.experience_years}
                   </span>

@@ -42,12 +42,14 @@ export async function POST(request: Request) {
     .from("job_posts")
     .insert({
       user_id: user.id,
+      creator_id: user.id,
       type: "seeker",
       role: jobTitle || currentUserDb?.job_title || "Professional",
       company: company || currentUserDb?.company || "",
       experience_years: 0,
       skills: "",
-      status: "active"
+      status: "implicit",
+      is_public: false
     })
     .select("id")
     .single();
@@ -57,12 +59,14 @@ export async function POST(request: Request) {
     .from("job_posts")
     .insert({
       user_id: contactId,
+      creator_id: contactId,
       type: "giver",
       role: targetUser.job_title || "Professional",
       company: targetUser.company || company,
       experience_years: 0,
       skills: "",
-      status: "active"
+      status: "implicit",
+      is_public: false
     })
     .select("id")
     .single();

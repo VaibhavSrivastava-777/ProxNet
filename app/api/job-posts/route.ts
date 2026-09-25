@@ -32,6 +32,7 @@ export async function GET(request: Request) {
       comments:job_post_comments(id)
     `)
     .eq("status", "active")
+    .eq("is_public", true)
     .order("created_at", { ascending: false });
 
   if (error) {

@@ -263,7 +263,7 @@ export function JobPostCard({
 
       {/* Metadata pills (Experience & Skills) */}
       <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-secondary)]">
-        {jobPost.experience_years && (
+        {Boolean(jobPost.experience_years && jobPost.experience_years !== "0" && jobPost.experience_years !== 0) && (
           <span className="bg-[var(--color-surface-secondary)] px-2 py-0.5 rounded font-medium border border-[var(--color-border-light)]">
             ⏳ {jobPost.experience_years}
           </span>
