@@ -8,7 +8,8 @@ import { ResumeCard } from "./ResumeCard";
 import { ReferralPitchModal } from "./ReferralPitchModal";
 import { TargetCompanyManager } from "./TargetCompanyManager";
 import { ApplicationPipeline } from "./ApplicationPipeline";
-import { DeepFetchModal } from "./DeepFetchModal";
+import { DeepConversionModal } from "./DeepConversionModal";
+import type { ConversionBlueprint } from "@/lib/jobs/deep-conversion-miner";
 import { JobInbox } from "./JobInbox";
 import { playNotificationSound } from "@/lib/sound";
 import { cleanJobTitle } from "@/lib/jobs/job-filters";
@@ -150,7 +151,11 @@ export function SuggestedJobs() {
   const [pitchModalJob, setPitchModalJob] = useState<{ job: SuggestedJob; group: CompanyGroup } | null>(null);
   // New: Target Company Manager Modal
   const [showTargetCompanyModal, setShowTargetCompanyModal] = useState(false);
-  // Deep ATS Hunter State
+  // Deep Career Conversion Miner State
+  const [showDeepConversionModal, setShowDeepConversionModal] = useState(false);
+  const [deepConversionBlueprints, setDeepConversionBlueprints] = useState<ConversionBlueprint[]>([]);
+  const [activeBlueprintTab, setActiveBlueprintTab] = useState<Record<number, "x" | "y" | "z">>({});
+  const [copiedBlueprintIndex, setCopiedBlueprintIndex] = useState<number | null>(null);
   const [showDeepFetchModal, setShowDeepFetchModal] = useState(false);
   const [deepHunterMatches, setDeepHunterMatches] = useState<any[]>([]);
   // Save job feedback & state tracking
@@ -160,6 +165,20 @@ export function SuggestedJobs() {
   // Option 5: Proximity Colleagues & Helpers State
   const [nearbyHelpers, setNearbyHelpers] = useState<NearbyHelper[]>([]);
   const router = useRouter();
+
+  const handleBlueprintsFetched = (blueprints: ConversionBlueprint[], newWallet: number) => {
+    setDeepConversionBlueprints(blueprints);
+    setUserWallet(newWallet);
+    window.dispatchEvent(new CustomEvent("wallet-updated", { detail: newWallet }));
+    try {
+      playNotificationSound("job_match");
+    } catch {}
+    setMatchAddedToast({
+      show: true,
+      message: `🎯 Generated ${blueprints.length} strategic conversion blueprints with Focus X, Y, Z & warm connector bridges!`,
+      score: blueprints[0]?.matchScore || 92,
+    });
+  };
 
   const handleMatchesFetched = (matches: any[], newWallet: number) => {
     // Exclude candidate's own current employer from output
@@ -303,7 +322,11 @@ export function SuggestedJobs() {
         }
         if (data.profileDigest) {
           setProfileDigest(data.profileDigest);
+          if (Array.isArray(data.profileDigest.deep_career_blueprints) && data.profileDigest.deep_career_blueprints.length > 0) {
+            setDeepConversionBlueprints(data.profileDigest.deep_career_blueprints);
+          }
         }
+
         try {
           sessionStorage.setItem("proxnet_suggested_jobs_cache_v4", JSON.stringify({
             companies: data.companies || [],
@@ -1294,16 +1317,266 @@ export function SuggestedJobs() {
             <button
               id="btn-deep-ats-fetch"
               type="button"
-              onClick={() => setShowDeepFetchModal(true)}
-              className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-primary to-emerald-600 hover:opacity-95 text-white font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+              onClick={() => setShowDeepConversionModal(true)}
+              className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-primary via-indigo-600 to-emerald-600 hover:opacity-95 text-white font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              <span>⚡ Fetch Matches</span>
+              <span>🎯 Mine Opportunities (3 Credits / Job)</span>
             </button>
           </div>
         </div>
 
+
+        {/* 🎯 Deep Career Conversion Dossier (Rendered when conversion blueprints available) */}
+        {deepConversionBlueprints.length > 0 && (
+          <div id="deep-conversion-results" className="p-4 sm:p-5 rounded-2xl border-2 border-primary/30 bg-gradient-to-br from-primary/5 via-[var(--color-surface)] to-emerald-500/5 shadow-sm space-y-4 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[var(--color-border-light)] gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-primary/20 text-primary flex items-center justify-center text-base font-bold shadow-2xs">
+                  🎯
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-bold text-[var(--color-text)] m-0 flex items-center gap-2">
+                    <span>Deep Career Conversion Dossier</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      {deepConversionBlueprints.length} Strategic Blueprints
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-[var(--color-text-secondary)] m-0">
+                    High-yield peer roles equipped with Focus X (resume hooks), Focus Y (ATS gaps), Focus Z (interview pitches) & warm connectors
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                <button
+                  type="button"
+                  onClick={() => setShowDeepConversionModal(true)}
+                  className="px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-bold text-xs transition-colors cursor-pointer"
+                >
+                  ⚡ Re-Mine
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeepConversionBlueprints([])}
+                  className="text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] underline ml-1 cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {deepConversionBlueprints.map((bp, bIdx) => {
+                const activeTab = activeBlueprintTab[bIdx] || "x";
+                const isProxNet = bp.connector?.type === "proxnet";
+
+                return (
+                  <div
+                    key={bp.jobId || bIdx}
+                    className="p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-xs hover:border-primary/40 transition-all space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <CompanyLogo company={bp.company} size={38} />
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-xs sm:text-sm text-[var(--color-text)]">
+                              {cleanJobTitle(bp.title)}
+                            </span>
+                            {bp.reqId && (
+                              <span className="text-[10px] text-[var(--color-text-tertiary)] bg-[var(--color-surface-secondary)] px-1.5 py-0.5 rounded font-mono">
+                                Req #{bp.reqId}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+                            <span className="font-semibold text-[var(--color-text)]">{bp.company}</span>
+                            <span>•</span>
+                            <span>📍 {bp.location || "Remote"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+                        <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-extrabold text-xs">
+                          {bp.matchScore}% Match
+                        </span>
+                        {bp.url && (
+                          <a
+                            href={bp.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1 rounded-lg bg-primary hover:opacity-90 text-white font-bold text-xs transition-opacity flex items-center gap-1 shadow-2xs"
+                          >
+                            <span>Apply</span>
+                            <span>↗</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Why this opportunity */}
+                    {bp.whyThisOpportunity && (
+                      <p className="text-[11px] text-[var(--color-text-secondary)] italic bg-[var(--color-surface-secondary)]/50 p-2.5 rounded-lg border border-[var(--color-border-light)]/60 m-0">
+                        &quot;{bp.whyThisOpportunity}&quot;
+                      </p>
+                    )}
+
+                    {/* Focus X, Y, Z Tab Bar */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex border-b border-[var(--color-border-light)] gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setActiveBlueprintTab(prev => ({ ...prev, [bIdx]: "x" }))}
+                          className={`px-3 py-1.5 font-bold text-[11px] border-b-2 transition-all cursor-pointer ${
+                            activeTab === "x"
+                              ? "border-primary text-primary"
+                              : "border-transparent text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
+                          }`}
+                        >
+                          🎯 Focus X (Resume Hook)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveBlueprintTab(prev => ({ ...prev, [bIdx]: "y" }))}
+                          className={`px-3 py-1.5 font-bold text-[11px] border-b-2 transition-all cursor-pointer ${
+                            activeTab === "y"
+                              ? "border-primary text-primary"
+                              : "border-transparent text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
+                          }`}
+                        >
+                          ⚙️ Focus Y (ATS Optimization)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveBlueprintTab(prev => ({ ...prev, [bIdx]: "z" }))}
+                          className={`px-3 py-1.5 font-bold text-[11px] border-b-2 transition-all cursor-pointer ${
+                            activeTab === "z"
+                              ? "border-primary text-primary"
+                              : "border-transparent text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
+                          }`}
+                        >
+                          🎙️ Focus Z (Interview Strategy)
+                        </button>
+                      </div>
+
+                      {/* Tab Content */}
+                      <div className="p-3 rounded-lg bg-[var(--color-surface-secondary)]/50 border border-[var(--color-border-light)] text-[11px]">
+                        {activeTab === "x" && (
+                          <div className="space-y-1">
+                            <span className="font-bold text-[var(--color-text)] block">
+                              {bp.focusX?.title || "Resume Project Anchor"}
+                            </span>
+                            <p className="text-[var(--color-text-secondary)] m-0 leading-relaxed">
+                              {bp.focusX?.description}
+                            </p>
+                          </div>
+                        )}
+
+                        {activeTab === "y" && (
+                          <div className="space-y-2">
+                            <span className="font-bold text-[var(--color-text)] block">
+                              {bp.focusY?.title || "ATS Keywords & Metrics"}
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {(bp.focusY?.keywordsToAdd || []).map((kw, kwIdx) => (
+                                <span
+                                  key={kwIdx}
+                                  className="px-2 py-0.5 rounded-md bg-primary/10 text-primary font-mono text-[10px] font-semibold border border-primary/20"
+                                >
+                                  +{kw}
+                                </span>
+                              ))}
+                            </div>
+                            <p className="text-[var(--color-text-secondary)] m-0 leading-relaxed">
+                              {bp.focusY?.description}
+                            </p>
+                          </div>
+                        )}
+
+                        {activeTab === "z" && (
+                          <div className="space-y-2">
+                            <div>
+                              <span className="font-bold text-[var(--color-text)] block">
+                                {bp.focusZ?.title || "Winning Interview Narrative"}
+                              </span>
+                              <div className="mt-1 p-2 rounded bg-primary/5 border-l-2 border-primary text-[var(--color-text)] font-medium italic">
+                                &quot;{bp.focusZ?.interviewPitch}&quot;
+                              </div>
+                            </div>
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-[var(--color-text-tertiary)] block">
+                                Objection Handler:
+                              </span>
+                              <p className="text-[var(--color-text-secondary)] m-0 leading-relaxed">
+                                {bp.focusZ?.objectionHandler}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Warm Connector Card (Mr. A) */}
+                    {bp.connector && (
+                      <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm">{isProxNet ? "🟢" : "🔵"}</span>
+                            <span className="font-bold text-xs text-[var(--color-text)]">
+                              {bp.connector.connectionPath}
+                            </span>
+                          </div>
+
+                          {!isProxNet && bp.connector.linkedinAlumniUrl && (
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={bp.connector.linkedinAlumniUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2.5 py-1 rounded bg-[#0077b5]/15 text-[#0077b5] dark:text-[#00a0dc] font-bold text-[10px] border border-[#0077b5]/30 hover:bg-[#0077b5] hover:text-white transition-all"
+                              >
+                                Alumni Search ↗
+                              </a>
+                              <a
+                                href={bp.connector.linkedinSearchUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2.5 py-1 rounded bg-[#0077b5]/15 text-[#0077b5] dark:text-[#00a0dc] font-bold text-[10px] border border-[#0077b5]/30 hover:bg-[#0077b5] hover:text-white transition-all"
+                              >
+                                Leaders ↗
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Outreach Pitch Copy Box */}
+                        <div className="relative p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)] text-[11px] font-mono text-[var(--color-text-secondary)] leading-relaxed">
+                          <div className="pr-16">{bp.connector.outreachMessage}</div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(bp.connector.outreachMessage);
+                              setCopiedBlueprintIndex(bIdx);
+                              setTimeout(() => setCopiedBlueprintIndex(null), 2500);
+                            }}
+                            className="absolute top-2 right-2 px-2.5 py-1 rounded bg-primary text-white font-bold text-[10px] shadow-2xs hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+                          >
+                            {copiedBlueprintIndex === bIdx ? "Copied! ✓" : "Copy Note"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* 🎯 Deep Hunter Matches Section (Rendered when live matches fetched) */}
         {deepHunterMatches.length > 0 && (
+
           <div id="deep-hunter-results" className="p-4 rounded-xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/5 to-transparent space-y-3 animate-fadeIn">
             <div className="flex items-center justify-between pb-2 border-b border-emerald-500/20">
               <div className="flex items-center gap-2">
@@ -2228,18 +2501,19 @@ export function SuggestedJobs() {
         </div>
       )}
 
-      {/* Deep ATS Match Hunter Modal */}
-      <DeepFetchModal
-        isOpen={showDeepFetchModal}
-        onClose={() => setShowDeepFetchModal(false)}
+      {/* Deep Career Conversion Miner Modal */}
+      <DeepConversionModal
+        isOpen={showDeepConversionModal}
+        onClose={() => setShowDeepConversionModal(false)}
         wallet={userWallet ?? 0}
         hasResume={hasResume}
-        onMatchesFetched={handleMatchesFetched}
+        onBlueprintsFetched={handleBlueprintsFetched}
         onOpenResumeUpload={() => {
           const el = document.getElementById("resume-upload-input");
           if (el) el.click();
         }}
       />
+
     </div>
   );
 }
