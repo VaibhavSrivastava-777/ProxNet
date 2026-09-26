@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { ConversionBlueprint } from "@/lib/jobs/deep-conversion-miner";
 
 interface DeepConversionModalProps {
@@ -60,6 +61,11 @@ export function DeepConversionModal({
   onBlueprintsFetched,
   onOpenResumeUpload,
 }: DeepConversionModalProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const [isRunning, setIsRunning] = useState(false);
   const [countdown, setCountdown] = useState(100);
   const [activePhaseIndex, setActivePhaseIndex] = useState(0);
@@ -137,7 +143,7 @@ export function DeepConversionModal({
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleStartMining = async () => {
     if (!hasResume) {
@@ -215,18 +221,18 @@ export function DeepConversionModal({
     setActiveTabMap((prev) => ({ ...prev, [jobIndex]: tab }));
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/75 backdrop-blur-sm animate-fadeIn overflow-hidden"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm overflow-hidden"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-2xl overflow-hidden flex flex-col h-[94dvh] max-h-[94dvh] sm:h-[88dvh] sm:max-h-[88dvh] animate-scaleUp text-[var(--color-text)] relative"
+        className="w-full max-w-2xl rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-2xl overflow-hidden flex flex-col h-[90dvh] max-h-[90dvh] sm:h-[84dvh] sm:max-h-[84dvh] text-[var(--color-text)] relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Sticky Header - Permanently Fixed at Top */}
-        <div className="flex-none shrink-0 p-3.5 sm:p-4 border-b border-[var(--color-border-light)] flex items-center justify-between bg-[var(--color-surface)] z-30 shadow-xs">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 mr-3">
+        <div className="flex-none shrink-0 p-3 sm:p-4 border-b border-[var(--color-border-light)] flex items-center justify-between bg-[var(--color-surface)] z-30 shadow-xs">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 mr-2">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-600 text-white flex items-center justify-center text-lg sm:text-xl shadow-md shrink-0">
               🎯
             </div>
@@ -247,13 +253,11 @@ export function DeepConversionModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 sm:px-3 sm:py-1.5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border)] transition-all cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs group"
+            className="p-2 sm:px-3 sm:py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 transition-all cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs active:scale-95 group"
             title="Close (Esc)"
             aria-label="Close modal"
           >
-            <span className="text-xs font-semibold hidden sm:inline text-[var(--color-text-secondary)] group-hover:text-[var(--color-text)]">
-              Close
-            </span>
+            <span className="text-xs font-bold hidden sm:inline">Close</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="group-hover:scale-110 transition-transform">
               <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -598,6 +602,25 @@ export function DeepConversionModal({
                     </div>
                   );
                 })}
+
+                {/* End of Dossier Action Card */}
+                <div className="p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left mt-4">
+                  <div>
+                    <h4 className="text-xs font-bold text-[var(--color-text)]">
+                      Finished reviewing your conversion blueprints?
+                    </h4>
+                    <p className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+                      These roles and roadmaps are now saved in your opportunities feed.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs shadow-sm active:scale-95 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    <span>✕ Close Dossier</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -845,6 +868,7 @@ export function DeepConversionModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

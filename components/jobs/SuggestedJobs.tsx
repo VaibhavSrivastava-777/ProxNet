@@ -52,93 +52,99 @@ interface NearbyHelper {
   is_followed?: boolean;
 }
 
+interface JobsCachePayload {
+  companies: CompanyGroup[];
+  allCompanies: CompanyGroup[];
+  profileDigest: ProfileDigest | null;
+  hasResume: boolean;
+  resumeUrl: string | null;
+  wallet: number;
+  currentUserId: string | null;
+  currentUserCompany: string | null;
+  userInviteCode: string | null;
+  nearbyHelpers: NearbyHelper[];
+  isMatchingCompleted: boolean;
+  deepConversionBlueprints?: ConversionBlueprint[];
+  timestamp: number;
+}
+
+const JOBS_CACHE_KEY = "proxnet_last_jobs_pull_v1";
+
+// In-memory module cache to persist across client-side tab switching without any disk hit
+let memoryJobsCache: JobsCachePayload | null = null;
+// Track whether we've already executed a refresh during the current full page load
+let hasRefreshedInCurrentPageLoad = false;
+
+function getStoredJobsCache(): JobsCachePayload | null {
+  if (memoryJobsCache) return memoryJobsCache;
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(JOBS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    memoryJobsCache = parsed;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveJobsCache(payload: Partial<JobsCachePayload>) {
+  if (typeof window === "undefined") return;
+  try {
+    const existing = getStoredJobsCache() || {
+      companies: [],
+      allCompanies: [],
+      profileDigest: null,
+      hasResume: true,
+      resumeUrl: null,
+      wallet: 0,
+      currentUserId: null,
+      currentUserCompany: null,
+      userInviteCode: null,
+      nearbyHelpers: [],
+      isMatchingCompleted: true,
+      deepConversionBlueprints: [],
+      timestamp: Date.now(),
+    };
+    const updated: JobsCachePayload = {
+      ...existing,
+      ...payload,
+      timestamp: Date.now(),
+    };
+    memoryJobsCache = updated;
+    localStorage.setItem(JOBS_CACHE_KEY, JSON.stringify(updated));
+  } catch {
+    // ignore
+  }
+}
+
 export function SuggestedJobs() {
-  const [companies, setCompanies] = useState<CompanyGroup[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      sessionStorage.removeItem("proxnet_suggested_jobs_cache"); // purge legacy
-      sessionStorage.removeItem("proxnet_suggested_jobs_cache_v2"); // purge legacy
-      sessionStorage.removeItem("proxnet_suggested_jobs_cache_v3"); // purge legacy
-      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache_v4");
-      if (cached) return JSON.parse(cached).companies || [];
-    } catch {
-      // ignore
-    }
-    return [];
-  });
-  const [allCompanies, setAllCompanies] = useState<CompanyGroup[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      sessionStorage.removeItem("proxnet_all_jobs_cache"); // purge legacy
-      sessionStorage.removeItem("proxnet_all_jobs_cache_v2"); // purge legacy
-      const cached = sessionStorage.getItem("proxnet_all_jobs_cache_v3");
-      if (cached) return JSON.parse(cached).companies || [];
-    } catch {
-      // ignore
-    }
-    return [];
-  });
+  const initialCache = getStoredJobsCache();
+
+  const [companies, setCompanies] = useState<CompanyGroup[]>(() => initialCache?.companies || []);
+  const [allCompanies, setAllCompanies] = useState<CompanyGroup[]>(() => initialCache?.allCompanies || []);
   const [jobsViewMode, setJobsViewMode] = useState<"matched" | "all">("matched");
-  const [profileDigest, setProfileDigest] = useState<ProfileDigest | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache_v3");
-      if (cached) return JSON.parse(cached).profileDigest || null;
-    } catch {
-      // ignore
-    }
-    return null;
-  });
-  const [hasResume, setHasResume] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    try {
-      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed.hasResume !== undefined) return parsed.hasResume;
-      }
-    } catch {
-      // ignore
-    }
-    return true;
-  });
-  const [resumeUrl, setResumeUrl] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
-      if (cached) return JSON.parse(cached).resumeUrl || null;
-    } catch {
-      // ignore
-    }
-    return null;
-  });
-  const [userWallet, setUserWallet] = useState<number | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const cached = sessionStorage.getItem("proxnet_suggested_jobs_cache");
-      if (cached) return JSON.parse(cached).wallet ?? null;
-    } catch {
-      // ignore
-    }
-    return null;
-  });
+  const [profileDigest, setProfileDigest] = useState<ProfileDigest | null>(() => initialCache?.profileDigest || null);
+  const [hasResume, setHasResume] = useState<boolean>(() => initialCache?.hasResume ?? true);
+  const [resumeUrl, setResumeUrl] = useState<string | null>(() => initialCache?.resumeUrl ?? null);
+  const [userWallet, setUserWallet] = useState<number | null>(() => initialCache?.wallet ?? null);
   const [calculatingMatchJobId, setCalculatingMatchJobId] = useState<string | null>(null);
+
+  // Loading is ONLY true if we have no cached data at all (first-time load ever)
   const [loading, setLoading] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
-    try {
-      return !sessionStorage.getItem("proxnet_suggested_jobs_cache");
-    } catch {
-      // ignore
-    }
-    return true;
+    const cache = getStoredJobsCache();
+    return !cache || (cache.companies.length === 0 && cache.allCompanies.length === 0);
   });
+
   const [activeCompanyModal, setActiveCompanyModal] = useState<CompanyGroup | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [currentUserCompany, setCurrentUserCompany] = useState<string | null>(null);
-  const [userInviteCode, setUserInviteCode] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(() => initialCache?.currentUserId ?? null);
+  const [currentUserCompany, setCurrentUserCompany] = useState<string | null>(() => initialCache?.currentUserCompany ?? null);
+  const [userInviteCode, setUserInviteCode] = useState<string | null>(() => initialCache?.userInviteCode ?? null);
   const [inviteToast, setInviteToast] = useState<string | null>(null);
   const [startingReferralJobId, setStartingReferralJobId] = useState<string | null>(null);
-  const [isMatchingCompleted, setIsMatchingCompleted] = useState(true);
+  const [isMatchingCompleted, setIsMatchingCompleted] = useState<boolean>(() => initialCache?.isMatchingCompleted ?? true);
   const [errorMsg, setErrorMsg] = useState("");
   const [matchAddedToast, setMatchAddedToast] = useState<{ show: boolean; message: string; score: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -153,7 +159,7 @@ export function SuggestedJobs() {
   const [showTargetCompanyModal, setShowTargetCompanyModal] = useState(false);
   // Deep Career Conversion Miner State
   const [showDeepConversionModal, setShowDeepConversionModal] = useState(false);
-  const [deepConversionBlueprints, setDeepConversionBlueprints] = useState<ConversionBlueprint[]>([]);
+  const [deepConversionBlueprints, setDeepConversionBlueprints] = useState<ConversionBlueprint[]>(() => initialCache?.deepConversionBlueprints || []);
   const [activeBlueprintTab, setActiveBlueprintTab] = useState<Record<number, "x" | "y" | "z">>({});
   const [copiedBlueprintIndex, setCopiedBlueprintIndex] = useState<number | null>(null);
   const [showDeepFetchModal, setShowDeepFetchModal] = useState(false);
@@ -163,7 +169,7 @@ export function SuggestedJobs() {
   const [savedJobKeys, setSavedJobKeys] = useState<Set<string>>(new Set());
   const [savingJobId, setSavingJobId] = useState<string | null>(null);
   // Option 5: Proximity Colleagues & Helpers State
-  const [nearbyHelpers, setNearbyHelpers] = useState<NearbyHelper[]>([]);
+  const [nearbyHelpers, setNearbyHelpers] = useState<NearbyHelper[]>(() => initialCache?.nearbyHelpers || []);
   const router = useRouter();
 
   const handleBlueprintsFetched = (blueprints: ConversionBlueprint[], newWallet: number) => {
@@ -341,7 +347,7 @@ export function SuggestedJobs() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeCompanyModal]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (forceRefresh: boolean = false) => {
     try {
       const t = Date.now();
       const [suggestedRes, allRes, peopleRes] = await Promise.allSettled([
@@ -350,113 +356,107 @@ export function SuggestedJobs() {
         fetch(`/api/proximity/people?unfiltered=true`, { cache: "no-store" }).then(r => r.ok ? r.json() : null),
       ]);
 
+      let newNearbyHelpers: NearbyHelper[] = [];
       if (peopleRes.status === "fulfilled" && peopleRes.value) {
         const pData = peopleRes.value;
-        const peopleList: NearbyHelper[] = Array.isArray(pData.people)
+        newNearbyHelpers = Array.isArray(pData.people)
           ? pData.people
           : Array.isArray(pData)
           ? pData
           : [];
-        setNearbyHelpers(peopleList);
+        setNearbyHelpers(newNearbyHelpers);
       }
+
+      let newValidCompanies: CompanyGroup[] = [];
+      let newProfileDigest: ProfileDigest | null = null;
+      let newWallet: number = 0;
+      let newUserId: string | null = null;
+      let newUserCompany: string | null = null;
+      let newInviteCode: string | null = null;
+      let newHasResume: boolean = true;
+      let newResumeUrl: string | null = null;
+      let newIsMatchingCompleted: boolean = true;
+      let newBlueprints: ConversionBlueprint[] = [];
 
       if (suggestedRes.status === "fulfilled" && suggestedRes.value) {
         const data = suggestedRes.value;
         const userComp = data.currentUserCompany || currentUserCompany;
-        const validCompanies = (data.companies || []).filter(
+        newValidCompanies = (data.companies || []).filter(
           (c: CompanyGroup) => !userComp || !isSameCompany(c.company, userComp)
         );
-        setCompanies(validCompanies);
-        setIsMatchingCompleted(data.isMatchingCompleted ?? true);
+        setCompanies(newValidCompanies);
+        newIsMatchingCompleted = data.isMatchingCompleted ?? true;
+        setIsMatchingCompleted(newIsMatchingCompleted);
         if (data.currentUserId) {
-          setCurrentUserId(data.currentUserId);
+          newUserId = data.currentUserId;
+          setCurrentUserId(newUserId);
         }
         if (data.currentUserCompany) {
-          setCurrentUserCompany(data.currentUserCompany);
+          newUserCompany = data.currentUserCompany;
+          setCurrentUserCompany(newUserCompany);
         }
         if (data.inviteCode) {
-          setUserInviteCode(data.inviteCode);
+          newInviteCode = data.inviteCode;
+          setUserInviteCode(newInviteCode);
         }
         if (data.hasResume !== undefined) {
-          setHasResume(data.hasResume);
+          newHasResume = data.hasResume;
+          setHasResume(newHasResume);
         }
         if (data.resumeUrl !== undefined) {
-          setResumeUrl(data.resumeUrl);
+          newResumeUrl = data.resumeUrl;
+          setResumeUrl(newResumeUrl);
         }
         if (data.wallet !== undefined) {
-          setUserWallet(data.wallet);
+          newWallet = data.wallet;
+          setUserWallet(newWallet);
         }
         if (data.profileDigest) {
-          setProfileDigest(data.profileDigest);
+          newProfileDigest = data.profileDigest;
+          setProfileDigest(newProfileDigest);
           if (Array.isArray(data.profileDigest.deep_career_blueprints) && data.profileDigest.deep_career_blueprints.length > 0) {
-            setDeepConversionBlueprints(data.profileDigest.deep_career_blueprints);
+            newBlueprints = data.profileDigest.deep_career_blueprints;
+            setDeepConversionBlueprints(newBlueprints);
           }
         }
-
-        try {
-          sessionStorage.setItem("proxnet_suggested_jobs_cache_v4", JSON.stringify({
-            companies: data.companies || [],
-            profileDigest: data.profileDigest || null,
-            hasResume: data.hasResume ?? true,
-            resumeUrl: data.resumeUrl || null,
-            wallet: data.wallet ?? 0,
-            currentUserId: data.currentUserId || null,
-          }));
-        } catch {
-          // ignore
-        }
       }
 
+      let newAllCompanies: CompanyGroup[] = [];
       if (allRes.status === "fulfilled" && allRes.value) {
         const allData = allRes.value;
-        setAllCompanies(allData.companies || []);
-        if (allData.currentUserId) {
-          setCurrentUserId(allData.currentUserId);
-        }
-        if (allData.currentUserCompany) {
-          setCurrentUserCompany(allData.currentUserCompany);
-        }
-        if (allData.inviteCode) {
-          setUserInviteCode(allData.inviteCode);
-        }
-        if (allData.hasResume !== undefined) {
-          setHasResume(allData.hasResume);
-        }
-        if (allData.resumeUrl !== undefined) {
-          setResumeUrl(allData.resumeUrl);
-        }
-        if (allData.wallet !== undefined) {
-          setUserWallet(allData.wallet);
-        }
-        try {
-          sessionStorage.setItem("proxnet_all_jobs_cache_v3", JSON.stringify({
-            companies: allData.companies || [],
-            hasResume: allData.hasResume ?? true,
-            resumeUrl: allData.resumeUrl || null,
-            wallet: allData.wallet ?? 0,
-          }));
-        } catch {
-          // ignore
-        }
+        newAllCompanies = allData.companies || [];
+        setAllCompanies(newAllCompanies);
       }
+
+      saveJobsCache({
+        companies: newValidCompanies,
+        allCompanies: newAllCompanies,
+        profileDigest: newProfileDigest,
+        hasResume: newHasResume,
+        resumeUrl: newResumeUrl,
+        wallet: newWallet,
+        currentUserId: newUserId,
+        currentUserCompany: newUserCompany,
+        userInviteCode: newInviteCode,
+        nearbyHelpers: newNearbyHelpers,
+        isMatchingCompleted: newIsMatchingCompleted,
+        deepConversionBlueprints: newBlueprints,
+      });
     } catch (e) {
       console.error("Failed to load jobs feed", e);
       setErrorMsg("An error occurred while fetching jobs.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUserCompany]);
 
   useEffect(() => {
-    let active = true;
-    void Promise.resolve().then(() => {
-      if (active) {
-        loadData();
-      }
-    });
-    return () => {
-      active = false;
-    };
+    // Only refresh when the page gets refreshed (first mount of this page load session)
+    // or if we have no cached data at all.
+    if (!hasRefreshedInCurrentPageLoad) {
+      hasRefreshedInCurrentPageLoad = true;
+      loadData();
+    }
   }, [loadData]);
 
   useEffect(() => {
