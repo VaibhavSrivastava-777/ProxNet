@@ -23,31 +23,31 @@ const PHASES: MiningPhase[] = [
   {
     id: 1,
     title: "Candidate Profile & Resume Ingestion",
-    subtitle: "Analyzing 8,750+ chars of leadership experience, GTM tenure & target domains...",
+    subtitle: "Analyzing leadership experience, tenure, domain skills & candidate preferences...",
     triggerSecond: 0,
   },
   {
     id: 2,
-    title: "Recursive Competitor & Peer Ecosystem Discovery",
-    subtitle: "Mapping enterprise tech peers (HP, Lenovo, Google, Microsoft, Cisco, Oracle)...",
+    title: "Dynamic Target & Peer Ecosystem Discovery",
+    subtitle: "Mapping target companies and industry competitors matched to candidate domain...",
     triggerSecond: 18,
   },
   {
     id: 3,
-    title: "Live Enterprise ATS & Workday Portal Crawling",
-    subtitle: "Fetching real-time openings directly from Workday CXS, Google Careers & partner feeds...",
+    title: "Live Enterprise ATS & Career Portal Crawling",
+    subtitle: "Fetching real-time openings directly from target ATS boards, Workday & verified feeds...",
     triggerSecond: 40,
   },
   {
     id: 4,
-    title: "Conversion Playbook Synthesis (Focus X, Y, Z)",
-    subtitle: "Synthesizing custom resume hooks, ATS keyword optimization & interview objection handlers...",
+    title: "Conversion Playbook & Action Plan Synthesis",
+    subtitle: "Synthesizing custom resume anchors, ATS keyword optimization & interview objection handlers...",
     triggerSecond: 65,
   },
   {
     id: 5,
     title: "Warm Insider Mapping & Pitch Drafting",
-    subtitle: "Identifying ProxNet community insiders, alumni bridges & crafting 300-char outreach notes...",
+    subtitle: "Identifying ProxNet community insiders, alumni bridges & crafting high-conversion outreach notes...",
     triggerSecond: 85,
   },
 ];
@@ -195,13 +195,13 @@ export function DeepConversionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
       <div
-        className="w-full max-w-2xl rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-scaleUp text-[var(--color-text)]"
+        className="w-full max-w-2xl rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-2xl overflow-hidden flex flex-col h-[90vh] sm:h-auto sm:max-h-[85vh] animate-scaleUp text-[var(--color-text)] relative"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-[var(--color-border-light)] flex items-center justify-between bg-gradient-to-r from-primary/10 via-[var(--color-surface)] to-emerald-500/10">
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-30 shrink-0 p-4 sm:p-5 border-b border-[var(--color-border-light)] flex items-center justify-between bg-[var(--color-surface)]/95 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-600 text-white flex items-center justify-center text-xl shadow-md shrink-0">
               🎯
@@ -212,7 +212,7 @@ export function DeepConversionModal({
                   Deep Career Conversion Miner
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/15 text-primary border border-primary/20">
-                  Option C: 3 Credits / Role
+                  3 Credits / Role
                 </span>
               </div>
               <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
@@ -222,19 +222,19 @@ export function DeepConversionModal({
           </div>
           <button
             type="button"
-            disabled={isRunning}
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-40"
+            className="p-2 rounded-xl text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer shrink-0"
             title="Close"
+            aria-label="Close modal"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12" />
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs text-[var(--color-text)] flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs text-[var(--color-text)] flex-1 min-h-0">
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 font-medium">
               {errorMsg}
@@ -360,9 +360,9 @@ export function DeepConversionModal({
                     </h3>
                     <p className="text-[11px] opacity-90">
                       {creditsExpended !== null ? (
-                        <span>🪙 Expended {creditsExpended} Credits (strictly 3 credits × {results.length} {results.length === 1 ? "role" : "roles"} unearthed) • Focus X, Y, Z roadmaps & connectors ready.</span>
+                        <span>🪙 Expended {creditsExpended} Credits (strictly 3 credits × {results.length} {results.length === 1 ? "role" : "roles"} unearthed) • Actionable roadmaps & connectors ready.</span>
                       ) : (
-                        <span>Tailored Focus X, Y, Z roadmaps and warm connector bridges generated.</span>
+                        <span>Tailored resume anchors, ATS keywords and interview roadmaps generated.</span>
                       )}
                     </p>
                   </div>
@@ -429,7 +429,7 @@ export function DeepConversionModal({
                         &quot;{bp.whyThisOpportunity}&quot;
                       </p>
 
-                      {/* Focus X, Y, Z Tabs */}
+                      {/* Strategy Tabs */}
                       <div className="space-y-2">
                         <div className="flex border-b border-[var(--color-border-light)] gap-1">
                           <button
@@ -441,7 +441,7 @@ export function DeepConversionModal({
                                 : "border-transparent text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
                             }`}
                           >
-                            🎯 Focus X (Resume Hook)
+                            🎯 Resume Hook
                           </button>
                           <button
                             type="button"
@@ -452,7 +452,7 @@ export function DeepConversionModal({
                                 : "border-transparent text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
                             }`}
                           >
-                            ⚙️ Focus Y (ATS Optimization)
+                            ⚙️ ATS Keyword Optimization
                           </button>
                           <button
                             type="button"
@@ -463,7 +463,7 @@ export function DeepConversionModal({
                                 : "border-transparent text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
                             }`}
                           >
-                            🎙️ Focus Z (Interview Strategy)
+                            🎙️ Interview Pitch & Strategy
                           </button>
                         </div>
 
@@ -600,7 +600,7 @@ export function DeepConversionModal({
                 </div>
               )}
 
-              {/* Opportunity Target Selector (Option C: 3 Credits / Opportunity) */}
+              {/* Opportunity Target Selector (3 Credits / Opportunity) */}
               <div className="p-4 rounded-xl border border-[var(--color-border-light)] bg-gradient-to-br from-[var(--color-surface-secondary)]/50 to-[var(--color-surface)] space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -612,7 +612,7 @@ export function DeepConversionModal({
                     </h4>
                   </div>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                    Option C: Strict 3 Cr / Role
+                    Strict 3 Cr / Role
                   </span>
                 </div>
 
@@ -704,17 +704,17 @@ export function DeepConversionModal({
                   <div className="p-3 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/30 space-y-1">
                     <div className="flex items-center gap-2 text-primary font-bold text-xs">
                       <span>🌐</span>
-                      <span>Recursive Peer Mining</span>
+                      <span>Target & Peer Ecosystem Mining</span>
                     </div>
                     <p className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed">
-                      Scrapes live career boards of competitors and peer tech giants (e.g. HP Workday, Google, Lenovo, Microsoft).
+                      Scrapes live career boards of your target companies and industry competitors matched to your exact domain.
                     </p>
                   </div>
 
                   <div className="p-3 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/30 space-y-1">
                     <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-xs">
                       <span>🎯</span>
-                      <span>Focus X: Resume Hook</span>
+                      <span>Resume Anchor (Hook)</span>
                     </div>
                     <p className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed">
                       Identifies the exact leadership project from your CV to lead with to solve the hiring manager&apos;s primary challenge.
@@ -724,7 +724,7 @@ export function DeepConversionModal({
                   <div className="p-3 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/30 space-y-1">
                     <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-xs">
                       <span>⚙️</span>
-                      <span>Focus Y: ATS Optimization</span>
+                      <span>ATS Keyword Optimization</span>
                     </div>
                     <p className="text-[11px] text-[var(--color-text-secondary)] leading-relaxed">
                       Injects high-yield domain terminology, frameworks, and metrics to reach 95%+ ATS parsing accuracy.
@@ -754,30 +754,57 @@ export function DeepConversionModal({
           )}
         </div>
 
-        {/* Modal Footer */}
-        {!isRunning && (
-          <div className="p-4 border-t border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/30 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-[var(--color-border-light)] text-[var(--color-text-secondary)] font-semibold hover:bg-[var(--color-surface-hover)] transition-colors text-xs"
-            >
-              {results ? "Close" : "Cancel"}
-            </button>
-
-            {!results && (
+        {/* Sticky Modal Footer - Always Visible */}
+        <div className="sticky bottom-0 z-30 shrink-0 p-4 border-t border-[var(--color-border-light)] bg-[var(--color-surface)]/95 backdrop-blur-md flex items-center justify-between gap-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
+          {isRunning ? (
+            <>
+              <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary animate-ping" />
+                <span>Mining {opportunityCount} {opportunityCount === 1 ? "Role" : "Roles"} (~{countdown}s remaining)...</span>
+              </div>
               <button
                 type="button"
-                disabled={!hasResume || (wallet !== null && wallet !== undefined && wallet < opportunityCount * 3)}
-                onClick={handleStartMining}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary to-emerald-600 text-white font-bold text-xs shadow-md hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl border border-[var(--color-border-light)] text-[var(--color-text-secondary)] font-semibold hover:bg-[var(--color-surface-hover)] transition-colors text-xs cursor-pointer"
               >
-                <span>🚀</span>
-                <span>Launch Deep Conversion Run ({opportunityCount * 3} Credits)</span>
+                Close & Run in Background
               </button>
-            )}
-          </div>
-        )}
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl border border-[var(--color-border-light)] text-[var(--color-text-secondary)] font-semibold hover:bg-[var(--color-surface-hover)] transition-colors text-xs cursor-pointer"
+              >
+                {results ? "Close Dossier" : "Cancel"}
+              </button>
+
+              {!results ? (
+                <button
+                  type="button"
+                  disabled={!hasResume || (wallet !== null && wallet !== undefined && wallet < opportunityCount * 3)}
+                  onClick={handleStartMining}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary to-emerald-600 text-white font-bold text-xs shadow-md hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+                >
+                  <span>🚀</span>
+                  <span>Launch Deep Conversion Run ({opportunityCount * 3} Credits)</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResults(null);
+                    setOpportunityCount(1);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary font-bold text-xs transition-colors cursor-pointer"
+                >
+                  ⚡ Mine More Roles
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

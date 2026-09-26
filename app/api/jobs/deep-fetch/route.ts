@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { STRATEGIES, stripHtml } from "@/lib/scrape-strategies";
 import { isJobEligible, cleanJobTitle, normalizeJobTitle, normalizeJobUrl } from "@/lib/jobs/job-filters";
+import { discoverCompetitorsForCompany } from "@/lib/competitors/discover-competitors";
 import { deductWalletCredits } from "@/lib/wallet";
 import { verifyJobUrlLive } from "@/lib/jobs/url-validator";
 
@@ -102,7 +103,20 @@ export async function POST(request: Request) {
       .in("provider", ["greenhouse", "lever", "ashby", "workable", "smartrecruiters"])
       .limit(60);
 
-    // Prioritize user target companies + diverse tech ecosystem boards
+    // Discover authentic industry competitors dynamically
+    let discoveredCompetitorNames: string[] = [];
+    if (userData.company) {
+      try {
+        const compRes = await discoverCompetitorsForCompany(userData.company);
+        discoveredCompetitorNames = (compRes.competitors || [])
+          .map(c => c.name.trim().toLowerCase())
+          .filter(c => Boolean(c) && !isSameCompany(c));
+      } catch (err: any) {
+        console.warn("[deep-fetch] Competitor discovery warning:", err.message);
+      }
+    }
+
+    // Prioritize user target companies + discovered competitor boards + general high-yield boards
     interface BoardTarget {
       company: string;
       provider: string;
@@ -112,7 +126,7 @@ export async function POST(request: Request) {
     const targetBoards: BoardTarget[] = [];
     const seenCompanies = new Set<string>();
 
-    // Add user target companies first (excluding own company)
+    // 1. Add user target companies first (excluding own company)
     for (const r of userTargetRows || []) {
       const cKey = r.company_name.toLowerCase().trim();
       if (!isSameCompany(r.company_name) && !seenCompanies.has(cKey) && r.ats_provider && r.ats_board_token && r.ats_provider !== "none") {
@@ -125,7 +139,28 @@ export async function POST(request: Request) {
       }
     }
 
-    // Add high-yield ATS configs (excluding own company)
+    // 2. Add discovered competitor ATS boards next
+    if (discoveredCompetitorNames.length > 0 && Array.isArray(atsConfigs)) {
+      for (const cfg of atsConfigs) {
+        const cKey = cfg.company_name.toLowerCase().trim();
+        if (
+          !isSameCompany(cfg.company_name) &&
+          !seenCompanies.has(cKey) &&
+          cfg.board_token_or_url &&
+          discoveredCompetitorNames.some(comp => comp === cKey || comp.includes(cKey) || cKey.includes(comp))
+        ) {
+          seenCompanies.add(cKey);
+          targetBoards.push({
+            company: cfg.company_name,
+            provider: cfg.provider,
+            token: cfg.board_token_or_url,
+          });
+        }
+        if (targetBoards.length >= 20) break;
+      }
+    }
+
+    // 3. Add remaining high-yield ATS configs up to 25 boards
     for (const cfg of atsConfigs || []) {
       const cKey = cfg.company_name.toLowerCase().trim();
       if (!isSameCompany(cfg.company_name) && !seenCompanies.has(cKey) && cfg.board_token_or_url) {

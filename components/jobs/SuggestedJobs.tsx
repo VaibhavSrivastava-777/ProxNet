@@ -175,7 +175,7 @@ export function SuggestedJobs() {
     } catch {}
     setMatchAddedToast({
       show: true,
-      message: `🎯 Generated ${blueprints.length} strategic conversion blueprints with Focus X, Y, Z & warm connector bridges!`,
+      message: `🎯 Generated ${blueprints.length} strategic conversion blueprints with resume anchors, ATS optimization & warm connector bridges!`,
       score: blueprints[0]?.matchScore || 92,
     });
   };
@@ -1367,7 +1367,7 @@ export function SuggestedJobs() {
                     </span>
                   </h3>
                   <p className="text-[11px] text-[var(--color-text-secondary)] m-0">
-                    High-yield peer roles equipped with Focus X (resume hooks), Focus Y (ATS gaps), Focus Z (interview pitches) & warm connectors
+                    High-yield peer roles equipped with resume anchors, ATS keywords, interview pitches & warm connectors
                   </p>
                 </div>
               </div>
@@ -1447,7 +1447,7 @@ export function SuggestedJobs() {
                       </p>
                     )}
 
-                    {/* Focus X, Y, Z Tab Bar */}
+                    {/* Conversion Strategy Tab Bar */}
                     <div className="space-y-2 pt-1">
                       <div className="flex border-b border-[var(--color-border-light)] gap-1">
                         <button
@@ -1459,7 +1459,7 @@ export function SuggestedJobs() {
                               : "border-transparent text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
                           }`}
                         >
-                          🎯 Focus X (Resume Hook)
+                          🎯 Resume Hook
                         </button>
                         <button
                           type="button"
@@ -1470,7 +1470,7 @@ export function SuggestedJobs() {
                               : "border-transparent text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
                           }`}
                         >
-                          ⚙️ Focus Y (ATS Optimization)
+                          ⚙️ ATS Keyword Optimization
                         </button>
                         <button
                           type="button"
@@ -1481,7 +1481,7 @@ export function SuggestedJobs() {
                               : "border-transparent text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
                           }`}
                         >
-                          🎙️ Focus Z (Interview Strategy)
+                          🎙️ Interview Pitch & Strategy
                         </button>
                       </div>
 

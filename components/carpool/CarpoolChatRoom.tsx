@@ -111,6 +111,22 @@ export function CarpoolChatRoom({ threadId }: { threadId: string }) {
     }
   }
 
+  const handlePasteClipboard = async () => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.readText) {
+        const clipText = await navigator.clipboard.readText();
+        if (clipText) {
+          setText((prev) => (prev ? `${prev} ${clipText}` : clipText));
+        }
+      } else {
+        alert("Clipboard reading is not supported or permitted in this browser.");
+      }
+    } catch (err: any) {
+      console.warn("[clipboard paste]", err);
+      alert("Unable to paste from clipboard. Please allow clipboard permissions in your browser or press Ctrl+V / Cmd+V.");
+    }
+  };
+
   async function handleAction(action: "agree" | "decline") {
     setActionLoading(true);
     const res = await fetch(`/api/carpool/reveal`, {
@@ -244,6 +260,19 @@ export function CarpoolChatRoom({ threadId }: { threadId: string }) {
           className="flex items-end gap-2 border-t border-[var(--color-border-light)] px-3 py-2 bg-[var(--whatsapp-bg)]/95 backdrop-blur-sm shrink-0"
           style={{ paddingBottom: "calc(8px + env(safe-area-inset-bottom, 0px))" }}
         >
+          {/* Paste from Clipboard Button */}
+          <button
+            type="button"
+            onClick={handlePasteClipboard}
+            title="Paste from clipboard"
+            aria-label="Paste from clipboard"
+            className="shrink-0 w-10 h-10 mb-0 flex items-center justify-center rounded-full bg-[var(--color-surface)] border border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-primary transition-all active:scale-95 cursor-pointer shadow-2xs"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+            </svg>
+          </button>
+
           <div className="flex-1 relative flex items-center">
             <textarea
               className="chat-textarea w-full h-10 min-h-[40px] max-h-[120px] rounded-[20px] py-[9px] px-4 resize-none text-sm leading-[22px] bg-[var(--color-surface)] border border-[var(--color-border-light)] shadow-[0_1px_1px_rgba(0,0,0,0.06)] focus:border-[var(--color-primary)] focus:ring-0 focus:outline-none text-[var(--color-text)] transition-colors box-border block"
