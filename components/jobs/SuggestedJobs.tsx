@@ -655,22 +655,6 @@ export function SuggestedJobs() {
     return () => clearTimeout(timer);
   }, []);
 
-  if (loading) {
-    return (
-      <div className="space-y-4 max-w-3xl mx-auto pb-8">
-        <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-medium">
-          <span className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
-            <span>Loading verified openings & AI match scores...</span>
-          </span>
-        </div>
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="card p-4 rounded-xl skeleton h-20 animate-pulse" />
-        ))}
-      </div>
-    );
-  }
-
   // Helper: days since posted
   const daysSince = (dateStr: string | undefined) => {
     if (!dateStr) return 999;
@@ -877,6 +861,22 @@ export function SuggestedJobs() {
 
     return result;
   }, [nearbyHelpers, companies, currentUserId]);
+
+  if (loading) {
+    return (
+      <div className="space-y-4 max-w-3xl mx-auto pb-8">
+        <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-medium">
+          <span className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
+            <span>Loading verified openings & AI match scores...</span>
+          </span>
+        </div>
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="card p-4 rounded-xl skeleton h-20 animate-pulse" />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 stagger-children max-w-3xl mx-auto pb-8">

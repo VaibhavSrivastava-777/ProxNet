@@ -110,6 +110,20 @@ async function runOption5Validation() {
     "Preserves full company directory scroll anchor id='jobs-company-list'"
   );
 
+  // 6. React Hook Invariant (Zero Error #310)
+  console.log("\n>>> [SECTION 6] Validating Rules of React (Hook Order & No Early Returns Before Hooks)...");
+  const lastHookIdx = Math.max(
+    src.lastIndexOf("useMemo"),
+    src.lastIndexOf("useEffect"),
+    src.lastIndexOf("useState"),
+    src.lastIndexOf("useCallback")
+  );
+  const loadingReturnIdx = src.indexOf("if (loading) {\n    return (");
+  assert(
+    loadingReturnIdx > lastHookIdx,
+    "Early loading return is positioned strictly AFTER all React hooks (preventing Error #310)"
+  );
+
   console.log("\n================================================================================");
   console.log("✅ ALL OPTION 5 REDESIGN VALIDATIONS PASSED WITH ZERO REGRESSIONS!");
   console.log("================================================================================\n");
