@@ -234,35 +234,74 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[], aiSession?: any }>(`/api/questions?locationMode=${locationMode}&_refresh=${refreshKey}`, fetcher, { refreshInterval: 10000, revalidateOnFocus: true, keepPreviousData: true });
-  const { data: jobInboxData, mutate: mutateJobInbox } = useSWR<{ threads: any[] }>("/api/jobs/inbox", fetcher, { refreshInterval: 10000, revalidateOnFocus: true, keepPreviousData: true });
+const CHATS_CACHE_KEY = "proxnet_last_chats_pull_v1";
+const INBOX_CACHE_KEY = "proxnet_last_inbox_pull_v1";
+
+let memoryChatsCache: any = null;
+let memoryInboxCache: any = null;
+
+function getStoredChatsCache(): any {
+  if (memoryChatsCache) return memoryChatsCache;
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(CHATS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    memoryChatsCache = parsed;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function getStoredInboxCache(): any {
+  if (memoryInboxCache) return memoryInboxCache;
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(INBOX_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    memoryInboxCache = parsed;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+  const initialChatsCache = getStoredChatsCache();
+  const initialInboxCache = getStoredInboxCache();
+
+  const { data, isLoading } = useSWR<{ asked: AskedQuestion[], incoming: IncomingQuestion[], forum: ForumQuestion[], suggestions?: any[], aiSession?: any }>(
+    `/api/questions?locationMode=${locationMode}&_refresh=${refreshKey}`, 
+    fetcher, 
+    { 
+      fallbackData: initialChatsCache,
+      refreshInterval: 10000, 
+      revalidateOnFocus: true, 
+      keepPreviousData: true 
+    }
+  );
+  const { data: jobInboxData, mutate: mutateJobInbox } = useSWR<{ threads: any[] }>(
+    "/api/jobs/inbox", 
+    fetcher, 
+    { 
+      fallbackData: initialInboxCache,
+      refreshInterval: 10000, 
+      revalidateOnFocus: true, 
+      keepPreviousData: true 
+    }
+  );
   const { data: notificationsData, mutate: mutateNotifications } = useSWR<{ notifications: any[] }>("/api/notifications", fetcher, { refreshInterval: 5000, revalidateOnFocus: true, keepPreviousData: true });
 
-  // Instant hydration from sessionStorage to eliminate chat list reload latency
-  const [cachedData, setCachedData] = useState<{ asked?: any[]; incoming?: any[]; aiSession?: any; suggestions?: any[] } | null>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const c = sessionStorage.getItem("proxnet_qa_cache");
-        if (c) return JSON.parse(c);
-      } catch (e) {}
-    }
-    return null;
-  });
-
-  const [cachedInbox, setCachedInbox] = useState<{ threads?: any[] } | null>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const c = sessionStorage.getItem("proxnet_inbox_cache");
-        if (c) return JSON.parse(c);
-      } catch (e) {}
-    }
-    return null;
-  });
+  // Instant hydration from persistent cache to eliminate chat list reload latency
+  const [cachedData, setCachedData] = useState<{ asked?: any[]; incoming?: any[]; aiSession?: any; suggestions?: any[] } | null>(() => initialChatsCache);
+  const [cachedInbox, setCachedInbox] = useState<{ threads?: any[] } | null>(() => initialInboxCache);
 
   useEffect(() => {
     if (data) {
       try {
-        sessionStorage.setItem("proxnet_qa_cache", JSON.stringify(data));
+        memoryChatsCache = data;
+        localStorage.setItem(CHATS_CACHE_KEY, JSON.stringify(data));
         setCachedData(data);
       } catch (e) {}
     }
@@ -271,14 +310,15 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
   useEffect(() => {
     if (jobInboxData) {
       try {
-        sessionStorage.setItem("proxnet_inbox_cache", JSON.stringify(jobInboxData));
+        memoryInboxCache = jobInboxData;
+        localStorage.setItem(INBOX_CACHE_KEY, JSON.stringify(jobInboxData));
         setCachedInbox(jobInboxData);
       } catch (e) {}
     }
   }, [jobInboxData]);
 
-  const activeData = data || cachedData;
-  const activeInbox = jobInboxData || cachedInbox;
+  const activeData = data || cachedData || initialChatsCache;
+  const activeInbox = jobInboxData || cachedInbox || initialInboxCache;
 
   const asked = activeData?.asked || [];
   const referralThreads = activeInbox?.threads || [];
@@ -400,7 +440,7 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
     }
   }
 
-  if (isLoading && !data) {
+  if (isLoading && !data && !cachedData && !initialChatsCache) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <div className="skeleton" style={{ height: "5rem", borderRadius: "var(--radius-lg)" }} />

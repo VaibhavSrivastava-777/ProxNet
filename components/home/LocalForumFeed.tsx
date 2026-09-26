@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import useSWR, { mutate } from "swr";
 import { useRouter } from "next/navigation";
 import { EventCard } from "@/components/forum/EventCard";
@@ -8,6 +8,39 @@ import { EventFormModal } from "@/components/forum/EventFormModal";
 import { JobPostCard } from "@/components/forum/JobPostCard";
 import { JobPostModal } from "@/components/forum/JobPostModal";
 import { isPastEvent } from "@/lib/date";
+
+interface ForumCachePayload {
+  data?: any;
+  eventsData?: any;
+  jobPostsData?: any;
+}
+
+const FORUM_CACHE_KEY = "proxnet_last_forum_pull_v1";
+let memoryForumCache: ForumCachePayload | null = null;
+
+function getStoredForumCache(): ForumCachePayload | null {
+  if (memoryForumCache) return memoryForumCache;
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(FORUM_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    memoryForumCache = parsed;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveForumCache(payload: Partial<ForumCachePayload>) {
+  if (typeof window === "undefined") return;
+  try {
+    const existing = getStoredForumCache() || {};
+    const updated = { ...existing, ...payload };
+    memoryForumCache = updated;
+    localStorage.setItem(FORUM_CACHE_KEY, JSON.stringify(updated));
+  } catch {}
+}
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -17,6 +50,7 @@ export function LocalForumFeed({
   profile?: any 
 }) {
   const router = useRouter();
+  const cachedForum = getStoredForumCache();
 
   // Fetch user profile if not passed explicitly as prop
   const { data: profileData } = useSWR(propProfile ? null : "/api/profile", fetcher);
@@ -32,6 +66,7 @@ export function LocalForumFeed({
     questionsUrl,
     fetcher,
     {
+      fallbackData: cachedForum?.data,
       refreshInterval: 30000,
       revalidateOnFocus: false,
       keepPreviousData: true,
@@ -63,11 +98,32 @@ export function LocalForumFeed({
 
   // Fetch events SWR based on location and radius
   const eventsUrl = `/api/events?lat=${activeLat ?? ''}&lng=${activeLng ?? ''}&radius=${filter2km ? 2000 : 50000}`;
-  const { data: eventsData } = useSWR(eventsUrl, fetcher, { refreshInterval: 30000, revalidateOnFocus: false, keepPreviousData: true });
+  const { data: eventsData } = useSWR(eventsUrl, fetcher, { 
+    fallbackData: cachedForum?.eventsData,
+    refreshInterval: 30000, 
+    revalidateOnFocus: false, 
+    keepPreviousData: true 
+  });
 
   // Fetch job posts SWR based on location and radius
   const jobPostsUrl = `/api/job-posts?lat=${activeLat ?? ''}&lng=${activeLng ?? ''}&radius=${filter2km ? 2000 : 50000}`;
-  const { data: jobPostsData } = useSWR(jobPostsUrl, fetcher, { refreshInterval: 30000, revalidateOnFocus: false, keepPreviousData: true });
+  const { data: jobPostsData } = useSWR(jobPostsUrl, fetcher, { 
+    fallbackData: cachedForum?.jobPostsData,
+    refreshInterval: 30000, 
+    revalidateOnFocus: false, 
+    keepPreviousData: true 
+  });
+
+  // Sync to persistent cache on new data arrival
+  useEffect(() => {
+    if (data || eventsData || jobPostsData) {
+      saveForumCache({
+        ...(data ? { data } : {}),
+        ...(eventsData ? { eventsData } : {}),
+        ...(jobPostsData ? { jobPostsData } : {}),
+      });
+    }
+  }, [data, eventsData, jobPostsData]);
 
   const toggleExpand = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -403,7 +459,7 @@ export function LocalForumFeed({
       )}
 
       {/* Main Feed Content */}
-      {isLoading ? (
+      {isLoading && !data && !cachedForum?.data ? (
         <div className="flex flex-col gap-4">
           <div className="skeleton h-32 rounded-xl" />
           <div className="skeleton h-32 rounded-xl" />

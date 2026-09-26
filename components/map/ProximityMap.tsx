@@ -118,6 +118,41 @@ function getReasonToEngage(myProfile: any, targetPerson: any): { reason: string;
   return null;
 }
 
+interface NetworkCachePayload {
+  clusterData?: { clusters: CompanyCluster[] };
+  peopleData?: { people: any[]; autoExpanded?: boolean };
+  eventsData?: any;
+  profile?: any;
+  center?: { lat: number; lng: number };
+}
+
+const NETWORK_CACHE_KEY = "proxnet_last_network_pull_v1";
+let memoryNetworkCache: NetworkCachePayload | null = null;
+
+function getStoredNetworkCache(): NetworkCachePayload | null {
+  if (memoryNetworkCache) return memoryNetworkCache;
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(NETWORK_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    memoryNetworkCache = parsed;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveNetworkCache(payload: Partial<NetworkCachePayload>) {
+  if (typeof window === "undefined") return;
+  try {
+    const existing = getStoredNetworkCache() || {};
+    const updated = { ...existing, ...payload };
+    memoryNetworkCache = updated;
+    localStorage.setItem(NETWORK_CACHE_KEY, JSON.stringify(updated));
+  } catch {}
+}
+
 const fetcher = (url: string) => fetch(url).then((res) => {
   if (!res.ok) throw new Error("Failed to load");
   return res.json();
@@ -126,8 +161,16 @@ const fetcher = (url: string) => fetch(url).then((res) => {
 export function ProximityMap() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const cachedNetwork = getStoredNetworkCache();
+
   const [showNextMeetupBanner, setShowNextMeetupBanner] = useState(true);
-  const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const [center, setCenter] = useState<{ lat: number; lng: number } | null>(() => {
+    if (cachedNetwork?.center) return cachedNetwork.center;
+    if (cachedNetwork?.profile?.home_lat && cachedNetwork?.profile?.home_lng) {
+      return { lat: Number(cachedNetwork.profile.home_lat), lng: Number(cachedNetwork.profile.home_lng) };
+    }
+    return { lat: 12.9716, lng: 77.5946 };
+  });
 
   // Auto-dismiss Next Meetup banner after 10 seconds on the Network tab
   useEffect(() => {
@@ -147,7 +190,7 @@ export function ProximityMap() {
   // Follows & profile modal states
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
   const [chatTarget, setChatTarget] = useState<any | null>(null);
-  const [profile, setProfile] = useState<any | null>(null);
+  const [profile, setProfile] = useState<any | null>(() => cachedNetwork?.profile || null);
   const [stoppingBroadcast, setStoppingBroadcast] = useState(false);
   const [joiningBeaconId, setJoiningBeaconId] = useState<string | null>(null);
   
@@ -257,9 +300,46 @@ export function ProximityMap() {
     ? `/api/events?lat=${center.lat}&lng=${center.lng}&radius=${filter2km ? 2000 : 50000}`
     : null;
 
-  const { data: clusterData, isLoading: clustersLoading, mutate: mutateClusters } = useSWR<{ clusters: CompanyCluster[] }>(aggregateApiUrl, fetcher, { revalidateOnFocus: false, keepPreviousData: true });
-  const { data: peopleData, isLoading: peopleLoading, mutate: mutatePeople } = useSWR<{ people: any[]; autoExpanded?: boolean }>(peopleApiUrl, fetcher, { revalidateOnFocus: false, keepPreviousData: true });
-  const { data: eventsData } = useSWR(eventsApiUrl, fetcher, { revalidateOnFocus: false, keepPreviousData: true });
+  const { data: clusterData, isLoading: clustersLoading, mutate: mutateClusters } = useSWR<{ clusters: CompanyCluster[] }>(
+    aggregateApiUrl, 
+    fetcher, 
+    { 
+      fallbackData: cachedNetwork?.clusterData,
+      revalidateOnFocus: false, 
+      keepPreviousData: true 
+    }
+  );
+  const { data: peopleData, isLoading: peopleLoading, mutate: mutatePeople } = useSWR<{ people: any[]; autoExpanded?: boolean }>(
+    peopleApiUrl, 
+    fetcher, 
+    { 
+      fallbackData: cachedNetwork?.peopleData,
+      revalidateOnFocus: false, 
+      keepPreviousData: true 
+    }
+  );
+  const { data: eventsData } = useSWR(
+    eventsApiUrl, 
+    fetcher, 
+    { 
+      fallbackData: cachedNetwork?.eventsData,
+      revalidateOnFocus: false, 
+      keepPreviousData: true 
+    }
+  );
+
+  // Sync fresh network data to persistent cache
+  useEffect(() => {
+    if (clusterData || peopleData || eventsData || profile || center) {
+      saveNetworkCache({
+        ...(clusterData ? { clusterData } : {}),
+        ...(peopleData ? { peopleData } : {}),
+        ...(eventsData ? { eventsData } : {}),
+        ...(profile ? { profile } : {}),
+        ...(center ? { center } : {}),
+      });
+    }
+  }, [clusterData, peopleData, eventsData, profile, center]);
 
   const clusters = clusterData?.clusters ?? [];
   const people = peopleData?.people ?? [];
@@ -368,8 +448,8 @@ export function ProximityMap() {
     });
   }, [filteredPeople, activeBeacons, activeBeaconMap, profile, center]);
 
-  const isInitializing = !profile && !center;
-  const loading = isInitializing || Boolean(peopleLoading && !peopleData);
+  const isInitializing = !profile && !center && !cachedNetwork?.center;
+  const loading = (isInitializing || Boolean(peopleLoading && !peopleData)) && (!cachedNetwork?.peopleData?.people?.length);
   const error = localError;
 
   const refreshAll = () => {
