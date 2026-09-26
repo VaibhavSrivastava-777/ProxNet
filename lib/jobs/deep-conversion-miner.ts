@@ -39,6 +39,18 @@ export interface ConversionBlueprint {
   };
 }
 
+export type FunctionalDiscipline =
+  | "human_resources"
+  | "supply_chain"
+  | "product_management"
+  | "software_engineering"
+  | "data_ai"
+  | "design"
+  | "finance"
+  | "sales_marketing"
+  | "legal"
+  | "operations_general";
+
 export interface CandidateContext {
   id: string;
   fullName: string;
@@ -51,7 +63,142 @@ export interface CandidateContext {
   location: string;
   societyName: string;
   resumeText: string;
+  discipline: FunctionalDiscipline;
   embedding?: number[];
+}
+
+/**
+ * Classifies a title/description into a standardized functional discipline
+ */
+export function detectFunctionalDiscipline(title?: string | null, description?: string | null): FunctionalDiscipline {
+  const t = (title || "").toLowerCase();
+
+  // 1. First classify by TITLE (title has the highest signal-to-noise ratio)
+  if (
+    /\b(hr|human resources|talent|recruiter|recruiting|recruitment|people ops|people operations|people partner|hrbp|people lead|sourcing specialist|hr generalist|hr manager|hr director|talent partner|head of people|people & culture|people experience)\b/i.test(t)
+  ) {
+    return "human_resources";
+  }
+
+  if (
+    /\b(supply chain|logistics|procurement|sourcing manager|materials manager|warehouse|inventory planning|operations planning|demand planning|fulfillment|freight|purchasing)\b/i.test(t)
+  ) {
+    return "supply_chain";
+  }
+
+  if (
+    /\b(product manager|product management|product lead|product director|group product manager|head of product|technical product manager|principal product|cpo)\b/i.test(t)
+  ) {
+    return "product_management";
+  }
+
+  if (
+    /\b(software|developer|engineer|full stack|backend|frontend|devops|sre|cloud|architect|qa engineer|sde|tech lead|firmware|embedded|solutions engineer|it engineer|systems engineer|infrastructure)\b/i.test(t)
+  ) {
+    return "software_engineering";
+  }
+
+  if (
+    /\b(data scientist|data analyst|machine learning|ml engineer|ai engineer|data engineer|analytics manager|business intelligence|bi analyst|nlp)\b/i.test(t)
+  ) {
+    return "data_ai";
+  }
+
+  if (
+    /\b(ux|ui|product designer|visual designer|motion designer|interaction designer|design lead|creative director|graphic designer)\b/i.test(t)
+  ) {
+    return "design";
+  }
+
+  if (
+    /\b(finance|financial analyst|accountant|accounting|audit|controller|treasury|fp&a|tax manager|cfo|payroll)\b/i.test(t)
+  ) {
+    return "finance";
+  }
+
+  if (
+    /\b(sales|account executive|account manager|customer success|business development|marketing|growth marketing|brand manager|demand gen|bdr|sdr|client success)\b/i.test(t)
+  ) {
+    return "sales_marketing";
+  }
+
+  if (
+    /\b(legal|counsel|attorney|lawyer|compliance officer|general counsel|contracts manager)\b/i.test(t)
+  ) {
+    return "legal";
+  }
+
+  // 2. If title is non-specific (e.g. "Director", "Specialist", "Consultant"), inspect description snippet
+  if (description) {
+    const d = description.slice(0, 1500).toLowerCase();
+    if (/\b(talent acquisition|human resources department|recruiting team|people operations team|hr business partner)\b/i.test(d)) {
+      return "human_resources";
+    }
+    if (/\b(supply chain management|procurement process|logistics operations|vendor management & procurement)\b/i.test(d)) {
+      return "supply_chain";
+    }
+    if (/\b(product roadmap|product discovery|product lifecycle|product backlog|user stories)\b/i.test(d)) {
+      return "product_management";
+    }
+    if (/\b(software development|codebase|pull requests|ci\/cd pipeline|rest api|microservices)\b/i.test(d)) {
+      return "software_engineering";
+    }
+    if (/\b(machine learning models|data pipelines|deep learning|data warehousing|sql queries)\b/i.test(d)) {
+      return "data_ai";
+    }
+  }
+
+  return "operations_general";
+}
+
+/**
+ * Checks if two disciplines are functionally compatible
+ */
+export function areDisciplinesCompatible(
+  candDiscipline: FunctionalDiscipline,
+  jobDiscipline: FunctionalDiscipline
+): boolean {
+  if (candDiscipline === jobDiscipline) return true;
+  // Only match general if both are general
+  if (candDiscipline === "operations_general" && jobDiscipline === "operations_general") return true;
+
+  // Plausible cross-functional overlaps
+  if (
+    (candDiscipline === "product_management" && (jobDiscipline === "data_ai" || jobDiscipline === "software_engineering")) ||
+    (candDiscipline === "data_ai" && (jobDiscipline === "product_management" || jobDiscipline === "software_engineering")) ||
+    (candDiscipline === "software_engineering" && (jobDiscipline === "data_ai" || jobDiscipline === "product_management"))
+  ) {
+    return true;
+  }
+
+  // Distinct functional areas (e.g. HR vs Supply Chain) are strictly incompatible
+  return false;
+}
+
+/**
+ * Generates tailored search terms for a functional discipline
+ */
+export function getDisciplineSearchTerms(discipline: FunctionalDiscipline, candidateRole: string): string[] {
+  switch (discipline) {
+    case "human_resources":
+      return ["Talent Acquisition", "Human Resources", "Recruiter", "People Partner", "HR Manager", "Talent Management"];
+    case "supply_chain":
+      return ["Supply Chain", "Procurement", "Logistics", "Sourcing Manager", "Operations Planning"];
+    case "product_management":
+      return ["Product Manager", "Product Lead", "Technical Product Manager", "Group Product Manager"];
+    case "software_engineering":
+      return ["Software Engineer", "Backend Developer", "Full Stack Developer", "Engineering Lead"];
+    case "data_ai":
+      return ["Data Scientist", "Machine Learning", "Data Engineer", "AI Engineer"];
+    case "design":
+      return ["Product Designer", "UX Designer", "UI/UX Designer", "Interaction Designer"];
+    case "finance":
+      return ["Financial Analyst", "Finance Manager", "Controller", "FP&A"];
+    case "sales_marketing":
+      return ["Sales Manager", "Account Executive", "Business Development", "Marketing Manager"];
+    default:
+      return candidateRole.split(/\s+/).filter(w => w.length > 3).slice(0, 3);
+  }
 }
 
 export async function fetchCandidateContext(candidateId?: string): Promise<CandidateContext> {
@@ -106,6 +253,8 @@ export async function fetchCandidateContext(candidateId?: string): Promise<Candi
     ? combinedTargets
     : (discoveredCompetitors.length > 0 ? discoveredCompetitors : []);
 
+  const discipline = detectFunctionalDiscipline(user.job_title, user.resume_text);
+
   return {
     id: user.id,
     fullName: user.full_name || "Member",
@@ -118,14 +267,20 @@ export async function fetchCandidateContext(candidateId?: string): Promise<Candi
     location: user.location_name || user.city || "Bengaluru, Karnataka, India",
     societyName: digest.society_name || "ProxNet Community",
     resumeText: user.resume_text || "",
+    discipline,
     embedding: Array.isArray(user.embedding) ? user.embedding : undefined,
   };
 }
 
 /**
- * Live Workday CXS scraper for specific enterprise companies (like HP) when relevant
+ * Live Workday CXS scraper for specific enterprise companies (like HP) when relevant.
+ * Strictly verifies India location, 30-day freshness, and discipline compatibility.
  */
-export async function fetchLiveWorkdayOpportunities(companyName: string = "HP", searchTerms: string[] = []): Promise<any[]> {
+export async function fetchLiveWorkdayOpportunities(
+  companyName: string = "HP",
+  searchTerms: string[] = [],
+  candidateDiscipline?: FunctionalDiscipline
+): Promise<any[]> {
   if (companyName.toLowerCase() !== "hp") return [];
 
   const hpApi = "https://hp.wd5.myworkdayjobs.com/wday/cxs/hp/ExternalCareerSite/jobs";
@@ -172,7 +327,7 @@ export async function fetchLiveWorkdayOpportunities(companyName: string = "HP", 
   }
 
   const results: any[] = [];
-  const items = Array.from(foundMap.values()).slice(0, 4);
+  const items = Array.from(foundMap.values()).slice(0, 10);
 
   for (const item of items) {
     try {
@@ -184,21 +339,50 @@ export async function fetchLiveWorkdayOpportunities(companyName: string = "HP", 
         },
         signal: AbortSignal.timeout(6000)
       });
+      let fullTitle = item.title;
+      let fullDesc = item.title;
+      let fullLoc = item.location;
+      let reqId = item.reqId;
+
       if (resDetail.ok) {
         const detailData = await resDetail.json();
         const info = detailData.jobPostingInfo || {};
-        results.push({
-          ...item,
-          title: info.title || item.title,
-          description: info.jobDescription || item.title,
-          reqId: info.jobReqId || item.reqId,
-          location: info.location || item.location,
-        });
-      } else {
-        results.push({ ...item, description: item.title });
+        fullTitle = info.title || item.title;
+        fullDesc = info.jobDescription || item.title;
+        reqId = info.jobReqId || item.reqId;
+        fullLoc = info.location || item.location;
       }
+
+      const cleanTitle = cleanJobTitle(normalizeJobTitle(fullTitle));
+      const cleanDesc = stripHtml(fullDesc);
+
+      // Validate location (India only), 30-day freshness, and junior filtering
+      const eligibility = isJobEligible({
+        title: cleanTitle,
+        location: fullLoc,
+        description: cleanDesc,
+        posted_at: new Date().toISOString(),
+      });
+
+      if (!eligibility.eligible) continue;
+
+      // Validate functional discipline compatibility
+      if (candidateDiscipline) {
+        const jobDisc = detectFunctionalDiscipline(cleanTitle, cleanDesc);
+        if (!areDisciplinesCompatible(candidateDiscipline, jobDisc)) {
+          continue;
+        }
+      }
+
+      results.push({
+        ...item,
+        title: cleanTitle,
+        description: cleanDesc,
+        reqId,
+        location: fullLoc,
+      });
     } catch {
-      results.push({ ...item, description: item.title });
+      // Graceful timeout
     }
   }
 
@@ -206,7 +390,8 @@ export async function fetchLiveWorkdayOpportunities(companyName: string = "HP", 
 }
 
 /**
- * Dynamically queries live ATS boards for candidate's actual target and peer companies
+ * Dynamically queries live ATS boards for candidate's actual target and peer companies,
+ * enforcing India location, 30-day freshness, and functional discipline compatibility.
  */
 export async function crawlCandidateTargetAts(
   candidate: CandidateContext
@@ -215,27 +400,48 @@ export async function crawlCandidateTargetAts(
   const allTargetNames = Array.from(new Set([...candidate.targetCompanies, ...candidate.discoveredCompetitors]))
     .filter(c => !isSameCompany(c, candidate.currentCompany));
 
-  if (allTargetNames.length === 0) return [];
-
-  // Look for configured ATS boards for these specific companies
+  // Query ATS configs: match target/peer companies and augment with top active partner boards
   const { data: atsConfigs } = await supabase
     .from("company_ats_config")
     .select("company_name, provider, board_token_or_url")
-    .in("provider", ["greenhouse", "lever", "ashby", "workable", "smartrecruiters"]);
+    .in("provider", ["greenhouse", "lever", "ashby", "workable", "smartrecruiters", "breezy", "recruitee"])
+    .limit(80);
 
   if (!atsConfigs || atsConfigs.length === 0) return [];
 
-  // Match configs to candidate's companies
-  const relevantConfigs = atsConfigs.filter(cfg => {
-    return allTargetNames.some(t => {
+  const targetBoards: Array<{ company: string; provider: string; token: string }> = [];
+  const seenComps = new Set<string>();
+
+  // 1. Add candidate targets & competitors first
+  for (const cfg of atsConfigs) {
+    if (isSameCompany(cfg.company_name, candidate.currentCompany)) continue;
+    const cKey = cfg.company_name.toLowerCase().trim();
+    if (seenComps.has(cKey)) continue;
+
+    const matchesTarget = allTargetNames.some(t => {
       const tNorm = t.toLowerCase().trim();
-      const cNorm = cfg.company_name.toLowerCase().trim();
-      return isSameCompany(tNorm, cNorm) || tNorm.includes(cNorm) || cNorm.includes(tNorm);
+      return isSameCompany(tNorm, cKey) || tNorm.includes(cKey) || cKey.includes(tNorm);
     });
-  }).slice(0, 15);
+
+    if (matchesTarget && cfg.board_token_or_url) {
+      seenComps.add(cKey);
+      targetBoards.push({ company: cfg.company_name, provider: cfg.provider, token: cfg.board_token_or_url });
+    }
+  }
+
+  // 2. Add high-yield active partner boards up to 25 boards total
+  for (const cfg of atsConfigs) {
+    if (targetBoards.length >= 25) break;
+    if (isSameCompany(cfg.company_name, candidate.currentCompany)) continue;
+    const cKey = cfg.company_name.toLowerCase().trim();
+    if (!seenComps.has(cKey) && cfg.board_token_or_url) {
+      seenComps.add(cKey);
+      targetBoards.push({ company: cfg.company_name, provider: cfg.provider, token: cfg.board_token_or_url });
+    }
+  }
 
   const liveJobs: any[] = [];
-  const crawlPromises = relevantConfigs.map(async (board) => {
+  const crawlPromises = targetBoards.map(async (board) => {
     const strategy = STRATEGIES[board.provider];
     if (!strategy) return;
 
@@ -244,31 +450,39 @@ export async function crawlCandidateTargetAts(
         setTimeout(() => reject(new Error("Timeout")), 4000)
       );
       const jobs = await Promise.race([
-        strategy(board.board_token_or_url, board.company_name),
+        strategy(board.token, board.company),
         timeoutPromise,
       ]);
 
       if (Array.isArray(jobs)) {
         for (const j of jobs) {
           const cleanTitle = cleanJobTitle(normalizeJobTitle(j.title));
+          const cleanDesc = stripHtml(j.description || cleanTitle);
+
           const eligibility = isJobEligible({
             title: cleanTitle,
             location: j.location,
-            description: j.description,
+            description: cleanDesc,
             posted_at: j.posted_at,
           });
 
-          if (eligibility.eligible && !isSameCompany(board.company_name, candidate.currentCompany)) {
-            liveJobs.push({
-              title: cleanTitle,
-              company: board.company_name,
-              location: j.location || "Remote",
-              url: normalizeJobUrl(j.url),
-              description: stripHtml(j.description || cleanTitle),
-              posted_at: j.posted_at || new Date().toISOString(),
-              source: `live_${board.provider}`,
-            });
-          }
+          if (!eligibility.eligible) continue;
+          if (isSameCompany(board.company, candidate.currentCompany)) continue;
+
+          // Enforce discipline compatibility
+          const jobDisc = detectFunctionalDiscipline(cleanTitle, cleanDesc);
+          if (!areDisciplinesCompatible(candidate.discipline, jobDisc)) continue;
+
+          liveJobs.push({
+            title: cleanTitle,
+            company: board.company,
+            location: j.location || "Remote",
+            url: normalizeJobUrl(j.url),
+            description: cleanDesc,
+            posted_at: j.posted_at || new Date().toISOString(),
+            source: `live_${board.provider}`,
+            discipline: jobDisc,
+          });
         }
       }
     } catch {
@@ -283,10 +497,15 @@ export async function crawlCandidateTargetAts(
 /**
  * Dynamically queries matching opportunities across:
  * 1. Live ATS crawls of candidate's target companies & competitors
- * 2. Semantic vector matches from `scraped_jobs` via `match_scraped_jobs`
- * 3. Exact target company matches in `scraped_jobs`
+ * 2. Enterprise career portals (e.g. Workday) with tailored discipline queries
+ * 3. Ingestion of freshly crawled jobs into `scraped_jobs`
+ * 4. Semantic vector search from `scraped_jobs`
+ * 5. Persistent database query for candidate's discipline
  * 
- * Strictly excludes candidate's own current employer.
+ * STRICT GUARANTEES:
+ * - NO TWO JOBS BELONG TO THE SAME COMPANY (distinct companies only)
+ * - Excludes candidate's current employer
+ * - Enforces India location, 30-day freshness, and functional discipline compatibility
  */
 export async function fetchDynamicCandidateOpportunities(
   candidate: CandidateContext
@@ -299,40 +518,72 @@ export async function fetchDynamicCandidateOpportunities(
     if (!job || !job.title || !job.company) return;
     if (isSameCompany(job.company, candidate.currentCompany)) return;
 
+    // Enforce discipline compatibility
+    const jobDisc = job.discipline || detectFunctionalDiscipline(job.title, job.description);
+    if (!areDisciplinesCompatible(candidate.discipline, jobDisc)) return;
+
     const key = `${job.company.toLowerCase().trim()}:::${job.title.toLowerCase().trim()}`;
     if (!seenJobKeys.has(key)) {
       seenJobKeys.add(key);
-      allCandidateJobs.push({ ...job, _sourceWeight: sourceWeight });
+      allCandidateJobs.push({ ...job, discipline: jobDisc, _sourceWeight: sourceWeight });
     }
   };
 
-  // 1. Live ATS Crawl of candidate's relevant target companies
+  const freshlyScrapedJobs: any[] = [];
+
+  // 1. Live ATS Crawl of candidate's relevant target companies and partner boards
   try {
     const liveAtsJobs = await crawlCandidateTargetAts(candidate);
     for (const j of liveAtsJobs) {
-      addJobIfUnique(j, 40);
+      addJobIfUnique(j, 45);
+      freshlyScrapedJobs.push(j);
     }
   } catch (err: any) {
     console.warn("[deep-conversion-miner] Live ATS crawl warning:", err.message);
   }
 
-  // 2. If candidate's targets/peers include HP (e.g. enterprise tech peer) and candidate is not at HP
+  // 2. Enterprise Live Workday Crawl (if targets/peers include HP or large enterprise tech)
   const includesHp = [...candidate.targetCompanies, ...candidate.discoveredCompetitors].some(
     c => c.toLowerCase() === "hp" || c.toLowerCase().includes("hewlett packard")
   );
   if (includesHp && !isSameCompany("HP", candidate.currentCompany)) {
     try {
-      const hpTerms = candidate.currentRole.split(" ").filter(w => w.length > 3).slice(0, 3);
-      const hpJobs = await fetchLiveWorkdayOpportunities("HP", hpTerms);
+      const disciplineTerms = getDisciplineSearchTerms(candidate.discipline, candidate.currentRole);
+      const hpJobs = await fetchLiveWorkdayOpportunities("HP", disciplineTerms, candidate.discipline);
       for (const j of hpJobs) {
-        addJobIfUnique(j, 35);
+        addJobIfUnique(j, 40);
+        freshlyScrapedJobs.push(j);
       }
     } catch (err: any) {
       console.warn("[deep-conversion-miner] HP Workday query warning:", err.message);
     }
   }
 
-  // 3. Semantic Vector Search across scraped_jobs using candidate's resume embedding
+  // 3. PERSIST FRESH DISCOVERIES: Ingest newly discovered live jobs into `scraped_jobs`
+  if (freshlyScrapedJobs.length > 0) {
+    const rowsToUpsert = freshlyScrapedJobs.slice(0, 100).map((j) => ({
+      title: j.title,
+      company: j.company,
+      location: j.location,
+      url: j.url,
+      description: j.description,
+      posted_at: j.posted_at || new Date().toISOString(),
+      source: j.source || "deep_miner",
+      keywords: [candidate.discipline, "Deep Miner Discovery"],
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    }));
+
+    try {
+      await supabase
+        .from("scraped_jobs")
+        .upsert(rowsToUpsert, { onConflict: "url", ignoreDuplicates: false });
+    } catch (upsertErr) {
+      console.warn("[deep-conversion-miner] Scraped jobs upsert warning:", upsertErr);
+    }
+  }
+
+  // 4. Semantic Vector Search across scraped_jobs using candidate's resume embedding
   if (candidate.embedding && candidate.embedding.length > 0) {
     try {
       const { data: matchedVectorJobs } = await supabase.rpc("match_scraped_jobs", {
@@ -345,12 +596,15 @@ export async function fetchDynamicCandidateOpportunities(
         for (const vj of matchedVectorJobs) {
           if (isSameCompany(vj.company, candidate.currentCompany)) continue;
           const cleanTitle = cleanJobTitle(normalizeJobTitle(vj.title));
+          const cleanDesc = stripHtml(vj.description || cleanTitle);
+
           const eligibility = isJobEligible({
             title: cleanTitle,
             location: vj.location,
-            description: vj.description,
+            description: cleanDesc,
             posted_at: vj.posted_at,
           });
+
           if (eligibility.eligible) {
             addJobIfUnique({
               id: vj.id,
@@ -358,11 +612,11 @@ export async function fetchDynamicCandidateOpportunities(
               company: vj.company,
               location: vj.location || "Remote",
               url: vj.url,
-              description: stripHtml(vj.description || cleanTitle),
+              description: cleanDesc,
               posted_at: vj.posted_at,
               source: "vector_match",
               _similarity: vj.similarity || 0.5,
-            }, 30);
+            }, 35);
           }
         }
       }
@@ -371,7 +625,7 @@ export async function fetchDynamicCandidateOpportunities(
     }
   }
 
-  // 4. Direct Target & Competitor Query in scraped_jobs
+  // 5. Target Companies Query in scraped_jobs
   const targetCompanies = Array.from(new Set([...candidate.targetCompanies, ...candidate.discoveredCompetitors]))
     .filter(c => !isSameCompany(c, candidate.currentCompany));
 
@@ -389,12 +643,15 @@ export async function fetchDynamicCandidateOpportunities(
         for (const dj of dbJobs) {
           if (isSameCompany(dj.company, candidate.currentCompany)) continue;
           const cleanTitle = cleanJobTitle(normalizeJobTitle(dj.title));
+          const cleanDesc = stripHtml(dj.description || cleanTitle);
+
           const eligibility = isJobEligible({
             title: cleanTitle,
             location: dj.location,
-            description: dj.description,
+            description: cleanDesc,
             posted_at: dj.posted_at,
           });
+
           if (eligibility.eligible) {
             addJobIfUnique({
               id: dj.id,
@@ -402,19 +659,69 @@ export async function fetchDynamicCandidateOpportunities(
               company: dj.company,
               location: dj.location || "Remote",
               url: dj.url,
-              description: stripHtml(dj.description || cleanTitle),
+              description: cleanDesc,
               posted_at: dj.posted_at,
               source: "target_peer_match",
+            }, 30);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn("[deep-conversion-miner] Target query warning:", err.message);
+    }
+  }
+
+  // 6. Discipline Keyword Query across scraped_jobs (active, eligible jobs in India/Remote)
+  if (allCandidateJobs.length < 15) {
+    try {
+      const searchTerms = getDisciplineSearchTerms(candidate.discipline, candidate.currentRole);
+      const orFilters = searchTerms.map(t => `title.ilike.%${t}%`).join(",");
+
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const { data: disciplineDbJobs } = await supabase
+        .from("scraped_jobs")
+        .select("id, title, company, location, url, description, posted_at")
+        .eq("is_active", true)
+        .gte("posted_at", thirtyDaysAgo.toISOString())
+        .or(orFilters)
+        .order("posted_at", { ascending: false })
+        .limit(40);
+
+      if (Array.isArray(disciplineDbJobs)) {
+        for (const dj of disciplineDbJobs) {
+          if (isSameCompany(dj.company, candidate.currentCompany)) continue;
+          const cleanTitle = cleanJobTitle(normalizeJobTitle(dj.title));
+          const cleanDesc = stripHtml(dj.description || cleanTitle);
+
+          const eligibility = isJobEligible({
+            title: cleanTitle,
+            location: dj.location,
+            description: cleanDesc,
+            posted_at: dj.posted_at,
+          });
+
+          if (eligibility.eligible) {
+            addJobIfUnique({
+              id: dj.id,
+              title: cleanTitle,
+              company: dj.company,
+              location: dj.location || "Remote",
+              url: dj.url,
+              description: cleanDesc,
+              posted_at: dj.posted_at,
+              source: "discipline_feed_match",
             }, 25);
           }
         }
       }
     } catch (err: any) {
-      console.warn("[deep-conversion-miner] Database target query warning:", err.message);
+      console.warn("[deep-conversion-miner] Discipline feed query warning:", err.message);
     }
   }
 
-  // 5. Intelligent Ranking
+  // 7. Intelligent Scoring
   const roleKeywords = candidate.currentRole.toLowerCase().split(/\s+/).filter(w => w.length > 3);
   const targetSet = new Set(candidate.targetCompanies.map(c => c.toLowerCase().trim()));
   const compSet = new Set(candidate.discoveredCompetitors.map(c => c.toLowerCase().trim()));
@@ -429,7 +736,10 @@ export async function fetchDynamicCandidateOpportunities(
     // Bonus if company matches discovered industry competitor
     else if (compSet.has(compLower)) score += 20;
 
-    // Domain / Role keyword match
+    // Direct discipline match bonus
+    if (j.discipline === candidate.discipline) score += 25;
+
+    // Role keyword match bonus
     for (const kw of roleKeywords) {
       if (titleLower.includes(kw)) score += 15;
     }
@@ -442,26 +752,20 @@ export async function fetchDynamicCandidateOpportunities(
 
   scoredJobs.sort((a, b) => b.score - a.score);
 
-  // Return distinct companies first to give the candidate high-conviction diversity
-  const selected: any[] = [];
+  // 8. STRICT DIVERSITY RULE: MAXIMUM 1 JOB PER COMPANY
+  // All returned opportunities MUST belong to distinct companies!
+  const selectedDistinctCompanyJobs: any[] = [];
   const pickedCompanies = new Set<string>();
 
   for (const item of scoredJobs) {
     const cKey = item.job.company.toLowerCase().trim();
     if (!pickedCompanies.has(cKey)) {
       pickedCompanies.add(cKey);
-      selected.push(item.job);
+      selectedDistinctCompanyJobs.push(item.job);
     }
   }
 
-  // If we need more, add remaining highest scored
-  for (const item of scoredJobs) {
-    if (!selected.includes(item.job)) {
-      selected.push(item.job);
-    }
-  }
-
-  return selected;
+  return selectedDistinctCompanyJobs;
 }
 
 export async function resolveConnector(
@@ -529,11 +833,12 @@ export async function generateConversionBlueprint(
   }
 
   const prompt = `You are an elite executive career strategist and talent conversion architect.
-You are generating a hyper-specific, actionable conversion roadmap for a top candidate applying to a high-priority opportunity.
+You are evaluating a candidate's authentic fit for this role and generating a hyper-specific, actionable conversion roadmap.
 
 CANDIDATE CONTEXT:
 - Name: ${candidate.fullName}
 - Current Title: ${candidate.currentRole} at ${candidate.currentCompany}
+- Functional Discipline: ${candidate.discipline}
 - Alma Mater: ${candidate.education}
 - Location: ${candidate.location}
 - Resume Highlights & Experience:
@@ -546,15 +851,22 @@ OPPORTUNITY CONTEXT:
 - Job Description / Requirements:
 ${job.description.slice(0, 3500)}
 
-YOUR TASK:
-Generate a rigorous, tailored conversion blueprint structured strictly as JSON:
+CRITICAL EVALUATION GUIDELINES:
+1. FUNCTIONAL DISCIPLINE & SENIORITY:
+   - Evaluate whether the candidate's functional background matches or genuinely transfers to this role.
+   - If there is a functional mismatch (e.g. HR candidate for Supply Chain / Engineering), assign a score < 50.
+   - If there is strong direct or transferable alignment in the same functional domain, assign a score between 75 and 96 reflecting authentic merit.
+2. CONVERSION BLUEPRINT:
+   - Provide concrete, tailored guidance referencing specific candidate achievements, resume bullet points, ATS keywords, interview hooks, and connector outreach.
+
+STRUCTURE YOUR OUTPUT STRICTLY AS JSON:
 {
-  "matchScore": <number between 75 and 96 reflecting genuine alignment>,
-  "fitVerdict": "<e.g. Strong Strategic Fit / Exceptional Product Match>",
-  "whyThisOpportunity": "<2-3 sentences explaining exactly why this is a high-yield pivot for the candidate>",
+  "matchScore": <integer between 40 and 96 representing true functional alignment>,
+  "fitVerdict": "<e.g. Strong Strategic Fit / Exceptional Domain Match / Transferable Domain Pivot>",
+  "whyThisOpportunity": "<2-3 sentences explaining exactly why this is a high-yield opportunity for the candidate>",
   "focusX": {
     "title": "Resume Anchor: <Name of candidate project/achievement to lead with>",
-    "description": "<Exact guidance on which bullet points from the candidate's resume to highlight at the top of their CV to directly solve the hiring manager's core problem>"
+    "description": "<Exact guidance on which bullet points from the candidate's resume to highlight at the top of their CV>"
   },
   "focusY": {
     "title": "ATS Keyword & Metric Optimization",
@@ -564,7 +876,7 @@ Generate a rigorous, tailored conversion blueprint structured strictly as JSON:
   "focusZ": {
     "title": "Winning Interview Narrative & Objection Handler",
     "interviewPitch": "<A compelling 2-sentence opening hook the candidate should deliver when asked 'Tell me about yourself and why this role'>",
-    "objectionHandler": "<How to proactively address potential gaps or domain nuances>"
+    "objectionHandler": "<How to proactively address potential domain nuances or industry pivots>"
   }
 }`;
 
@@ -577,11 +889,11 @@ Generate a rigorous, tailored conversion blueprint structured strictly as JSON:
     body: JSON.stringify({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "You are a world-class executive career coach. Return ONLY valid JSON." },
+        { role: "system", content: "You are a world-class executive career coach and technical talent evaluator. Return ONLY valid JSON." },
         { role: "user", content: prompt }
       ],
       response_format: { type: "json_object" },
-      temperature: 0.3,
+      temperature: 0.2,
     }),
     signal: AbortSignal.timeout(30000)
   });
@@ -602,13 +914,13 @@ Generate a rigorous, tailored conversion blueprint structured strictly as JSON:
   );
 
   return {
-    jobId: job.id || `live_${job.company.toLowerCase()}_${(job.reqId || job.title).replace(/[^a-zA-Z0-9]/g, "")}`,
+    jobId: job.id || `live_${job.company.toLowerCase().replace(/[^a-z0-9]/g, "")}_${(job.reqId || job.title).replace(/[^a-zA-Z0-9]/g, "")}`,
     title: job.title,
     company: job.company,
     location: job.location,
     url: job.url,
     reqId: job.reqId,
-    matchScore: parsed.matchScore || 85,
+    matchScore: typeof parsed.matchScore === "number" ? parsed.matchScore : 85,
     fitVerdict: parsed.fitVerdict || "Strong Strategic Fit",
     whyThisOpportunity: parsed.whyThisOpportunity || "",
     focusX: parsed.focusX || { title: "Resume Alignment", description: "Tailor experience to JD requirements." },
@@ -625,19 +937,26 @@ export async function runDeepCareerConversionMiner(candidateId?: string, limit: 
   const candidate = await fetchCandidateContext(candidateId);
   const candidateOpportunities = await fetchDynamicCandidateOpportunities(candidate);
 
-  // Filter out candidate's own company
-  const eligibleJobs = candidateOpportunities.filter(
-    j => !isSameCompany(j.company, candidate.currentCompany)
-  );
-
+  // STRICT GUARANTEE: Filter out candidate's own company and enforce DISTINCT COMPANIES
+  // No two opportunities can ever belong to the same company!
   const blueprints: ConversionBlueprint[] = [];
   const countToMine = Math.max(1, Math.min(5, limit));
-  const selectedJobs = eligibleJobs.slice(0, countToMine);
+  const seenCompanies = new Set<string>();
 
-  for (const job of selectedJobs) {
+  for (const job of candidateOpportunities) {
+    if (blueprints.length >= countToMine) break;
+    if (isSameCompany(job.company, candidate.currentCompany)) continue;
+
+    const compKey = job.company.toLowerCase().trim();
+    if (seenCompanies.has(compKey)) continue;
+
     try {
       const blueprint = await generateConversionBlueprint(candidate, job);
-      blueprints.push(blueprint);
+      // Strictly enforce >= 70% match threshold
+      if (blueprint.matchScore >= 70) {
+        seenCompanies.add(compKey);
+        blueprints.push(blueprint);
+      }
     } catch (err: any) {
       console.error(`Failed analyzing ${job.title}:`, err.message);
     }

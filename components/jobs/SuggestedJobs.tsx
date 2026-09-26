@@ -178,6 +178,67 @@ export function SuggestedJobs() {
       message: `🎯 Generated ${blueprints.length} strategic conversion blueprints with resume anchors, ATS optimization & warm connector bridges!`,
       score: blueprints[0]?.matchScore || 92,
     });
+
+    // Auto-merge newly unearthed conversion blueprints into the overall list of opportunities (companies state)
+    if (blueprints.length > 0) {
+      setCompanies((prev) => {
+        const updated = [...prev];
+        for (const bp of blueprints) {
+          if (currentUserCompany && isSameCompany(bp.company, currentUserCompany)) continue;
+          const compIdx = updated.findIndex(
+            (c) => c.company.toLowerCase().trim() === bp.company.toLowerCase().trim()
+          );
+
+          const jobObj: SuggestedJob = {
+            id: bp.jobId,
+            title: cleanJobTitle(bp.title),
+            location: bp.location || "Remote",
+            url: bp.url || "",
+            description: bp.whyThisOpportunity || "",
+            posted_at: new Date().toISOString(),
+            keywords: bp.focusY?.keywordsToAdd || [],
+            matchRate: bp.matchScore,
+            score: bp.matchScore,
+            label: bp.fitVerdict,
+            reason: bp.whyThisOpportunity,
+          };
+
+          const referralContacts = bp.connector?.proxnetUserId
+            ? [
+                {
+                  id: bp.connector.proxnetUserId,
+                  alias: bp.connector.name
+                    ? `${bp.connector.name} (${bp.connector.role || "Insider"} @ ${bp.company})`
+                    : `Insider @ ${bp.company}`,
+                },
+              ]
+            : [];
+
+          if (compIdx !== -1) {
+            const existingComp = updated[compIdx];
+            const existingJobs = existingComp.jobs.filter(
+              (j) => j.id !== bp.jobId && j.title.toLowerCase().trim() !== bp.title.toLowerCase().trim()
+            );
+            existingJobs.unshift(jobObj);
+            existingJobs.sort((a, b) => (b.score ?? b.matchRate ?? 0) - (a.score ?? a.matchRate ?? 0));
+            updated[compIdx] = {
+              ...existingComp,
+              contactsCount: Math.max(existingComp.contactsCount, referralContacts.length),
+              referralContacts: existingComp.referralContacts?.length ? existingComp.referralContacts : referralContacts,
+              jobs: existingJobs,
+            };
+          } else {
+            updated.unshift({
+              company: bp.company,
+              contactsCount: referralContacts.length,
+              referralContacts,
+              jobs: [jobObj],
+            });
+          }
+        }
+        return updated.sort((a, b) => (b.jobs[0]?.score ?? 0) - (a.jobs[0]?.score ?? 0));
+      });
+    }
   };
 
   const handleMatchesFetched = (matches: any[], newWallet: number) => {

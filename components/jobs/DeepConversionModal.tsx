@@ -30,25 +30,25 @@ const PHASES: MiningPhase[] = [
     id: 2,
     title: "Dynamic Target & Peer Ecosystem Discovery",
     subtitle: "Mapping target companies and industry competitors matched to candidate domain...",
-    triggerSecond: 18,
+    triggerSecond: 4,
   },
   {
     id: 3,
     title: "Live Enterprise ATS & Career Portal Crawling",
     subtitle: "Fetching real-time openings directly from target ATS boards, Workday & verified feeds...",
-    triggerSecond: 40,
+    triggerSecond: 10,
   },
   {
     id: 4,
     title: "Conversion Playbook & Action Plan Synthesis",
     subtitle: "Synthesizing custom resume anchors, ATS keyword optimization & interview objection handlers...",
-    triggerSecond: 65,
+    triggerSecond: 18,
   },
   {
     id: 5,
     title: "Warm Insider Mapping & Pitch Drafting",
     subtitle: "Identifying ProxNet community insiders, alumni bridges & crafting high-conversion outreach notes...",
-    triggerSecond: 85,
+    triggerSecond: 28,
   },
 ];
 
@@ -74,19 +74,17 @@ export function DeepConversionModal({
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
 
-  // Reset state on open/close
+  // Handle Escape key to close modal anytime
   useEffect(() => {
-    if (!isOpen) {
-      if (timerRef.current) clearInterval(timerRef.current);
-      setIsRunning(false);
-      setCountdown(100);
-      setActivePhaseIndex(0);
-      setCompletedPhaseIds([]);
-      setErrorMsg("");
-      setResults(null);
-      setCreditsExpended(null);
-    }
-  }, [isOpen]);
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Handle 100s Countdown & Phase Progression
   useEffect(() => {
@@ -118,6 +116,26 @@ export function DeepConversionModal({
       };
     }
   }, [isRunning]);
+
+  // Handle Escape key to dismiss modal & lock background scrolling
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -159,14 +177,17 @@ export function DeepConversionModal({
         return;
       }
 
-      // Mark all phases as completed with ticks
-      setCompletedPhaseIds(PHASES.map((p) => p.id));
-      setActivePhaseIndex(PHASES.length);
-      setCountdown(0);
-
       if (timerRef.current) clearInterval(timerRef.current);
 
+      // Smoothly complete remaining phases with visible ticks
       const blueprints: ConversionBlueprint[] = data.blueprints || [];
+      for (let p = 1; p <= PHASES.length; p++) {
+        setCompletedPhaseIds((prev) => Array.from(new Set([...prev, p])));
+        setActivePhaseIndex(p);
+        await new Promise((r) => setTimeout(r, 200));
+      }
+
+      setCountdown(0);
       setResults(blueprints);
       if (data.creditsExpended !== undefined) {
         setCreditsExpended(data.creditsExpended);
@@ -195,27 +216,30 @@ export function DeepConversionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/75 backdrop-blur-sm animate-fadeIn overflow-hidden"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-2xl rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-2xl overflow-hidden flex flex-col h-[90vh] sm:h-auto sm:max-h-[85vh] animate-scaleUp text-[var(--color-text)] relative"
+        className="w-full max-w-2xl rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-2xl overflow-hidden flex flex-col h-[94dvh] max-h-[94dvh] sm:h-[88dvh] sm:max-h-[88dvh] animate-scaleUp text-[var(--color-text)] relative"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Sticky Header */}
-        <div className="sticky top-0 z-30 shrink-0 p-4 sm:p-5 border-b border-[var(--color-border-light)] flex items-center justify-between bg-[var(--color-surface)]/95 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-600 text-white flex items-center justify-center text-xl shadow-md shrink-0">
+        {/* Sticky Header - Permanently Fixed at Top */}
+        <div className="flex-none shrink-0 p-3.5 sm:p-4 border-b border-[var(--color-border-light)] flex items-center justify-between bg-[var(--color-surface)] z-30 shadow-xs">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 mr-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-600 text-white flex items-center justify-center text-lg sm:text-xl shadow-md shrink-0">
               🎯
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-[var(--color-text)]">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-base font-bold text-[var(--color-text)] truncate">
                   Deep Career Conversion Miner
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/15 text-primary border border-primary/20">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/15 text-primary border border-primary/20 shrink-0">
                   3 Credits / Role
                 </span>
               </div>
-              <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+              <p className="text-[11px] sm:text-xs text-[var(--color-text-secondary)] truncate">
                 Recursive opportunity discovery & strategic conversion roadmaps
               </p>
             </div>
@@ -223,18 +247,21 @@ export function DeepConversionModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors cursor-pointer shrink-0"
-            title="Close"
+            className="p-2 sm:px-3 sm:py-1.5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border)] transition-all cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs group"
+            title="Close (Esc)"
             aria-label="Close modal"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <span className="text-xs font-semibold hidden sm:inline text-[var(--color-text-secondary)] group-hover:text-[var(--color-text)]">
+              Close
+            </span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="group-hover:scale-110 transition-transform">
               <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs text-[var(--color-text)] flex-1 min-h-0">
+        {/* Modal Body - Strictly Scrollable between Header and Footer */}
+        <div className="p-4 sm:p-6 overflow-y-auto overscroll-contain space-y-5 text-xs text-[var(--color-text)] flex-1 min-h-0">
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 font-medium">
               {errorMsg}
@@ -754,20 +781,45 @@ export function DeepConversionModal({
           )}
         </div>
 
-        {/* Sticky Modal Footer - Always Visible */}
-        <div className="sticky bottom-0 z-30 shrink-0 p-4 border-t border-[var(--color-border-light)] bg-[var(--color-surface)]/95 backdrop-blur-md flex items-center justify-between gap-3 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
+        {/* Sticky Modal Footer - Permanently Fixed at Bottom, Always Visible */}
+        <div className="flex-none shrink-0 p-3 sm:p-4 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] z-30 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] flex items-center justify-between gap-3">
           {isRunning ? (
             <>
-              <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-                <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary animate-ping" />
-                <span>Mining {opportunityCount} {opportunityCount === 1 ? "Role" : "Roles"} (~{countdown}s remaining)...</span>
+              <div className="flex items-center gap-2 text-xs font-semibold text-primary min-w-0 truncate">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary animate-ping shrink-0" />
+                <span className="truncate">Mining {opportunityCount} {opportunityCount === 1 ? "Role" : "Roles"} (~{countdown}s remaining)...</span>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-[var(--color-border-light)] text-[var(--color-text-secondary)] font-semibold hover:bg-[var(--color-surface-hover)] transition-colors text-xs cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] font-semibold hover:bg-[var(--color-surface-hover)] transition-colors text-xs cursor-pointer shrink-0"
               >
                 Close & Run in Background
+              </button>
+            </>
+          ) : results ? (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs sm:text-sm shadow-md active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>Close Dossier</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setResults(null);
+                  setOpportunityCount(1);
+                }}
+                className="px-4 py-2.5 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+              >
+                <span>⚡</span>
+                <span>Mine More Roles</span>
               </button>
             </>
           ) : (
@@ -775,33 +827,20 @@ export function DeepConversionModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-[var(--color-border-light)] text-[var(--color-text-secondary)] font-semibold hover:bg-[var(--color-surface-hover)] transition-colors text-xs cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-[var(--color-border-light)] text-[var(--color-text-secondary)] font-semibold hover:bg-[var(--color-surface-hover)] transition-colors text-xs cursor-pointer shrink-0"
               >
-                {results ? "Close Dossier" : "Cancel"}
+                Cancel
               </button>
 
-              {!results ? (
-                <button
-                  type="button"
-                  disabled={!hasResume || (wallet !== null && wallet !== undefined && wallet < opportunityCount * 3)}
-                  onClick={handleStartMining}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary to-emerald-600 text-white font-bold text-xs shadow-md hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
-                >
-                  <span>🚀</span>
-                  <span>Launch Deep Conversion Run ({opportunityCount * 3} Credits)</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setResults(null);
-                    setOpportunityCount(1);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary font-bold text-xs transition-colors cursor-pointer"
-                >
-                  ⚡ Mine More Roles
-                </button>
-              )}
+              <button
+                type="button"
+                disabled={!hasResume || (wallet !== null && wallet !== undefined && wallet < opportunityCount * 3)}
+                onClick={handleStartMining}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary to-emerald-600 text-white font-bold text-xs shadow-md hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer shrink-0"
+              >
+                <span>🚀</span>
+                <span>Launch Deep Conversion Run ({opportunityCount * 3} Credits)</span>
+              </button>
             </>
           )}
         </div>

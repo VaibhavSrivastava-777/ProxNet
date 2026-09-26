@@ -500,6 +500,7 @@ Output valid JSON ONLY with format:
     // 8. Real-time Live URL Verification: Prune 404s, 410s, and closed redirects
     const liveDeliveredMatches: EvaluatedMatch[] = [];
     const deadJobIds: string[] = [];
+    const deliveredCompanies = new Set<string>();
 
     // Probe the top candidate matches concurrently (pool of up to requestedCredits + 8)
     const candidatesToProbe = externalMatches.slice(0, requestedCredits + 8);
@@ -513,7 +514,9 @@ Output valid JSON ONLY with format:
     for (const res of probeResults) {
       if (res.status === "fulfilled") {
         if (res.value.live) {
-          if (liveDeliveredMatches.length < requestedCredits) {
+          const cKey = res.value.match.company.toLowerCase().trim();
+          if (!deliveredCompanies.has(cKey) && liveDeliveredMatches.length < requestedCredits) {
+            deliveredCompanies.add(cKey);
             liveDeliveredMatches.push(res.value.match);
           }
         } else {
@@ -525,12 +528,16 @@ Output valid JSON ONLY with format:
       }
     }
 
-    // If still need matches, backfill from remaining external matches
+    // If still need matches, backfill from remaining external matches (strictly distinct companies)
     if (liveDeliveredMatches.length < requestedCredits && externalMatches.length > candidatesToProbe.length) {
       for (const remaining of externalMatches.slice(candidatesToProbe.length)) {
         if (liveDeliveredMatches.length >= requestedCredits) break;
+        const cKey = remaining.company.toLowerCase().trim();
+        if (deliveredCompanies.has(cKey)) continue;
+
         const check = await verifyJobUrlLive(remaining.url, 2000);
         if (check.live) {
+          deliveredCompanies.add(cKey);
           liveDeliveredMatches.push(remaining);
         } else if (remaining.id && !remaining.id.startsWith("live_")) {
           deadJobIds.push(remaining.id);
