@@ -12,7 +12,7 @@ import { DeepConversionModal } from "./DeepConversionModal";
 import type { ConversionBlueprint } from "@/lib/jobs/deep-conversion-miner";
 import { JobInbox } from "./JobInbox";
 import { playNotificationSound } from "@/lib/sound";
-import { cleanJobTitle } from "@/lib/jobs/job-filters";
+import { cleanJobTitle, isSameCompany } from "@/lib/jobs/job-filters";
 
 interface SuggestedJob {
   id: string;
@@ -201,11 +201,12 @@ export function SuggestedJobs() {
       score: externalMatches[0]?.score || 85,
     });
 
-    // Also auto-merge these matches into existing companies state if matched
+    // Also auto-merge these matches into existing companies state if matched (excluding candidate's own company)
     if (externalMatches.length > 0) {
       setCompanies((prev) => {
         const updated = [...prev];
         for (const m of externalMatches) {
+          if (currentUserCompany && isSameCompany(m.company, currentUserCompany)) continue;
           const compIdx = updated.findIndex(
             (c) => c.company.toLowerCase().trim() === m.company.toLowerCase().trim()
           );
@@ -300,7 +301,11 @@ export function SuggestedJobs() {
 
       if (suggestedRes.status === "fulfilled" && suggestedRes.value) {
         const data = suggestedRes.value;
-        setCompanies(data.companies || []);
+        const userComp = data.currentUserCompany || currentUserCompany;
+        const validCompanies = (data.companies || []).filter(
+          (c: CompanyGroup) => !userComp || !isSameCompany(c.company, userComp)
+        );
+        setCompanies(validCompanies);
         setIsMatchingCompleted(data.isMatchingCompleted ?? true);
         if (data.currentUserId) {
           setCurrentUserId(data.currentUserId);
@@ -745,9 +750,16 @@ export function SuggestedJobs() {
   };
 
   // Advanced filter logic
-  const applyAdvancedFilters = (companiesList: CompanyGroup[]) => {
+  const applyAdvancedFilters = (companiesList: CompanyGroup[], isMatchedFeed: boolean = false) => {
     const q = searchQuery.toLowerCase().trim();
     return companiesList
+      .filter((c) => {
+        // Guarantee candidate's own company is NEVER displayed as a matched opportunity
+        if (isMatchedFeed && currentUserCompany && isSameCompany(c.company, currentUserCompany)) {
+          return false;
+        }
+        return true;
+      })
       .map(c => {
         let jobs = c.jobs;
 
@@ -781,51 +793,64 @@ export function SuggestedJobs() {
       });
   };
 
-  const filteredMatchedCompanies = applyAdvancedFilters(companies);
-  const filteredAllCompanies = applyAdvancedFilters(allCompanies);
+  const filteredMatchedCompanies = applyAdvancedFilters(companies, true);
+  const filteredAllCompanies = applyAdvancedFilters(allCompanies, false);
 
   const displayedCompanies = jobsViewMode === "matched" ? filteredMatchedCompanies : filteredAllCompanies;
 
-  // Stats for market pulse
-  const totalMatchedJobs = companies.reduce((acc, c) => acc + c.jobs.length, 0);
+  // Stats for market pulse (excluding own company in matched counts)
+  const totalMatchedJobs = companies
+    .filter(c => !currentUserCompany || !isSameCompany(c.company, currentUserCompany))
+    .reduce((acc, c) => acc + c.jobs.length, 0);
   const totalAllJobs = allCompanies.reduce((acc, c) => acc + c.jobs.length, 0);
-  const strongMatchCount = companies.reduce((acc, c) => acc + c.jobs.filter(j => (j.score ?? j.matchRate ?? 0) >= 85).length, 0);
-  const companiesWithReferrers = companies.filter(c => c.contactsCount > 0).length;
-  const totalReferrers = companies.reduce((acc, c) => acc + c.contactsCount, 0);
+  const strongMatchCount = companies
+    .filter(c => !currentUserCompany || !isSameCompany(c.company, currentUserCompany))
+    .reduce((acc, c) => acc + c.jobs.filter(j => (j.score ?? j.matchRate ?? 0) >= 85).length, 0);
+  const companiesWithReferrers = companies
+    .filter(c => (!currentUserCompany || !isSameCompany(c.company, currentUserCompany)) && c.contactsCount > 0).length;
+  const totalReferrers = companies
+    .filter(c => !currentUserCompany || !isSameCompany(c.company, currentUserCompany))
+    .reduce((acc, c) => acc + c.contactsCount, 0);
 
-  // Option 5: Flattened and sorted matched opportunities for Hero & Similar sections
+  // Option 5: Flattened and sorted matched opportunities for Hero & Similar sections (strictly non-own company)
   const allFlattenedMatchedJobs = useMemo(() => {
-    return companies.flatMap((g) =>
-      g.jobs.map((j) => ({ job: j, group: g }))
-    ).sort((a, b) => {
-      const scoreA = a.job.score ?? a.job.matchRate ?? 0;
-      const scoreB = b.job.score ?? b.job.matchRate ?? 0;
-      if (scoreB !== scoreA) return scoreB - scoreA;
-      const dateA = a.job.posted_at ? new Date(a.job.posted_at).getTime() : 0;
-      const dateB = b.job.posted_at ? new Date(b.job.posted_at).getTime() : 0;
-      return dateB - dateA;
-    });
-  }, [companies]);
+    return companies
+      .filter((g) => !currentUserCompany || !isSameCompany(g.company, currentUserCompany))
+      .flatMap((g) =>
+        g.jobs.map((j) => ({ job: j, group: g }))
+      ).sort((a, b) => {
+        const scoreA = a.job.score ?? a.job.matchRate ?? 0;
+        const scoreB = b.job.score ?? b.job.matchRate ?? 0;
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        const dateA = a.job.posted_at ? new Date(a.job.posted_at).getTime() : 0;
+        const dateB = b.job.posted_at ? new Date(b.job.posted_at).getTime() : 0;
+        return dateB - dateA;
+      });
+  }, [companies, currentUserCompany]);
 
-  // Top hero match (highest match opportunity or fallback to first available opening)
+  // Top hero match (highest match opportunity from non-own company)
   const heroJobItem = useMemo(() => {
     if (allFlattenedMatchedJobs.length > 0) return allFlattenedMatchedJobs[0];
-    if (allCompanies.length > 0 && allCompanies[0].jobs.length > 0) {
-      return { job: allCompanies[0].jobs[0], group: allCompanies[0] };
+    const nonOwnAll = allCompanies.filter(
+      (c) => !currentUserCompany || !isSameCompany(c.company, currentUserCompany)
+    );
+    if (nonOwnAll.length > 0 && nonOwnAll[0].jobs.length > 0) {
+      return { job: nonOwnAll[0].jobs[0], group: nonOwnAll[0] };
     }
     return null;
-  }, [allFlattenedMatchedJobs, allCompanies]);
+  }, [allFlattenedMatchedJobs, allCompanies, currentUserCompany]);
 
-  // Next top opportunities (Option 5: "More Similar Jobs")
+  // Next top opportunities (Option 5: "More Similar Jobs" - never showing own company)
   const similarJobs = useMemo(() => {
     if (allFlattenedMatchedJobs.length > 1) {
       return allFlattenedMatchedJobs.slice(1, 5);
     }
     const others = allCompanies
+      .filter((g) => !currentUserCompany || !isSameCompany(g.company, currentUserCompany))
       .flatMap((g) => g.jobs.map((j) => ({ job: j, group: g })))
       .filter((item) => !heroJobItem || item.job.id !== heroJobItem.job.id);
     return others.slice(0, 4);
-  }, [allFlattenedMatchedJobs, allCompanies, heroJobItem]);
+  }, [allFlattenedMatchedJobs, allCompanies, heroJobItem, currentUserCompany]);
 
   // Relevant nearby helpers (Option 5: "People around you who can help")
   const relevantHelpers = useMemo(() => {

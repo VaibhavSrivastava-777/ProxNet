@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { discoverCompetitorsForCompany } from "@/lib/competitors/discover-competitors";
+import { isSameCompany } from "@/lib/jobs/job-filters";
 
 export interface ConversionBlueprint {
   jobId: string;
@@ -361,9 +362,14 @@ export async function runDeepCareerConversionMiner(candidateId?: string, limit: 
   const oracleJob = networkJobs.find(j => (j.company || "").toLowerCase().includes("oracle"));
   if (oracleJob) prioritizedJobs.push(oracleJob);
 
+  // Filter out candidate's own company
+  const eligibleJobs = prioritizedJobs.filter(
+    j => !isSameCompany(j.company, candidate.currentCompany)
+  );
+
   const blueprints: ConversionBlueprint[] = [];
   const countToMine = Math.max(1, Math.min(5, limit));
-  const selectedJobs = prioritizedJobs.slice(0, countToMine);
+  const selectedJobs = eligibleJobs.slice(0, countToMine);
 
   for (const job of selectedJobs) {
     try {

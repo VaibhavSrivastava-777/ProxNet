@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { cleanJobTitle } from "@/lib/jobs/job-filters";
+import { cleanJobTitle, isSameCompany } from "@/lib/jobs/job-filters";
 
 function isJuniorJob(title: string, description: string): boolean {
   const t = title.toLowerCase();
@@ -196,9 +196,12 @@ Return ONLY a JSON object with:
       contact_alias?: string | null;
     }
 
-    // Pre-filter candidate jobs by freshness (30-day window) and seniority before reranking
+    const userCompany = userProfile.company?.trim() || "";
+
+    // Pre-filter candidate jobs by freshness (30-day window), seniority, and EXCLUDE candidate's own company
     const candidateJobs: ScrapedJobRow[] = [];
     for (const row of (matchedJobsList as ScrapedJobRow[] | null) || []) {
+      if (isSameCompany(row.company, userCompany)) continue;
       if (row.posted_at) {
         const jobDate = new Date(row.posted_at);
         if (!isNaN(jobDate.getTime()) && jobDate < thirtyDaysAgo) continue;
@@ -481,8 +484,9 @@ Return ONLY a JSON object with:
       }
     }
 
-    // Include matched job groups sorted by highest reranked score
+    // Include matched job groups sorted by highest reranked score (strictly excluding candidate's own company)
     const finalCompanies = Object.values(companyGroups)
+      .filter(g => !isSameCompany(g.company, userCompany))
       .map(g => {
         g.contactsCount = g.referralContacts.length;
         g.jobs.sort((a, b) => {

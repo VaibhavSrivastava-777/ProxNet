@@ -365,3 +365,60 @@ export function isJobEligible(job: {
 
   return { eligible: true };
 }
+
+/**
+ * Determines whether two company names represent the same organization.
+ * Used to ensure candidates are NEVER shown their own current company as a matched opportunity.
+ * Handles variations in corporate suffixes, regional subsidiaries, and abbreviations.
+ */
+export function isSameCompany(compA?: string | null, compB?: string | null): boolean {
+  if (!compA || !compB) return false;
+  const a = compA.trim().toLowerCase();
+  const b = compB.trim().toLowerCase();
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  const stripSuffixes = (str: string) => {
+    return str
+      .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, " ")
+      .replace(/\b(inc|incorporated|llc|ltd|limited|corp|corporation|technologies|technology|solutions|services|group|holdings|pvt|private|india|global|international|co|company|systems|software|labs|enterprise|enterprises)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  const cleanA = stripSuffixes(a);
+  const cleanB = stripSuffixes(b);
+
+  if (cleanA && cleanB) {
+    if (cleanA === cleanB) return true;
+    if (cleanA.length >= 3 && cleanB.length >= 3) {
+      if (cleanA.startsWith(cleanB) || cleanB.startsWith(cleanA)) return true;
+      if (cleanA.includes(cleanB) || cleanB.includes(cleanA)) return true;
+    }
+  }
+
+  // Common aliases & abbreviations
+  const aliases: Array<[string, string]> = [
+    ["hp", "hewlett packard"],
+    ["ibm", "international business machines"],
+    ["aws", "amazon"],
+    ["jpmorgan", "jp morgan"],
+    ["chase", "jpmorgan"],
+    ["lseg", "london stock exchange"],
+    ["pwc", "pricewaterhousecoopers"],
+    ["ey", "ernst & young"],
+    ["dell", "dell technologies"],
+    ["msft", "microsoft"],
+    ["fb", "meta"],
+    ["goog", "google"],
+  ];
+
+  for (const [alias1, alias2] of aliases) {
+    const match1 = cleanA === alias1 || cleanA.startsWith(alias1);
+    const match2 = cleanB === alias2 || cleanB.startsWith(alias2);
+    if ((match1 && match2) || (cleanA === alias2 && cleanB === alias1)) return true;
+  }
+
+  return false;
+}
+
