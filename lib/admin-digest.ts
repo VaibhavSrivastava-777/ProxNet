@@ -227,13 +227,15 @@ export async function generateDailyAdminDigestData(
     });
   }
 
-  // 5. STALLED REFERRAL THREADS (Candidate messaged > 24 hours ago, no response from referrer)
+  // 5. STALLED REFERRAL THREADS (Candidate messaged 24h to 300h ago, no response from referrer)
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const threeHundredHoursAgo = new Date(Date.now() - 300 * 60 * 60 * 1000).toISOString();
   const { data: olderActiveThreads } = await supabase
     .from("job_threads")
     .select("id, post_id, created_at")
     .eq("status", "active")
     .lte("created_at", twentyFourHoursAgo)
+    .gte("created_at", threeHundredHoursAgo)
     .limit(20);
 
   const stalledThreads: Array<{ threadId: string; company: string; role: string; waitingHours: number }> = [];
@@ -244,11 +246,12 @@ export async function generateDailyAdminDigestData(
       .eq("thread_id", ot.id)
       .order("created_at", { ascending: true });
 
-    // Stalled if only 1 message sent ever (initial pitch)
+    // Stalled if only 1 message sent ever (initial pitch) within 24h - 300h
     if (msgs && msgs.length === 1) {
       const hoursWaiting = Math.round(
         (Date.now() - new Date(msgs[0].created_at).getTime()) / (1000 * 60 * 60)
       );
+      if (hoursWaiting > 300) continue;
       let comp = "Company";
       let r = "Role";
       if (ot.post_id) {

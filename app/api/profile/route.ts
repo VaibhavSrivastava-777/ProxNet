@@ -238,6 +238,40 @@ export async function PATCH(request: Request) {
     });
   }
 
+  // Auto-seed company into company_ats_config if pioneer company
+  if (body.company && body.company.trim()) {
+    const rawCompany = body.company.trim();
+    (async () => {
+      try {
+        const { data: existing } = await supabase
+          .from("company_ats_config")
+          .select("id")
+          .ilike("company_name", rawCompany)
+          .maybeSingle();
+
+        if (!existing) {
+          const { discoverAts } = await import("@/lib/ats-discovery");
+          const ats = await discoverAts(rawCompany);
+          if (ats && ats.provider && ats.provider !== "none") {
+            await supabase.from("company_ats_config").upsert({
+              company_name: rawCompany,
+              provider: ats.provider,
+              board_token_or_url: ats.board,
+              scrape_notes: "Auto-discovered pioneer company on profile update"
+            }, { onConflict: "company_name" });
+          } else {
+            await supabase.from("company_ats_config").upsert({
+              company_name: rawCompany,
+              provider: "custom",
+              board_token_or_url: `https://www.google.com/search?q=${encodeURIComponent(rawCompany + " careers jobs")}`,
+              scrape_notes: "Pioneer company pending direct career portal"
+            }, { onConflict: "company_name" });
+          }
+        }
+      } catch (e) {}
+    })().catch(() => {});
+  }
+
   return NextResponse.json({
     ...responseData,
     completeness,

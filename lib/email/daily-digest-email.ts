@@ -227,7 +227,7 @@ export function buildDailyDigestEmailHtml(report: DailyDigestReport): { subject:
                     ? `
                 <div style="background-color: #fff1f2; border: 1px solid #fecdd3; border-radius: 10px; padding: 14px; margin-bottom: 14px;">
                   <div style="color: #9f1239; font-size: 13px; font-weight: 700; margin-bottom: 6px;">
-                    ⚠️ Stalled Referral Requests (>24h without response)
+                    ⚠️ Stalled Referral Requests (24h - 300h without response)
                   </div>
                   <div style="color: #881337; font-size: 12px; margin-bottom: 10px;">
                     Candidates are waiting for an insider referral reply. Immediate nudge recommended to protect conversion:

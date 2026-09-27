@@ -68,6 +68,54 @@ async function handleScrape(request: Request) {
     }
   }
 
+  // Step 1B: Ensure all pioneer/new ProxNet member companies from users exist in company_ats_config
+  try {
+    const { data: networkUsers } = await supabase
+      .from("users")
+      .select("company")
+      .not("company", "is", null);
+
+    const uniqueCompanies = Array.from(new Set(
+      (networkUsers || [])
+        .map(u => (u.company as string)?.trim())
+        .filter(c => c && c.length >= 2)
+    ));
+
+    const { data: existingConfigs } = await supabase
+      .from("company_ats_config")
+      .select("company_name");
+
+    const existingNamesSet = new Set((existingConfigs || []).map(c => c.company_name.toLowerCase().trim()));
+    const unseededCompanies = uniqueCompanies.filter(c => !existingNamesSet.has(c.toLowerCase().trim()));
+
+    if (unseededCompanies.length > 0) {
+      console.log(`[scrape-network-and-competitors] Auto-seeding ${unseededCompanies.length} pioneer companies...`);
+      const { discoverAts } = await import("@/lib/ats-discovery");
+      for (const comp of unseededCompanies.slice(0, 5)) {
+        try {
+          const ats = await discoverAts(comp);
+          if (ats && ats.provider && ats.provider !== "none") {
+            await supabase.from("company_ats_config").upsert({
+              company_name: comp,
+              provider: ats.provider,
+              board_token_or_url: ats.board,
+              scrape_notes: "Auto-discovered pioneer ProxNet company"
+            }, { onConflict: "company_name" });
+          } else {
+            await supabase.from("company_ats_config").upsert({
+              company_name: comp,
+              provider: "custom",
+              board_token_or_url: `https://www.google.com/search?q=${encodeURIComponent(comp + " careers jobs")}`,
+              scrape_notes: "Pioneer company pending career portal mapping"
+            }, { onConflict: "company_name" });
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (err: any) {
+    console.warn("[scrape-network-and-competitors] Pioneer auto-seed notice:", err.message);
+  }
+
   // Step 2: Fetch all valid scrape targets from company_ats_config
   let query = supabase
     .from("company_ats_config")

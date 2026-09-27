@@ -225,10 +225,11 @@ export async function handleMorningReminders(request?: Request | null, bypassAut
           continue;
         }
 
-        // Check if initial message was sent >= 24 hours ago
+        // Check if initial message was sent >= 24 hours ago and <= 300 hours ago
+        // Stop nudging once the referral message waits for more than 300 hours
         const initialTimestamp = new Date(openingMsg.created_at).getTime();
         const hoursSinceInitial = (now - initialTimestamp) / (1000 * 60 * 60);
-        if (hoursSinceInitial < 24) {
+        if (hoursSinceInitial < 24 || hoursSinceInitial > 300) {
           continue;
         }
 
