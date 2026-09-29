@@ -73,8 +73,8 @@ export function DiscoverCard({
   const competitorJobs: DiscoverJobItem[] = jobsBundle?.competitorJobs || [];
   const competitorNames: string[] = jobsBundle?.competitorNames || [];
 
-  // Drag stamp opacity calculation
-  const celebrateOpacity = Math.min(1, Math.max(0, dragOffset / 75));
+  // Drag stamp opacity calculation (purely for navigation feedback)
+  const prevOpacity = Math.min(1, Math.max(0, dragOffset / 75));
   const nextOpacity = Math.min(1, Math.max(0, -dragOffset / 75));
 
   return (
@@ -85,14 +85,14 @@ export function DiscoverCard({
         boxShadow: "0 20px 40px -15px rgba(0,0,0,0.15), 0 0 1px 1px rgba(0,0,0,0.05)",
       }}
     >
-      {/* ── Visual Stamp Overlays on Swipe Drag ── */}
-      {celebrateOpacity > 0 && (
+      {/* ── Visual Stamp Overlays on Swipe Drag (Navigation Only) ── */}
+      {prevOpacity > 0 && (
         <div
-          className="absolute top-6 left-6 z-30 pointer-events-none transform -rotate-12 border-3 border-amber-500 rounded-xl px-4 py-1.5 bg-amber-500/20 backdrop-blur-xs shadow-lg transition-opacity"
-          style={{ opacity: celebrateOpacity }}
+          className="absolute top-6 left-6 z-30 pointer-events-none transform -rotate-12 border-3 border-zinc-500 rounded-xl px-4 py-1.5 bg-zinc-500/20 backdrop-blur-xs shadow-lg transition-opacity"
+          style={{ opacity: prevOpacity }}
         >
-          <span className="text-amber-500 dark:text-amber-400 font-black tracking-wider text-xl uppercase flex items-center gap-1.5">
-            🎉 CELEBRATE
+          <span className="text-zinc-600 dark:text-zinc-300 font-black tracking-wider text-xl uppercase flex items-center gap-1.5">
+            ⬅ PREV
           </span>
         </div>
       )}

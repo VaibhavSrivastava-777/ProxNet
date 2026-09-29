@@ -73,9 +73,6 @@ export function SwipeCardStack({
       } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
         e.preventDefault();
         advancePrev();
-      } else if (e.key === "c" || e.key === "C") {
-        e.preventDefault();
-        triggerCelebrate();
       } else if (e.key === " " || e.key === "Enter") {
         if (topProfile) {
           e.preventDefault();
@@ -119,13 +116,12 @@ export function SwipeCardStack({
     if (!isDragging) return;
     setIsDragging(false);
 
-    if (dragOffset > SWIPE_THRESHOLD) {
-      // Swiping right: Celebrate & move to next
-      triggerCelebrate();
+    if (dragOffset < -SWIPE_THRESHOLD) {
+      // Swiping left: advance to next profile in continuous carousel
       advanceNext();
-    } else if (dragOffset < -SWIPE_THRESHOLD) {
-      // Swiping left: simply move to next profile without filtering
-      advanceNext();
+    } else if (dragOffset > SWIPE_THRESHOLD) {
+      // Swiping right: navigate to previous profile in continuous carousel
+      advancePrev();
     } else {
       setDragOffset(0);
     }
@@ -149,11 +145,12 @@ export function SwipeCardStack({
     if (!isDragging) return;
     setIsDragging(false);
 
-    if (dragOffset > SWIPE_THRESHOLD) {
-      triggerCelebrate();
+    if (dragOffset < -SWIPE_THRESHOLD) {
+      // Dragging left: advance to next profile
       advanceNext();
-    } else if (dragOffset < -SWIPE_THRESHOLD) {
-      advanceNext();
+    } else if (dragOffset > SWIPE_THRESHOLD) {
+      // Dragging right: advance to previous profile
+      advancePrev();
     } else {
       setDragOffset(0);
     }
