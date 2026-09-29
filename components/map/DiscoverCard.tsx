@@ -74,8 +74,8 @@ export function DiscoverCard({
   const competitorNames: string[] = jobsBundle?.competitorNames || [];
 
   // Drag stamp opacity calculation (purely for navigation feedback)
-  const prevOpacity = Math.min(1, Math.max(0, dragOffset / 75));
-  const nextOpacity = Math.min(1, Math.max(0, -dragOffset / 75));
+  const prevOpacity = Math.min(1, Math.max(0, -dragOffset / 75));
+  const nextOpacity = Math.min(1, Math.max(0, dragOffset / 75));
 
   return (
     <div

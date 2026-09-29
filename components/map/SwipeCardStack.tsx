@@ -24,11 +24,20 @@ export function SwipeCardStack({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [transitioning, setTransitioning] = useState<"next" | "celebrate" | null>(null);
+  const [transitioning, setTransitioning] = useState<"next" | "prev" | null>(null);
 
   const startXRef = useRef(0);
   const startYRef = useRef(0);
   const isHorizontalScrollRef = useRef<boolean | null>(null);
+  const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const total = profiles.length;
   // Get active 3 profiles with wrap-around so stack is always full
@@ -45,16 +54,23 @@ export function SwipeCardStack({
   const advanceNext = useCallback(() => {
     if (transitioning || total === 0) return;
     setTransitioning("next");
-    setTimeout(() => {
+    setDragOffset(0);
+    if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current);
+    transitionTimeoutRef.current = setTimeout(() => {
       setTransitioning(null);
-      setDragOffset(0);
       setCurrentIndex((prev) => (prev + 1) % total);
-    }, 240);
+    }, 200);
   }, [transitioning, total]);
 
   const advancePrev = useCallback(() => {
     if (transitioning || total === 0) return;
-    setCurrentIndex((prev) => (prev - 1 + total) % total);
+    setTransitioning("prev");
+    setDragOffset(0);
+    if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current);
+    transitionTimeoutRef.current = setTimeout(() => {
+      setTransitioning(null);
+      setCurrentIndex((prev) => (prev - 1 + total) % total);
+    }, 200);
   }, [transitioning, total]);
 
   const triggerCelebrate = useCallback(() => {
@@ -83,11 +99,12 @@ export function SwipeCardStack({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [advanceNext, advancePrev, triggerCelebrate, topProfile, onOpenDetails]);
+  }, [advanceNext, advancePrev, topProfile, onOpenDetails]);
 
   // Touch Handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     if (transitioning || !topProfile) return;
+    if ((e.target as HTMLElement)?.closest("button, a, select, input")) return;
     const touch = e.touches[0];
     startXRef.current = touch.clientX;
     startYRef.current = touch.clientY;
@@ -117,11 +134,11 @@ export function SwipeCardStack({
     setIsDragging(false);
 
     if (dragOffset < -SWIPE_THRESHOLD) {
-      // Swiping left: advance to next profile in continuous carousel
-      advanceNext();
-    } else if (dragOffset > SWIPE_THRESHOLD) {
-      // Swiping right: navigate to previous profile in continuous carousel
+      // Swiping left: navigate to previous profile in circular loop
       advancePrev();
+    } else if (dragOffset > SWIPE_THRESHOLD) {
+      // Swiping right: navigate to next profile in circular loop
+      advanceNext();
     } else {
       setDragOffset(0);
     }
@@ -146,11 +163,11 @@ export function SwipeCardStack({
     setIsDragging(false);
 
     if (dragOffset < -SWIPE_THRESHOLD) {
-      // Dragging left: advance to next profile
-      advanceNext();
-    } else if (dragOffset > SWIPE_THRESHOLD) {
-      // Dragging right: advance to previous profile
+      // Dragging left: navigate to previous profile
       advancePrev();
+    } else if (dragOffset > SWIPE_THRESHOLD) {
+      // Dragging right: navigate to next profile
+      advanceNext();
     } else {
       setDragOffset(0);
     }
@@ -181,24 +198,30 @@ export function SwipeCardStack({
           let transition =
             isDragging && isTop
               ? "none"
-              : "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease";
+              : "transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease";
 
           if (isTop) {
-            if (transitioning) {
+            if (transitioning === "prev") {
               transform = "translate3d(-105%, 15px, 0) rotate(-15deg)";
               opacity = 0;
+            } else if (transitioning === "next") {
+              transform = "translate3d(105%, 15px, 0) rotate(15deg)";
+              opacity = 0;
+            } else if (isDragging) {
+              const rot = Math.max(-12, Math.min(12, dragOffset * 0.05));
+              transform = `translate3d(${dragOffset}px, ${Math.abs(dragOffset) * 0.03}px, 0) rotate(${rot}deg)`;
             } else {
-              const rot = dragOffset * 0.06;
-              transform = `translate3d(${dragOffset}px, ${Math.abs(dragOffset) * 0.05}px, 0) rotate(${rot}deg)`;
+              transform = "translate3d(0, 0, 0) rotate(0deg)";
+              opacity = 1;
             }
           } else if (isSecond) {
-            const progress = Math.min(1, Math.abs(dragOffset) / 120);
+            const progress = transitioning ? 1 : Math.min(1, Math.abs(dragOffset) / 120);
             const scale = 0.95 + 0.05 * progress;
             const translateY = 10 - 10 * progress;
             transform = `scale(${scale}) translateY(${translateY}px)`;
             opacity = 0.85 + 0.15 * progress;
           } else if (isThird) {
-            const progress = Math.min(1, Math.abs(dragOffset) / 120);
+            const progress = transitioning ? 1 : Math.min(1, Math.abs(dragOffset) / 120);
             const scale = 0.9 + 0.05 * progress;
             const translateY = 20 - 10 * progress;
             transform = `scale(${scale}) translateY(${translateY}px)`;
