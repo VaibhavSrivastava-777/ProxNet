@@ -150,13 +150,15 @@ export function QuestionForm({
     }
   }, [body]);
 
-  // Focus on mount
+  // Focus on mount (only when fresh without pre-filled template message to avoid popping mobile keyboard and hiding send button)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 150);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!initialMsg) {
+      const timer = setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [initialMsg]);
 
   useEffect(() => {
     if (message) {
@@ -499,7 +501,7 @@ export function QuestionForm({
       )}
 
       {/* ── 4. Bottom Send Toolbar ── */}
-      <div className="flex items-center justify-between pt-2 border-t border-[var(--color-border-light)] shrink-0 gap-3">
+      <div className="sticky bottom-0 bg-[var(--color-surface)] flex items-center justify-between pt-3 pb-3 px-1 border-t border-[var(--color-border-light)] shrink-0 gap-3 z-10 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
         <div className="text-xs text-[var(--color-text-tertiary)] truncate">
           {targetUser ? (
             <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
@@ -516,7 +518,7 @@ export function QuestionForm({
         <button
           type="submit"
           disabled={loading || !body.trim()}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm bg-[var(--color-primary)] text-white hover:opacity-95 active:scale-95 transition-all shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-none shrink-0"
+          className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full font-bold text-sm bg-[var(--color-primary)] text-white hover:opacity-95 active:scale-95 transition-all shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-none shrink-0"
         >
           {loading ? (
             <>

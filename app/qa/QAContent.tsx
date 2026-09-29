@@ -197,11 +197,11 @@ export function QAContent({ initialTab }: QAContentProps) {
           <div className="mx-auto max-w-4xl p-3 md:p-4 animate-fadeIn flex flex-col gap-[0.75rem] pb-[2rem]">
             {formOpen && (
               <div
-                className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm animate-fadeIn"
+                className="fixed inset-0 z-[1100] flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 pb-safe backdrop-blur-sm animate-fadeIn"
                 onClick={() => setFormOpen(false)}
               >
                 <div
-                  className="bg-[var(--color-surface)] w-full sm:max-w-xl rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] flex flex-col max-h-[92dvh] overflow-hidden animate-slideUp sm:animate-scaleIn"
+                  className="bg-[var(--color-surface)] w-full sm:max-w-xl rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] flex flex-col max-h-[92dvh] overflow-hidden animate-slideUp sm:animate-scaleIn pb-2 sm:pb-0"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {/* Mobile Grab Handle */}

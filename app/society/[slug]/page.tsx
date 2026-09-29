@@ -371,7 +371,7 @@ export default function SocietyYearbookPage({ params }: PageProps) {
           person={selectedMember}
           onClose={() => setSelectedMember(null)}
           onStartChat={(personId) => {
-            window.location.href = `/?chatWith=${personId}`;
+            window.location.href = `/network?userId=${encodeURIComponent(personId)}`;
           }}
         />
       )}

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { RechargeModal } from "@/components/RechargeModal";
 import { ProximityCardModal } from "@/components/profile/ProximityCardModal";
+import { QuestionForm } from "@/components/qa/QuestionForm";
 
 interface Message {
   id?: string;
@@ -38,8 +39,9 @@ function AIChatInner() {
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [showScroll, setShowScroll] = useState(false);
 
-  // Proximity Card View directly within AI chat
+  // Proximity Card & Direct Chat View directly within AI chat
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
+  const [chatTarget, setChatTarget] = useState<any | null>(null);
   const [loadingPersonId, setLoadingPersonId] = useState<string | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any | null>(null);
 
@@ -629,11 +631,58 @@ function AIChatInner() {
           person={selectedPerson}
           currentUserProfile={currentUserProfile}
           onClose={() => setSelectedPerson(null)}
-          onStartChat={() => {
+          onStartChat={(person) => {
+            const target = person || selectedPerson;
             setSelectedPerson(null);
-            router.push(`/qa?tab=network`);
+            setChatTarget(target);
           }}
         />
+      )}
+
+      {/* Direct Message Dialog from ProxNet AI */}
+      {chatTarget && (
+        <div
+          className="fixed inset-0 z-[1100] flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 pb-safe backdrop-blur-sm animate-fadeIn"
+          onClick={() => setChatTarget(null)}
+        >
+          <div
+            className="bg-[var(--color-surface)] w-full sm:max-w-xl rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] flex flex-col max-h-[92dvh] overflow-hidden animate-slideUp sm:animate-scaleIn pb-2 sm:pb-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-[var(--color-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
+            <div className="flex justify-between items-center px-4 py-3 sm:px-5 sm:py-3.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50 shrink-0">
+              <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0">
+                Direct Message
+              </h3>
+              <button
+                onClick={() => setChatTarget(null)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors border-none bg-transparent cursor-pointer"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <QuestionForm
+                targetUser={{
+                  id: chatTarget.id,
+                  job_title: chatTarget.job_title,
+                  company: chatTarget.company,
+                }}
+                initialMsg={
+                  currentUserProfile?.company &&
+                  chatTarget?.company &&
+                  currentUserProfile.company.trim().toLowerCase() === chatTarget.company.trim().toLowerCase()
+                    ? `Hi! I noticed we both work at ${chatTarget.company} and are nearby in the area. Would love to connect and chat!`
+                    : `Hi! I noticed we're professional neighbors in the area and you work as a ${chatTarget.job_title} at ${chatTarget.company}. Would love to connect and chat!`
+                }
+                onPosted={() => {
+                  setTimeout(() => setChatTarget(null), 1500);
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       <RechargeModal
