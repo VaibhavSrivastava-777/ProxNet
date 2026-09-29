@@ -83,13 +83,73 @@ export async function POST(request: Request) {
       body: message.trim()
     });
 
-    // Fetch context
-    const { data: usersData } = await supabase.from("users").select("id, company, job_title").eq("is_active", true).limit(100);
-    const { data: jobsData } = await supabase.from("jobs").select("role, company").limit(50);
-    const { data: qData } = await supabase.from("questions").select("body").eq("type", "forum").limit(20);
+    // Fetch context: all active network professionals
+    const { data: usersData } = await supabase
+      .from("users")
+      .select("id, company, job_title, about, professional_bio, tags, profile_digest")
+      .eq("is_active", true)
+      .not("company", "is", null);
 
-    const safeUsers = usersData?.filter(u => u.company && u.job_title) || [];
-    const safeJobs = jobsData?.filter(j => j.company && j.role) || [];
+    const { data: jobsData } = await supabase
+      .from("scraped_jobs")
+      .select("id, title, company, location")
+      .order("created_at", { ascending: false })
+      .limit(60);
+
+    const { data: qData } = await supabase
+      .from("questions")
+      .select("body")
+      .eq("type", "forum")
+      .order("created_at", { ascending: false })
+      .limit(15);
+
+    const msgLower = (message || "").toLowerCase();
+
+    // Map users and prioritize relevance to the user's specific query keywords
+    const safeUsers = (usersData || [])
+      .filter((u: any) => u.company && u.job_title && u.id !== user.id)
+      .map((u: any) => {
+        const comp = u.company.trim();
+        const title = u.job_title.trim();
+        const digest = u.profile_digest || {};
+        return {
+          id: u.id,
+          company: comp,
+          job_title: title,
+          about: u.about || u.professional_bio || "",
+          skills: digest.help_offers || u.tags || [],
+        };
+      });
+
+    // Helper to test if a term appears as a distinct word in the user message
+    const matchesQueryWord = (term: string) => {
+      const clean = term.trim().toLowerCase();
+      if (!clean) return false;
+      const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i").test(msgLower);
+    };
+
+    // Prioritize users whose company, title, or skills match keywords in user message
+    safeUsers.sort((a: any, b: any) => {
+      const aCompMatch = matchesQueryWord(a.company);
+      const bCompMatch = matchesQueryWord(b.company);
+      if (aCompMatch && !bCompMatch) return -1;
+      if (!aCompMatch && bCompMatch) return 1;
+
+      const aTitleMatch = matchesQueryWord(a.job_title);
+      const bTitleMatch = matchesQueryWord(b.job_title);
+      if (aTitleMatch && !bTitleMatch) return -1;
+      if (!aTitleMatch && bTitleMatch) return 1;
+
+      return 0;
+    });
+
+    const safeJobs = (jobsData || []).map((j: any) => ({
+      id: j.id,
+      role: j.title,
+      company: j.company,
+      location: j.location || "Nearby"
+    }));
 
     const contextStr = `
 Users nearby: ${JSON.stringify(safeUsers)}
@@ -108,22 +168,26 @@ About: ${user.about || "Not provided"}
 CONTEXT:
 ${contextStr}
 
-RULES:
-1. Be helpful, professional, and slightly more explicit. Do not be overly terse or brief, but don't be excessively verbose either.
-2. Provide direct answers, listing the matching professionals, their job titles, and their companies. Tell the user how they can initiate a conversation.
-3. Mention approximate distance/radius (e.g., "living in less than 1 km radius" or "nearby") to emphasize the local aspect of the platform.
-4. Offer the next expected step or action at the end of your response, such as asking if the user would like you to draft/initiate the first message for them.
-5. NEVER reveal exact real names or precise locations of other users.
-6. When suggesting a professional, ALWAYS provide a markdown link using their designation and company as the text, and ALWAYS provide a reason why they are a good match.
-   Format the link exactly as: [Job Title @ Company](/qa?userId=ID&company=COMPANY&title=TITLE) (Replace ID, COMPANY, and TITLE with exact context values from Users nearby. URL encode them).
-7. If the user asks for connections, write a helpful response introducing the relevant matches, include the markdown links for each along with the reason for matching, and offer a next expected action.
+UX & USABILITY PRINCIPLES (CRITICAL):
+1. ZERO FLUFF & MAXIMUM SCANNABILITY: Keep answers concise, clear, and structured. Do NOT write long conversational introductions, redundant disclaimers, or paragraphs of preamble.
+2. ACCURACY & COMPLETENESS: Search "Users nearby" carefully. If a user asks about a specific company (e.g. Eclerx), check all members and accurately acknowledge if someone from that company is present.
+3. PROXIMITY CARD LINKS: When suggesting a professional, ALWAYS provide a direct link to their Proximity Card View so the user can easily view their profile and initiate a conversation.
+   Format each suggested professional cleanly like this:
+   - **[Job Title @ Company](/network?userId=ID)**
+     Reason: [1 punchy sentence explaining their relevant background or why to connect]
+     [👀 View Proximity Card](/network?userId=ID)
+   (Replace ID with the person's exact id from Users nearby).
+4. PRIVACY: NEVER reveal real names or private personal addresses. Only refer to professionals by their Job Title @ Company, approximate radius ("nearby" / "within 2 km"), and anonymized background.
+5. SHORT ACTIONABLE CLOSING: Finish with a single short, helpful sentence offering next steps (e.g., "Would you like me to draft an introductory message for you?").
 
-Example response format when asked for matches:
-"Based on your nearby network, I found a couple of relevant professionals:
-- [Regional Manager @ HDFC Bank](/qa?userId=...&company=...&title=...) - This professional's background in regional banking operations aligns well with your interest in finance.
-- [Director Wealth @ Axis Bank](/qa?userId=...&company=...&title=...) - Their leadership role in wealth management could provide valuable strategic insights.
+Example response format:
+"I found a relevant professional nearby:
 
-Would you like me to initiate a conversation with either of them?"`;
+- **[Senior Data Scientist @ Eclerx](/network?userId=...)**
+  Specializes in predictive modeling and analytics workflows.
+  [👀 View Proximity Card](/network?userId=...)
+
+Would you like me to draft an intro note?"`;
 
     const formattedHistory = (history || []).map((h: any) => ({
       role: h.role === "user" ? "user" : "assistant",

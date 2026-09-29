@@ -23,6 +23,7 @@ export async function GET(request: Request) {
   const radius = parseInt(searchParams.get("radius") ?? "5000", 10);
   const unfiltered = searchParams.get("unfiltered") === "true";
   const tagFilter = searchParams.get("tag")?.trim().toLowerCase() || null;
+  const targetId = searchParams.get("targetId")?.trim() || null;
 
   let effectiveLat = lat;
   let effectiveLng = lng;
@@ -113,7 +114,7 @@ export async function GET(request: Request) {
       }
     }
 
-    if (effectiveUnfiltered || minDistance <= radius) {
+    if (effectiveUnfiltered || minDistance <= radius || (targetId && u.id === targetId)) {
       const digest = (u as any).profile_digest || {};
       nearbyPeople.push({
         id: u.id,
@@ -196,6 +197,13 @@ export async function GET(request: Request) {
     }
     return a.company.localeCompare(b.company);
   });
+
+  if (targetId) {
+    const targetPerson = nearbyPeople.find((p) => p.id === targetId);
+    if (targetPerson) {
+      return NextResponse.json({ person: targetPerson, people: nearbyPeople, autoExpanded });
+    }
+  }
 
   return NextResponse.json({ people: nearbyPeople, autoExpanded });
 }

@@ -955,3 +955,18 @@ input[type="range"]::-moz-range-thumb {
   animation: indeterminate 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -24px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.animate-fadeInDown {
+  animation: fadeInDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

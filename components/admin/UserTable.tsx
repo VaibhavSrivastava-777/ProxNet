@@ -8,6 +8,17 @@ import { UserForm } from "./UserForm";
 
 type FilterType = "all" | "missing_embedding" | "incomplete_profile" | "missing_locality" | "blocked";
 
+function isVectorReady(u: User): boolean {
+  if (u.has_embedding !== undefined) return Boolean(u.has_embedding);
+  if (!u.embedding) return false;
+  if (Array.isArray(u.embedding)) return u.embedding.length > 0;
+  if (typeof u.embedding === "string") {
+    const trimmed = (u.embedding as string).trim();
+    return trimmed.length > 2 && trimmed !== "[]" && trimmed !== "null";
+  }
+  return false;
+}
+
 export function UserTable() {
   const [users, setUsers] = useState<User[]>([]);
   const [query, setQuery] = useState("");
@@ -91,7 +102,7 @@ export function UserTable() {
   // Client-side filtering on current page
   const filteredUsers = users.filter((u) => {
     if (activeFilter === "missing_embedding") {
-      return !u.embedding || (Array.isArray(u.embedding) && u.embedding.length === 0);
+      return !isVectorReady(u);
     }
     if (activeFilter === "incomplete_profile") {
       return !u.full_name?.trim() || !u.company?.trim() || !u.job_title?.trim() || !u.email?.trim();
@@ -224,7 +235,7 @@ export function UserTable() {
                   </tr>
                 ) : (
                   filteredUsers.map((u) => {
-                    const hasEmbedding = Array.isArray(u.embedding) && u.embedding.length > 0;
+                    const hasEmbedding = isVectorReady(u);
                     const isProfileComplete = !!(u.full_name?.trim() && u.company?.trim() && u.job_title?.trim() && u.email?.trim());
                     const locality = u.home_name || u.office_name || (u.home_lat ? "GPS Coordinate" : "None");
 

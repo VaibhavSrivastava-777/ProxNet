@@ -38,7 +38,8 @@ export interface User {
   invited_by: string | null;
   network_points: number;
   anonymous_name: string | null;
-  embedding: number[] | null;
+  embedding: number[] | string | null;
+  has_embedding?: boolean;
   wallet: number;
   tags: string[];
   help_offers?: string[];

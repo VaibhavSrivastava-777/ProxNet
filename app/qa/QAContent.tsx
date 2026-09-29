@@ -7,6 +7,8 @@ import { LocalForumFeed } from "@/components/home/LocalForumFeed";
 import { ProximityMap } from "@/components/map/ProximityMap";
 import { GrowClient } from "@/components/grow/GrowClient";
 import { TabValueTransition, isFirstTimeScreenOpening } from "@/components/common/TabValueTransition";
+import { useStreakTracker } from "@/lib/hooks/useStreakTracker";
+import { StreakGraffitiBanner } from "@/components/streak/StreakGraffitiBanner";
 import { useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -43,6 +45,9 @@ export function QAContent({ initialTab }: QAContentProps) {
 
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  // Diligence Streak tracking & Graffiti banner
+  const { streakData, showBanner, dismissBanner } = useStreakTracker();
 
   // Update visited tabs whenever activeTab changes
   useEffect(() => {
@@ -127,6 +132,14 @@ export function QAContent({ initialTab }: QAContentProps) {
         minDisplayDurationMs={5000}
         onTransitionComplete={() => setIsTransitioning(false)}
       />
+
+      {/* ── Daily Diligence Streak Graffiti Banner ── */}
+      {!isTransitioning && showBanner && (
+        <StreakGraffitiBanner
+          streakData={streakData}
+          onDismiss={dismissBanner}
+        />
+      )}
 
       {/* ── 1. Jobs Tab ── */}
       {visitedTabs.has("/jobs") && (

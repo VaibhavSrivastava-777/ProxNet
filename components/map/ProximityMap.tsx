@@ -11,6 +11,7 @@ import { CompanyLogo } from "@/components/qa/QuestionList";
 import { MicroStatusBeacon } from "./MicroStatusBeacon";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
 import { ProximityCardModal } from "@/components/profile/ProximityCardModal";
+import { NetworkDiscoverView } from "./NetworkDiscoverView";
 
 const ProximityMapInner = dynamic(
   () => import("./ProximityMapInner").then((m) => m.ProximityMapInner),
@@ -184,7 +185,7 @@ export function ProximityMap() {
   const [locationMode, setLocationMode] = useState<"home" | "office">("home");
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [viewMode, setViewMode] = useState<"discover" | "list" | "map">("discover");
   const [tagFilter, setTagFilter] = useState("");
   
   // Follows & profile modal states
@@ -347,6 +348,26 @@ export function ProximityMap() {
   let filteredPeople = companyParam
     ? people.filter((p: any) => p.company?.toLowerCase() === companyParam.toLowerCase())
     : people;
+
+  // Deep-link auto open Proximity Card for specified user (e.g. from ProxNet AI / direct links)
+  useEffect(() => {
+    const targetUserId = searchParams.get("userId") || searchParams.get("viewUser");
+    if (!targetUserId) return;
+
+    const found = people.find((p: any) => p.id === targetUserId);
+    if (found) {
+      setSelectedPerson(found);
+      return;
+    }
+
+    fetch(`/api/proximity/people?targetId=${encodeURIComponent(targetUserId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const p = data.person || (data.people && data.people.find((x: any) => x.id === targetUserId)) || data.people?.[0];
+        if (p) setSelectedPerson(p);
+      })
+      .catch(() => {});
+  }, [searchParams, people]);
 
 
   // Live active beacons tracking
@@ -676,8 +697,24 @@ export function ProximityMap() {
             </div>
           </div>
 
-          {/* List / Map View Mode Toggle (Icon-only) */}
+          {/* Discover / List / Map View Mode Toggle (Icon-only) */}
           <div className="flex bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] p-0.5 rounded-lg shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode("discover")}
+              className={`p-1.5 rounded-md transition-all border-0 cursor-pointer flex items-center justify-center ${
+                viewMode === "discover"
+                  ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-xs"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
+              }`}
+              title="Discover Cards (Swipe View)"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <path d="M12 8v8" />
+                <path d="M8 12h8" />
+              </svg>
+            </button>
             <button
               type="button"
               onClick={() => setViewMode("list")}
@@ -808,7 +845,19 @@ export function ProximityMap() {
       )}
 
       {/* ── 2. View Mode Content Pane ── */}
-      {viewMode === "list" ? (
+      {viewMode === "discover" ? (
+        <NetworkDiscoverView
+          people={sortedPeople}
+          profile={profile}
+          center={center}
+          loading={loading && people.length === 0}
+          onStartChat={openDirectChat}
+          onFollowToggle={handleFollowToggle}
+          onSwitchViewMode={(mode) => setViewMode(mode)}
+          onExpandRadius={() => setFilter2km(false)}
+          is2kmFilterActive={filter2km}
+        />
+      ) : viewMode === "list" ? (
         
         /* ── LIST VIEW: scrollable nearby people sorted by similarity ── */
         <div className="flex flex-col gap-3 min-h-[300px]">

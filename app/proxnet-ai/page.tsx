@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { RechargeModal } from "@/components/RechargeModal";
+import { ProximityCardModal } from "@/components/profile/ProximityCardModal";
 
 interface Message {
   id?: string;
@@ -36,6 +37,11 @@ function AIChatInner() {
   const [wallet, setWallet] = useState<number | null>(null);
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [showScroll, setShowScroll] = useState(false);
+
+  // Proximity Card View directly within AI chat
+  const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
+  const [loadingPersonId, setLoadingPersonId] = useState<string | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -108,6 +114,12 @@ function AIChatInner() {
 
   useEffect(() => {
     async function loadHistory() {
+      try {
+        const cached = sessionStorage.getItem("proxnet_profile_cache");
+        if (cached) setCurrentUserProfile(JSON.parse(cached));
+      } catch {}
+      fetch("/api/profile").then((r) => r.json()).then((data) => setCurrentUserProfile(data)).catch(() => {});
+
       try {
         const res = await fetch("/api/ai/chat");
         if (res.ok) {
@@ -395,7 +407,91 @@ function AIChatInner() {
                             <p className="m-0 select-text leading-normal">{m.content}</p>
                           ) : (
                             <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0 select-text font-normal text-[var(--whatsapp-text)]">
-                              <ReactMarkdown>{m.content}</ReactMarkdown>
+                              <ReactMarkdown
+                                components={{
+                                  a: ({ href, children }) => {
+                                    const hrefStr = href || "";
+                                    const isProximityLink = hrefStr.includes("userId=");
+                                    if (isProximityLink) {
+                                      let uId = "";
+                                      try {
+                                        const parsed = new URL(hrefStr, "https://proxnet.in");
+                                        uId = parsed.searchParams.get("userId") || "";
+                                      } catch {
+                                        const match = hrefStr.match(/userId=([^&]+)/);
+                                        if (match) uId = decodeURIComponent(match[1]);
+                                      }
+
+                                      const textContent = Array.isArray(children)
+                                        ? children.join("")
+                                        : String(children || "");
+                                      const isCardButton =
+                                        textContent.includes("Proximity Card") ||
+                                        textContent.includes("👀");
+
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={async (e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            if (!uId) {
+                                              router.push(hrefStr);
+                                              return;
+                                            }
+                                            setLoadingPersonId(uId);
+                                            try {
+                                              const res = await fetch(
+                                                `/api/proximity/people?targetId=${encodeURIComponent(uId)}`
+                                              );
+                                              if (res.ok) {
+                                                const data = await res.json();
+                                                const p =
+                                                  data.person ||
+                                                  (data.people &&
+                                                    data.people.find((x: any) => x.id === uId)) ||
+                                                  data.people?.[0];
+                                                if (p) {
+                                                  setSelectedPerson(p);
+                                                  return;
+                                                }
+                                              }
+                                              router.push(`/network?userId=${encodeURIComponent(uId)}`);
+                                            } catch {
+                                              router.push(`/network?userId=${encodeURIComponent(uId)}`);
+                                            } finally {
+                                              setLoadingPersonId(null);
+                                            }
+                                          }}
+                                          className={
+                                            isCardButton
+                                              ? "inline-flex items-center gap-1.5 font-bold text-xs bg-[var(--color-primary)] text-white hover:brightness-110 active:scale-95 px-3 py-1.5 rounded-lg shadow-sm my-1 cursor-pointer transition-all border-none"
+                                              : "inline-flex items-center gap-1 font-semibold text-[var(--color-primary)] underline hover:opacity-80 cursor-pointer bg-transparent border-none p-0"
+                                          }
+                                        >
+                                          {loadingPersonId === uId && (
+                                            <span className="animate-spin text-[10px]">⏳</span>
+                                          )}
+                                          {children}
+                                        </button>
+                                      );
+                                    }
+
+                                    return (
+                                      <a
+                                        href={href}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[var(--color-primary)] underline hover:opacity-80"
+                                      >
+                                        {children}
+                                      </a>
+                                    );
+                                  },
+                                }}
+                              >
+                                {m.content}
+                              </ReactMarkdown>
                             </div>
                           )}
                         </div>
@@ -527,6 +623,18 @@ function AIChatInner() {
           30% { transform: translateY(-4px); opacity: 1; }
         }
       `}</style>
+
+      {selectedPerson && (
+        <ProximityCardModal
+          person={selectedPerson}
+          currentUserProfile={currentUserProfile}
+          onClose={() => setSelectedPerson(null)}
+          onStartChat={() => {
+            setSelectedPerson(null);
+            router.push(`/qa?tab=network`);
+          }}
+        />
+      )}
 
       <RechargeModal
         isOpen={showRechargeModal}

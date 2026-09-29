@@ -781,11 +781,8 @@ export async function resolveConnector(
     .select("id, full_name, company, job_title, email")
     .eq("is_active", true);
 
-  const cleanTarget = companyName.toLowerCase().trim();
   const insider = (users || []).find(u => {
-    return isSameCompany(u.company, companyName) ||
-      (u.company && cleanTarget.includes(u.company.toLowerCase().trim())) ||
-      (u.company && u.company.toLowerCase().trim().includes(cleanTarget));
+    return isSameCompany(u.company, companyName);
   });
 
   const encodedAlum = encodeURIComponent(`${companyName} "${candidateInstitute}"`);

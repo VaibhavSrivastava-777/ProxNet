@@ -33,7 +33,26 @@ export async function GET(request: Request) {
 
   const { data, count, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ users: data ?? [], total: count ?? 0, page, limit });
+
+  const formattedUsers = (data ?? []).map((u: any) => {
+    const hasEmbedding = Boolean(
+      u.embedding &&
+      (Array.isArray(u.embedding)
+        ? u.embedding.length > 0
+        : typeof u.embedding === "string"
+        ? u.embedding.trim().length > 2 && u.embedding.trim() !== "[]" && u.embedding.trim() !== "null"
+        : true)
+    );
+
+    return {
+      ...u,
+      has_embedding: hasEmbedding,
+      // Replace huge 19KB pgvector string with lightweight token so 400KB of raw floats are not sent on every table request
+      embedding: hasEmbedding ? "[VECTOR_READY]" : null,
+    };
+  });
+
+  return NextResponse.json({ users: formattedUsers, total: count ?? 0, page, limit });
 }
 
 export async function POST(request: Request) {
