@@ -73,6 +73,27 @@ export function DiscoverCard({
   const competitorJobs: DiscoverJobItem[] = jobsBundle?.competitorJobs || [];
   const competitorNames: string[] = jobsBundle?.competitorNames || [];
 
+  // Effective scrapbook entries with intelligent fallback
+  const askMeAboutList: string[] = (person.ask_me_about && person.ask_me_about.length > 0)
+    ? person.ask_me_about
+    : (person.tags && person.tags.length > 0)
+    ? person.tags.slice(0, 3).map((t: string) => t.replace(/^#+/, ""))
+    : [
+        person.job_title ? `${person.job_title} best practices` : "Tech & Product",
+        person.company ? `Work culture at ${person.company}` : "Bangalore Tech Scene",
+      ];
+
+  const helpOffersList: string[] = (person.help_offers && person.help_offers.length > 0)
+    ? person.help_offers
+    : [
+        person.company ? `Referrals & insights at ${person.company}` : "Tech advice & peer connection",
+        "Resume review & career navigation",
+      ];
+
+  const tinkeringWithList: string[] = (person.tinkering_with && person.tinkering_with.length > 0)
+    ? person.tinkering_with
+    : [];
+
   // Drag stamp opacity calculation (purely for navigation feedback)
   const prevOpacity = Math.min(1, Math.max(0, -dragOffset / 75));
   const nextOpacity = Math.min(1, Math.max(0, dragOffset / 75));
@@ -258,9 +279,7 @@ export function DiscoverCard({
         </div>
 
         {/* ── What They Can Do For You (Scrapbook Superpowers) ── */}
-        {((person.help_offers && person.help_offers.length > 0) ||
-          (person.ask_me_about && person.ask_me_about.length > 0) ||
-          (person.tinkering_with && person.tinkering_with.length > 0)) && (
+        {(askMeAboutList.length > 0 || helpOffersList.length > 0 || tinkeringWithList.length > 0) && (
           <div className="p-3.5 rounded-2xl bg-[var(--color-surface-secondary)]/70 border border-[var(--color-border-light)] space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-secondary)] flex items-center gap-1">
@@ -270,31 +289,14 @@ export function DiscoverCard({
               <span className="text-[10px] text-[var(--color-text-tertiary)]">Derived from bio</span>
             </div>
 
-            {person.help_offers && person.help_offers.length > 0 && (
+            {askMeAboutList.length > 0 && (
               <div>
-                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 block mb-1">
-                  🤝 Can help you with:
+                <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 block mb-1 flex items-center gap-1">
+                  <span>💬</span>
+                  <span>Ask me about:</span>
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {person.help_offers.map((item: string, i: number) => (
-                    <span
-                      key={i}
-                      className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20"
-                    >
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {person.ask_me_about && person.ask_me_about.length > 0 && (
-              <div>
-                <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 block mb-1">
-                  💬 Ask them about:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {person.ask_me_about.map((item: string, i: number) => (
+                  {askMeAboutList.map((item: string, i: number) => (
                     <span
                       key={i}
                       className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-indigo-500/10 text-indigo-800 dark:text-indigo-300 border border-indigo-500/20"
@@ -306,13 +308,33 @@ export function DiscoverCard({
               </div>
             )}
 
-            {person.tinkering_with && person.tinkering_with.length > 0 && (
+            {helpOffersList.length > 0 && (
               <div>
-                <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 block mb-1">
-                  🔬 Tinkering with:
+                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 block mb-1 flex items-center gap-1">
+                  <span>🤝</span>
+                  <span>Can help you with:</span>
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {person.tinkering_with.map((item: string, i: number) => (
+                  {helpOffersList.map((item: string, i: number) => (
+                    <span
+                      key={i}
+                      className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {tinkeringWithList.length > 0 && (
+              <div>
+                <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 block mb-1 flex items-center gap-1">
+                  <span>🔬</span>
+                  <span>Tinkering with:</span>
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {tinkeringWithList.map((item: string, i: number) => (
                     <span
                       key={i}
                       className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20"

@@ -351,6 +351,15 @@ export function ProximityMap() {
 
   // Deep-link auto open Proximity Card for specified user (e.g. from ProxNet AI / direct links)
   useEffect(() => {
+    const v = searchParams.get("view");
+    if (v === "list" || v === "map" || v === "discover") {
+      setViewMode(v as any);
+    } else if (v === "cards") {
+      setViewMode("discover");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     const targetUserId = searchParams.get("userId") || searchParams.get("viewUser");
     if (!targetUserId) return;
 
@@ -708,58 +717,46 @@ export function ProximityMap() {
             </div>
           </div>
 
-          {/* Discover / List / Map View Mode Toggle (Icon-only) */}
-          <div className="flex bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] p-0.5 rounded-lg shrink-0">
+          {/* View Mode Switcher: Proximity Cards / List / Map */}
+          <div className="flex bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] p-1 rounded-xl shrink-0 gap-1">
             <button
               type="button"
               onClick={() => setViewMode("discover")}
-              className={`p-1.5 rounded-md transition-all border-0 cursor-pointer flex items-center justify-center ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1.5 ${
                 viewMode === "discover"
-                  ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-xs"
+                  ? "bg-[var(--color-primary)] text-white shadow-xs"
                   : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
               }`}
-              title="Discover Cards (Swipe View)"
+              title="Proximity Cards View"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <path d="M12 8v8" />
-                <path d="M8 12h8" />
-              </svg>
+              <span>🃏</span>
+              <span className="hidden sm:inline">Cards</span>
             </button>
             <button
               type="button"
               onClick={() => setViewMode("list")}
-              className={`p-1.5 rounded-md transition-all border-0 cursor-pointer flex items-center justify-center ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1.5 ${
                 viewMode === "list"
-                  ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-xs"
+                  ? "bg-[var(--color-primary)] text-white shadow-xs"
                   : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
               }`}
               title="List View"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="8" y1="6" x2="21" y2="6" />
-                <line x1="8" y1="12" x2="21" y2="12" />
-                <line x1="8" y1="18" x2="21" y2="18" />
-                <line x1="3" y1="6" x2="3.01" y2="6" />
-                <line x1="3" y1="12" x2="3.01" y2="12" />
-                <line x1="3" y1="18" x2="3.01" y2="18" />
-              </svg>
+              <span>📋</span>
+              <span className="hidden sm:inline">List</span>
             </button>
             <button
               type="button"
               onClick={() => setViewMode("map")}
-              className={`p-1.5 rounded-md transition-all border-0 cursor-pointer flex items-center justify-center ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1.5 ${
                 viewMode === "map"
-                  ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-xs"
+                  ? "bg-[var(--color-primary)] text-white shadow-xs"
                   : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
               }`}
               title="Map View"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-                <line x1="8" y1="2" x2="8" y2="18" />
-                <line x1="16" y1="6" x2="16" y2="22" />
-              </svg>
+              <span>🗺️</span>
+              <span className="hidden sm:inline">Map</span>
             </button>
           </div>
         </div>
@@ -931,10 +928,21 @@ export function ProximityMap() {
                   </button>
                 </div>
               )}
-              <div className="flex items-center justify-between px-2 py-1">
-                <span className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">
-                  {sortedPeople.length} Professionals Found
+              <div className="flex items-center justify-between px-3 py-2 bg-[var(--color-surface-secondary)]/80 border border-[var(--color-border-light)] rounded-xl mb-1 shadow-2xs">
+                <span className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-wider flex items-center gap-1.5">
+                  <span>👥</span>
+                  <span>{sortedPeople.length} Professionals</span>
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("discover")}
+                  className="px-2.5 py-1 rounded-lg bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] font-bold text-xs cursor-pointer border-0 flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
+                  title="Switch to Proximity Card View"
+                >
+                  <span>🃏</span>
+                  <span>Proximity Card View</span>
+                  <span>→</span>
+                </button>
               </div>
               {sortedPeople.slice(0, displayLimit).map((p: any, index: number) => {
                 const isLast = index === Math.min(sortedPeople.length, displayLimit) - 1;

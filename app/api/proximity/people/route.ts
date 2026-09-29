@@ -49,7 +49,7 @@ export async function GET(request: Request) {
   // Fetch all active users with profile fields and embeddings for cosine similarity
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("id, full_name, company, job_title, about, professional_bio, tags, profile_digest, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility, embedding")
+    .select("id, full_name, company, job_title, about, professional_bio, tags, profile_digest, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility, embedding, ask_me_about, help_offers, tinkering_with, quick_chat_preference, society_name")
     .eq("is_active", true)
     .neq("id", user.id);
 
@@ -131,11 +131,11 @@ export async function GET(request: Request) {
         about: (u as any).about || null,
         professional_bio: (u as any).professional_bio || null,
         tags: u.tags || [],
-        help_offers: digest.help_offers || [],
-        tinkering_with: digest.tinkering_with || [],
-        ask_me_about: digest.ask_me_about || [],
-        quick_chat_preference: digest.quick_chat_preference || null,
-        society_name: digest.society_name || null,
+        help_offers: (Array.isArray(u.help_offers) && u.help_offers.length > 0) ? u.help_offers : (digest.help_offers || []),
+        tinkering_with: (Array.isArray(u.tinkering_with) && u.tinkering_with.length > 0) ? u.tinkering_with : (digest.tinkering_with || []),
+        ask_me_about: (Array.isArray(u.ask_me_about) && u.ask_me_about.length > 0) ? u.ask_me_about : (digest.ask_me_about || []),
+        quick_chat_preference: u.quick_chat_preference || digest.quick_chat_preference || null,
+        society_name: u.society_name || digest.society_name || null,
         visibility: u.visibility,
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
         distance: minDistance === Infinity ? null : minDistance,
@@ -184,11 +184,11 @@ export async function GET(request: Request) {
         about: (u as any).about || null,
         professional_bio: (u as any).professional_bio || null,
         tags: u.tags || [],
-        help_offers: digest.help_offers || [],
-        tinkering_with: digest.tinkering_with || [],
-        ask_me_about: digest.ask_me_about || [],
-        quick_chat_preference: digest.quick_chat_preference || null,
-        society_name: digest.society_name || null,
+        help_offers: (Array.isArray(u.help_offers) && u.help_offers.length > 0) ? u.help_offers : (digest.help_offers || []),
+        tinkering_with: (Array.isArray(u.tinkering_with) && u.tinkering_with.length > 0) ? u.tinkering_with : (digest.tinkering_with || []),
+        ask_me_about: (Array.isArray(u.ask_me_about) && u.ask_me_about.length > 0) ? u.ask_me_about : (digest.ask_me_about || []),
+        quick_chat_preference: u.quick_chat_preference || digest.quick_chat_preference || null,
+        society_name: u.society_name || digest.society_name || null,
         visibility: u.visibility,
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
         distance: minDistance === Infinity ? null : minDistance,

@@ -127,6 +127,27 @@ export function ProximityCardModal({
   const engagement = computeReasonToEngage(currentUserProfile, person);
   const distanceStr = formatDistance(person.distance);
 
+  // Effective scrapbook entries with intelligent fallback
+  const askMeAboutList: string[] = (person.ask_me_about && person.ask_me_about.length > 0)
+    ? person.ask_me_about
+    : (person.tags && person.tags.length > 0)
+    ? person.tags.slice(0, 3).map((t: string) => t.replace(/^#+/, ""))
+    : [
+        person.job_title ? `${person.job_title} best practices` : "Tech & Product",
+        person.company ? `Work culture at ${person.company}` : "Bangalore Tech Scene",
+      ];
+
+  const helpOffersList: string[] = (person.help_offers && person.help_offers.length > 0)
+    ? person.help_offers
+    : [
+        person.company ? `Referrals & insights at ${person.company}` : "Tech advice & peer connection",
+        "Resume review & career navigation",
+      ];
+
+  const tinkeringWithList: string[] = (person.tinkering_with && person.tinkering_with.length > 0)
+    ? person.tinkering_with
+    : [];
+
   const handleShare = () => {
     const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/network` : "https://www.proxnet.in/network";
     navigator.clipboard.writeText(shareUrl);
@@ -287,68 +308,62 @@ export function ProximityCardModal({
 
           {/* Neighbor Scrapbook Tags */}
           <div className="space-y-3 pt-1 border-t border-[var(--color-border-light)]">
-            {person.help_offers && person.help_offers.length > 0 && (
+            {askMeAboutList.length > 0 && (
               <div>
-                <span className="text-[11px] font-bold text-[var(--color-text-tertiary)] uppercase tracking-wider block mb-1.5">
-                  I Can Help With:
+                <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block mb-1.5 flex items-center gap-1">
+                  <span>💬</span>
+                  <span>Ask Me About:</span>
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {person.help_offers.map((offer: string, idx: number) => (
+                  {askMeAboutList.map((topic: string, idx: number) => (
                     <span
                       key={idx}
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20"
                     >
-                      🤝 {offer}
+                      {topic}
                     </span>
                   ))}
                 </div>
               </div>
             )}
 
-            {person.tinkering_with && person.tinkering_with.length > 0 && (
+            {helpOffersList.length > 0 && (
               <div>
-                <span className="text-[11px] font-bold text-[var(--color-text-tertiary)] uppercase tracking-wider block mb-1.5">
-                  Tinkering With:
+                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block mb-1.5 flex items-center gap-1">
+                  <span>🤝</span>
+                  <span>I Can Help With:</span>
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {person.tinkering_with.map((item: string, idx: number) => (
+                  {helpOffersList.map((offer: string, idx: number) => (
                     <span
                       key={idx}
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20"
                     >
-                      🛠️ {item}
+                      {offer}
                     </span>
                   ))}
                 </div>
               </div>
             )}
 
-            {person.ask_me_about && person.ask_me_about.length > 0 && (
+            {tinkeringWithList.length > 0 && (
               <div>
-                <span className="text-[11px] font-bold text-[var(--color-text-tertiary)] uppercase tracking-wider block mb-1.5">
-                  Ask Me About:
+                <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider block mb-1.5 flex items-center gap-1">
+                  <span>🛠️</span>
+                  <span>Tinkering With:</span>
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {person.ask_me_about.map((topic: string, idx: number) => (
+                  {tinkeringWithList.map((item: string, idx: number) => (
                     <span
                       key={idx}
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20"
                     >
-                      💬 {topic}
+                      {item}
                     </span>
                   ))}
                 </div>
               </div>
             )}
-
-            {/* Default state if user hasn't filled tags */}
-            {(!person.help_offers || person.help_offers.length === 0) &&
-              (!person.tinkering_with || person.tinkering_with.length === 0) &&
-              (!person.ask_me_about || person.ask_me_about.length === 0) && (
-                <div className="p-3 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-center text-xs text-[var(--color-text-secondary)]">
-                  Neighbor is active in the local proximity network. Say hi or invite them for a chai!
-                </div>
-              )}
           </div>
 
           {/* Action Buttons */}

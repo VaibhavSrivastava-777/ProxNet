@@ -13,6 +13,7 @@ import type { ConversionBlueprint } from "@/lib/jobs/deep-conversion-miner";
 import { JobInbox } from "./JobInbox";
 import { playNotificationSound } from "@/lib/sound";
 import { cleanJobTitle, isSameCompany } from "@/lib/jobs/job-filters";
+import { ProximityCardModal } from "@/components/profile/ProximityCardModal";
 
 interface SuggestedJob {
   id: string;
@@ -170,6 +171,7 @@ export function SuggestedJobs() {
   const [savingJobId, setSavingJobId] = useState<string | null>(null);
   // Option 5: Proximity Colleagues & Helpers State
   const [nearbyHelpers, setNearbyHelpers] = useState<NearbyHelper[]>(() => initialCache?.nearbyHelpers || []);
+  const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
   const router = useRouter();
 
   const handleBlueprintsFetched = (blueprints: ConversionBlueprint[], newWallet: number) => {
@@ -587,6 +589,29 @@ export function SuggestedJobs() {
     } catch (err) {
       setInviteToast(`Invite link: ${inviteUrl}`);
       setTimeout(() => setInviteToast(null), 6000);
+    }
+  };
+
+  const handlePioneerClick = (companyName: string) => {
+    const cleanCompany = (companyName || "").trim();
+    if (cleanCompany) {
+      const linkedInUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(cleanCompany)}`;
+      try {
+        window.open(linkedInUrl, "_blank", "noopener,noreferrer");
+      } catch (e) {
+        console.warn("Could not open LinkedIn directly:", e);
+      }
+    }
+
+    const code = userInviteCode || "";
+    const inviteUrl = code ? `${window.location.origin}/join/${code}?company=${encodeURIComponent(companyName)}` : `${window.location.origin}/grow`;
+    try {
+      navigator.clipboard.writeText(inviteUrl);
+      setInviteToast(`🔗 Opening LinkedIn for ${companyName}! Copied your +10 pts invite link to clipboard.`);
+      setTimeout(() => setInviteToast(null), 5000);
+    } catch (err) {
+      setInviteToast(`Opening LinkedIn for ${companyName}...`);
+      setTimeout(() => setInviteToast(null), 4000);
     }
   };
 
@@ -1142,8 +1167,9 @@ export function SuggestedJobs() {
             ) : (
               <button
                 type="button"
-                onClick={() => handleInviteColleague(heroJobItem.group.company)}
+                onClick={() => handlePioneerClick(heroJobItem.group.company)}
                 className="py-2.5 px-4 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold text-xs sm:text-sm text-center transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1"
+                title={`Open LinkedIn with ${heroJobItem.group.company} & invite a colleague for +10 credits`}
               >
                 <span>🏆 Pioneer +10 pts</span>
               </button>
@@ -1164,7 +1190,7 @@ export function SuggestedJobs() {
           <button
             type="button"
             onClick={() => {
-              router.push("/qa?tab=network");
+              router.push("/qa?tab=network&view=list");
               window.dispatchEvent(new CustomEvent("tabchange", { detail: "/network" }));
             }}
             className="text-xs font-semibold text-primary hover:underline cursor-pointer bg-transparent border-0 flex items-center gap-0.5"
@@ -1184,7 +1210,7 @@ export function SuggestedJobs() {
               <div
                 key={person.id}
                 onClick={() => {
-                  router.push(`/chat?user=${person.id}`);
+                  setSelectedPerson(person);
                 }}
                 className="p-3 sm:p-3.5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-primary/40 hover:bg-[var(--color-surface-hover)] transition-all flex items-center justify-between gap-3 cursor-pointer group shadow-2xs"
               >
@@ -1344,9 +1370,9 @@ export function SuggestedJobs() {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => handleInviteColleague(group.company)}
+                          onClick={() => handlePioneerClick(group.company)}
                           className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-[10px] font-bold hover:bg-amber-500/25 transition-colors cursor-pointer"
-                          title="No members from this company yet. Invite a colleague and earn +10 credits!"
+                          title="Open LinkedIn with this company filter & invite a colleague to earn +10 credits!"
                         >
                           Pioneer +10 pts
                         </button>
@@ -1731,12 +1757,12 @@ export function SuggestedJobs() {
                     {m.isPioneer ? (
                       <button
                         type="button"
-                        onClick={() => handleInviteColleague(m.company)}
+                        onClick={() => handlePioneerClick(m.company)}
                         className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-[11px] font-bold hover:bg-amber-500/25 transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
-                        title="No members from this company yet. Invite a colleague and earn +10 credits!"
+                        title="Open LinkedIn with this company filter & invite a colleague to earn +10 credits!"
                       >
                         <span>🏆 Pioneer +10 pts</span>
-                        <span className="text-[10px] font-normal text-amber-600 dark:text-amber-400">• Invite Colleague</span>
+                        <span className="text-[10px] font-normal text-amber-600 dark:text-amber-400">• Open LinkedIn ↗</span>
                       </button>
                     ) : (
                       <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
@@ -2128,9 +2154,12 @@ export function SuggestedJobs() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setActiveCompanyModal(group)}
+                    onClick={() => {
+                      handlePioneerClick(group.company);
+                      setActiveCompanyModal(group);
+                    }}
                     className="btn btn-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-lg border-0 shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                    title={`View ${group.jobs.length} opening${group.jobs.length > 1 ? "s" : ""} & claim +10 pts Pioneer Bounty`}
+                    title={`Open LinkedIn with ${group.company} & claim +10 pts Pioneer Bounty`}
                   >
                     <span>🏆</span> Pioneer +10 pts
                   </button>
@@ -2201,17 +2230,27 @@ export function SuggestedJobs() {
                         <span className="badge text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-bold rounded">Unclaimed</span>
                       </div>
                       <p className="text-[11px] text-[var(--color-text-secondary)] m-0">
-                        No insiders from {activeCompanyModal.company} on ProxNet yet. Invite a colleague with your invite link and claim +10 credits when they join!
+                        No insiders from {activeCompanyModal.company} on ProxNet yet. Search colleagues on LinkedIn with this company filter and claim +10 credits when they join!
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleInviteColleague(activeCompanyModal.company)}
-                    className="btn btn-sm bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg border-0 cursor-pointer shadow-xs flex items-center gap-1.5 shrink-0 self-start sm:self-center"
-                  >
-                    <span>🎯</span> Invite Colleague
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                    <button
+                      type="button"
+                      onClick={() => handlePioneerClick(activeCompanyModal.company)}
+                      className="btn btn-sm bg-[#0077b5] hover:bg-[#005885] text-white font-bold text-xs px-3 py-1.5 rounded-lg border-0 cursor-pointer shadow-xs flex items-center gap-1.5"
+                      title="Open LinkedIn with company filter"
+                    >
+                      <span>🔍</span> LinkedIn ↗
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInviteColleague(activeCompanyModal.company)}
+                      className="btn btn-sm bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg border-0 cursor-pointer shadow-xs flex items-center gap-1.5"
+                    >
+                      <span>🎯</span> Invite Colleague
+                    </button>
+                  </div>
                 </div>
               );
             })()}
@@ -2599,6 +2638,37 @@ export function SuggestedJobs() {
           if (el) el.click();
         }}
       />
+
+      {/* Proximity Card Detail Modal */}
+      {selectedPerson && (
+        <ProximityCardModal
+          person={selectedPerson}
+          currentUserProfile={{
+            company: currentUserCompany,
+          }}
+          onClose={() => setSelectedPerson(null)}
+          onStartChat={(p) => {
+            setSelectedPerson(null);
+            const matchingComp = companies.find(
+              (c) => c.company.toLowerCase().trim() === (p.company || "").toLowerCase().trim()
+            );
+            if (matchingComp && matchingComp.jobs.length > 0) {
+              handleAskReferral(matchingComp.jobs[0], matchingComp);
+            } else {
+              router.push(`/qa?tab=network&userId=${encodeURIComponent(p.id)}`);
+              window.dispatchEvent(new CustomEvent("tabchange", { detail: "/network" }));
+            }
+          }}
+          onFollowToggle={(e, p) => {
+            setSelectedPerson((prev: any) => prev ? { ...prev, is_followed: !prev.is_followed } : null);
+            fetch(`/api/proximity/follow`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ targetUserId: p.id }),
+            }).catch(() => {});
+          }}
+        />
+      )}
 
     </div>
   );
