@@ -126,15 +126,18 @@ export function StreakGraffitiBanner({
     <div
       role="alert"
       aria-live="polite"
-      className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[94%] max-w-lg animate-fadeInDown"
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
-      onTouchStart={() => setIsPaused(true)}
-      onTouchEnd={() => setIsPaused(false)}
+      className="fixed inset-x-0 top-4 z-[100] flex justify-center px-3 pointer-events-none"
     >
       <div
-        className={`relative overflow-hidden rounded-3xl bg-gradient-to-r ${themeStyles.gradientBg} p-1 text-white ${themeStyles.glow} border border-white/25 backdrop-blur-xl transition-all duration-300 hover:scale-[1.01]`}
+        className="w-full max-w-lg pointer-events-auto animate-fadeIn"
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+        onTouchStart={() => setIsPaused(true)}
+        onTouchEnd={() => setIsPaused(false)}
       >
+        <div
+          className={`relative overflow-hidden rounded-3xl bg-gradient-to-r ${themeStyles.gradientBg} p-1 text-white ${themeStyles.glow} border border-white/25 backdrop-blur-xl transition-all duration-300 hover:scale-[1.01]`}
+        >
         {/* Graffiti Splatter Background Texture */}
         <div className="absolute -top-12 -right-12 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
         <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-black/20 rounded-full blur-xl pointer-events-none" />
@@ -226,6 +229,7 @@ export function StreakGraffitiBanner({
             />
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

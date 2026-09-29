@@ -118,31 +118,37 @@ export function NetworkDiscoverView({
         </span>
       </div>
 
-      {/* ── Floating Graffiti Celebration Toast Banner ── */}
+      {/* ── Center Mid Floating Graffiti Celebration Toast Banner ── */}
       {graffitiCelebration && (
-        <div className="fixed top-18 z-50 left-1/2 -translate-x-1/2 w-[92%] max-w-md px-2 animate-fadeInDown">
-          <div className="bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 text-white p-3.5 sm:p-4 rounded-2xl shadow-2xl border-2 border-white/30 flex items-center gap-3 backdrop-blur-md">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-2xl shrink-0 shadow-inner">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setGraffitiCelebration(null)}
+        >
+          <div
+            className="w-[94%] max-w-md bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 text-white p-4 sm:p-5 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] border-2 border-white/30 flex items-center gap-3.5 sm:gap-4 animate-scaleIn"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-3xl shrink-0 shadow-inner">
               🎉
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-black uppercase tracking-wider text-amber-200 bg-black/20 px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-200 bg-black/30 px-2 py-0.5 rounded-full border border-amber-300/30">
                   Graffiti Cheer
                 </span>
-                <span className="text-[11px] font-semibold text-white/90">Notification Sent</span>
+                <span className="text-[11px] font-bold text-white/90">Notification Sent</span>
               </div>
-              <p className="text-xs sm:text-sm font-extrabold truncate m-0 mt-0.5">
+              <p className="text-sm sm:text-base font-black truncate m-0 mt-1 drop-shadow-sm">
                 You celebrated {graffitiCelebration.name}!
               </p>
-              <p className="text-[10px] text-white/80 m-0">
+              <p className="text-[11px] sm:text-xs text-white/90 font-medium m-0 mt-0.5 leading-snug">
                 A graffiti notice has been delivered to their ProxNet profile.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setGraffitiCelebration(null)}
-              className="text-white/70 hover:text-white p-1 rounded-lg border-0 bg-transparent text-sm cursor-pointer shrink-0"
+              className="text-white/80 hover:text-white bg-white/15 hover:bg-white/25 transition-all p-2 rounded-full border-0 cursor-pointer flex items-center justify-center w-8 h-8 shrink-0 text-sm"
               aria-label="Dismiss"
             >
               ✕
