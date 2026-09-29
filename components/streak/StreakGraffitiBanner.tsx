@@ -126,23 +126,25 @@ export function StreakGraffitiBanner({
     <div
       role="alert"
       aria-live="polite"
-      className="fixed inset-x-0 top-4 z-[100] flex justify-center px-3 pointer-events-none"
+      className="fixed inset-0 z-[1010] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+      onClick={onDismiss}
     >
       <div
-        className="w-full max-w-lg pointer-events-auto animate-fadeIn"
+        className="w-[94%] max-w-md pointer-events-auto animate-scaleIn"
+        onClick={(e) => e.stopPropagation()}
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
         onTouchStart={() => setIsPaused(true)}
         onTouchEnd={() => setIsPaused(false)}
       >
         <div
-          className={`relative overflow-hidden rounded-3xl bg-gradient-to-r ${themeStyles.gradientBg} p-1 text-white ${themeStyles.glow} border border-white/25 backdrop-blur-xl transition-all duration-300 hover:scale-[1.01]`}
+          className={`relative overflow-hidden rounded-3xl bg-gradient-to-r ${themeStyles.gradientBg} p-1 text-white ${themeStyles.glow} border-2 border-white/30 shadow-[0_25px_60px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-all duration-300 hover:scale-[1.01]`}
         >
-        {/* Graffiti Splatter Background Texture */}
-        <div className="absolute -top-12 -right-12 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-black/20 rounded-full blur-xl pointer-events-none" />
+          {/* Graffiti Splatter Background Texture */}
+          <div className="absolute -top-12 -right-12 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-black/20 rounded-full blur-xl pointer-events-none" />
 
-        <div className="relative rounded-[22px] bg-black/25 p-4 sm:p-5 flex flex-col gap-3">
+          <div className="relative rounded-[22px] bg-black/30 p-4 sm:p-5 flex flex-col gap-3">
           {/* Top Bar: Graffiti Tag + Close Button */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
