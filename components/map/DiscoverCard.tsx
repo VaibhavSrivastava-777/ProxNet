@@ -192,6 +192,58 @@ export function DiscoverCard({
           )}
         </div>
 
+        {/* ── Action Buttons Row (Placed Above Why Connect) ── */}
+        <div
+          className="flex items-center justify-between gap-2 pt-1 pb-1 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Next Profile Button */}
+          <button
+            type="button"
+            onClick={onNext}
+            className="flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] active:scale-95 transition-all border border-[var(--color-border-light)] shadow-xs font-bold text-xs cursor-pointer"
+            title="Next Profile"
+            aria-label="Next Profile"
+          >
+            <span>Next</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+
+          {/* Say Hi / Direct Chat Button */}
+          <button
+            type="button"
+            onClick={() => onStartChat(person)}
+            className="flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 bg-[var(--color-surface-secondary)] text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 active:scale-95 transition-all border border-[var(--color-primary)]/20 shadow-xs font-bold text-xs cursor-pointer"
+            title="Direct Message"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <span>Say Hi</span>
+          </button>
+
+          {/* Celebrate Button (Graffiti & Notification Trigger - Explicit Click Only) */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCelebrate();
+            }}
+            className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 font-bold text-xs shadow-md transition-all cursor-pointer border-0 ${
+              isCelebrated
+                ? "bg-amber-500 text-white shadow-amber-500/25"
+                : "bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 text-white hover:opacity-95 active:scale-95 shadow-rose-500/25"
+            }`}
+            title="Celebrate Profile (Sends Graffiti Cheer)"
+            aria-label="Celebrate Profile"
+          >
+            <span>🎉</span>
+            <span>{isCelebrated ? "Celebrated!" : "Celebrate"}</span>
+          </button>
+        </div>
+
         {/* ── Why Connect (Primary Pertinence Callout) ── */}
         <div className="p-3 rounded-2xl bg-gradient-to-r from-[var(--color-primary)]/10 via-[var(--color-primary)]/5 to-transparent border border-[var(--color-primary)]/20 flex items-start gap-2.5">
           <span className="text-lg shrink-0 mt-0.5">💡</span>
@@ -419,60 +471,11 @@ export function DiscoverCard({
         )}
 
         {/* Tap hint */}
-        <div className="text-center pt-1 pb-1">
-          <span className="text-[10px] text-[var(--color-text-tertiary)]">
-            Tap anywhere to view complete card & bio →
+        <div className="text-center pt-2 pb-2">
+          <span className="text-[11px] font-semibold text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)] transition-colors">
+            Tap anywhere on card to view full profile & bio →
           </span>
         </div>
-      </div>
-
-      {/* ── Fixed Bottom Actions Bar ── */}
-      <div
-        className="px-5 py-3.5 bg-[var(--color-surface)] border-t border-[var(--color-border-light)] flex items-center justify-between gap-2.5 shrink-0"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Next Profile Button */}
-        <button
-          type="button"
-          onClick={onNext}
-          className="px-3.5 py-2.5 rounded-full flex items-center gap-1.5 bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] hover:scale-105 active:scale-95 transition-all border border-[var(--color-border-light)] shadow-xs font-bold text-xs cursor-pointer"
-          title="Next Profile"
-          aria-label="Next Profile"
-        >
-          <span>Next</span>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
-
-        {/* Say Hi / Direct Chat Button */}
-        <button
-          type="button"
-          onClick={() => onStartChat(person)}
-          className="px-4 py-2.5 rounded-full flex items-center gap-1.5 bg-[var(--color-surface-secondary)] text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 hover:scale-105 active:scale-95 transition-all border border-[var(--color-primary)]/20 shadow-xs font-bold text-xs cursor-pointer"
-          title="Direct Message"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-          <span>Say Hi</span>
-        </button>
-
-        {/* Celebrate Button (Graffiti & Notification Trigger) */}
-        <button
-          type="button"
-          onClick={onCelebrate}
-          className={`px-4 py-2.5 rounded-full flex items-center gap-1.5 font-bold text-xs shadow-md transition-all cursor-pointer border-0 ${
-            isCelebrated
-              ? "bg-amber-500 text-white shadow-amber-500/25 scale-100"
-              : "bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 text-white hover:opacity-95 hover:scale-105 active:scale-95 shadow-rose-500/25"
-          }`}
-          title="Celebrate Profile (Sends Graffiti Cheer)"
-          aria-label="Celebrate Profile"
-        >
-          <span>🎉</span>
-          <span>{isCelebrated ? "Celebrated!" : "Celebrate"}</span>
-        </button>
       </div>
     </div>
   );
