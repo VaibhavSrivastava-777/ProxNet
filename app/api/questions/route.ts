@@ -77,13 +77,13 @@ export async function GET(request: Request) {
   if (mySessionIds.length > 0) {
     const { data: mySessions } = await supabase
       .from("chat_sessions")
-      .select("id, question_id, created_at, chat_messages(body, created_at, sender_id), chat_participants(user_id, alias)")
+      .select("id, question_id, created_at, chat_messages(id, body, created_at, sender_id, is_read), chat_participants(user_id, alias)")
       .in("id", mySessionIds);
 
     sessions = mySessions || [];
   }
 
-  const sessionActivityMap = new Map<string, { time: string; body: string | null; sender_id: string | null; target_alias: string | null; sessionId: string }>();
+  const sessionActivityMap = new Map<string, { time: string; body: string | null; sender_id: string | null; target_alias: string | null; sessionId: string; has_unread: boolean }>();
   let aiSession = null;
 
   if (sessions) {
@@ -91,6 +91,7 @@ export async function GET(request: Request) {
       let latestTime = session.created_at;
       let latestBody = null;
       let latestSender = null;
+      let hasUnread = false;
       
       if (session.chat_messages && session.chat_messages.length > 0) {
         const latestMsg = session.chat_messages.reduce((prev: any, current: any) => 
@@ -99,6 +100,10 @@ export async function GET(request: Request) {
         latestTime = latestMsg.created_at;
         latestBody = latestMsg.body;
         latestSender = latestMsg.sender_id;
+
+        hasUnread = session.chat_messages.some(
+          (m: any) => m.sender_id !== user.id && m.is_read === false
+        );
       }
 
       let targetAlias = null;
@@ -114,6 +119,7 @@ export async function GET(request: Request) {
           latest_message_body: latestBody,
           latest_message_sender: latestSender,
           target_alias: targetAlias,
+          has_unread: hasUnread,
         };
         continue;
       }
@@ -127,7 +133,8 @@ export async function GET(request: Request) {
           body: latestBody,
           sender_id: latestSender,
           target_alias: targetAlias,
-          sessionId: session.id
+          sessionId: session.id,
+          has_unread: hasUnread,
         });
       }
     }
@@ -168,6 +175,7 @@ export async function GET(request: Request) {
       latest_message_sender: sender,
       target_alias: activity?.target_alias || null,
       session_id: activity?.sessionId || null,
+      has_unread: Boolean(activity?.has_unread),
       distance: dist,
     };
   });
@@ -209,6 +217,7 @@ export async function GET(request: Request) {
       latest_message_body: activity?.body || null,
       latest_message_sender: sender,
       session_id: activity?.sessionId || null,
+      has_unread: Boolean(activity?.has_unread),
       distance: dist,
     };
   });

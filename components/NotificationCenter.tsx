@@ -246,7 +246,7 @@ export function NotificationCenter({
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative z-[1055]" ref={dropdownRef}>
       {/* Trigger Bell Button */}
       <button
         type="button"
@@ -255,7 +255,7 @@ export function NotificationCenter({
           e.preventDefault();
           onToggle();
         }}
-        className={`relative btn-icon btn-ghost flex items-center justify-center transition-colors ${
+        className={`relative z-[1055] btn-icon btn-ghost flex items-center justify-center transition-colors ${
           isOpen
             ? "text-[var(--color-primary)] bg-[var(--color-primary-subtle)]"
             : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]"
@@ -278,8 +278,8 @@ export function NotificationCenter({
       {isOpen && (
         <div
           data-tour="notification-center-dropdown"
-          className="fixed inset-x-3 top-16 md:absolute md:inset-x-auto md:right-0 md:top-full md:mt-2 w-auto md:w-[410px] max-w-[calc(100vw-1.5rem)] bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-[var(--radius-lg)] shadow-[var(--shadow-xl)] z-[1050] overflow-hidden animate-fadeInDown flex flex-col backdrop-blur-md"
-          style={{ maxHeight: "min(560px, calc(100vh - 5rem))" }}
+          className="fixed inset-x-3 top-[calc(var(--nav-height,56px)+env(safe-area-inset-top,0px)+16px)] md:absolute md:inset-x-auto md:right-0 md:top-full md:mt-4 w-auto md:w-[410px] max-w-[calc(100vw-1.5rem)] bg-[var(--color-surface)] border border-[var(--color-border-light)] rounded-[var(--radius-lg)] shadow-[var(--shadow-xl)] z-[1050] overflow-hidden animate-fadeInDown flex flex-col backdrop-blur-md"
+          style={{ maxHeight: "min(540px, calc(100vh - var(--nav-height,56px) - env(safe-area-inset-top,0px) - 2.5rem))" }}
         >
           {!session ? (
             <div className="p-6 text-center flex flex-col items-center justify-center">

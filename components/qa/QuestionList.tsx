@@ -202,7 +202,7 @@ export function QuestionList({ refreshKey = 0, onOpenDirectQuestion }: Props) {
       setIsNavigating(false);
     };
   }, []);
-  const [activeTab, setActiveTab] = useState<"all" | "unread" | "suggestions">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "unread">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [aiSearchSuggestions, setAiSearchSuggestions] = useState<any[]>([]);
   const [searchingAI, setSearchingAI] = useState(false);
@@ -497,35 +497,33 @@ function getStoredInboxCache(): any {
     }
   });
 
-  const unreadCount = unified.filter(item => {
+  function isChatTrulyUnread(item: any): boolean {
     if (item.type === "referral") {
       return item.data.unread === true;
     }
+    const q = item.data;
+    // 1. Direct message unread status from database
+    if (q.has_unread === true) {
+      return true;
+    }
+    // 2. In-app notification for this specific chat session
+    if (q.session_id && notifications.some((n: any) => !n.is_read && n.url === `/chat/${q.session_id}`)) {
+      return true;
+    }
+    return false;
+  }
+
+  const unreadCount = unified.filter(item => {
     if (filter2km) {
       const isUnrespondedIncoming = item.type === "incoming" && item.data.status !== "responded";
       if (isUnrespondedIncoming && (item.data.distance === null || item.data.distance === undefined || item.data.distance > 2000)) {
         return false;
       }
     }
-    if (item.type === "asked") {
-      const q = item.data;
-      const hasUnreadNotif = q.session_id ? notifications.some((n: any) => !n.is_read && n.url === `/chat/${q.session_id}`) : false;
-      return hasUnreadNotif || (q.latest_message_body && q.latest_message_sender !== "asker");
-    } else {
-      const q = item.data;
-      const hasResponse = q.status === "responded";
-      const hasUnreadNotif = q.session_id ? notifications.some((n: any) => !n.is_read && n.url === `/chat/${q.session_id}`) : false;
-      return (!hasResponse) || hasUnreadNotif || (q.latest_message_body && q.latest_message_sender !== "responder");
-    }
+    return isChatTrulyUnread(item);
   }).length;
 
   const displayedUnified = filteredUnified.filter(item => {
-    if (item.type === "referral") {
-      if (activeTab === "unread") {
-        return item.data.unread === true;
-      }
-      return true;
-    }
     if (filter2km) {
       const isUnrespondedIncoming = item.type === "incoming" && item.data.status !== "responded";
       if (isUnrespondedIncoming && (item.data.distance === null || item.data.distance === undefined || item.data.distance > 2000)) {
@@ -533,16 +531,7 @@ function getStoredInboxCache(): any {
       }
     }
     if (activeTab === "unread") {
-      if (item.type === "asked") {
-        const q = item.data;
-        const hasUnreadNotif = q.session_id ? notifications.some((n: any) => !n.is_read && n.url === `/chat/${q.session_id}`) : false;
-        return hasUnreadNotif || (q.latest_message_body && q.latest_message_sender !== "asker");
-      } else {
-        const q = item.data;
-        const hasResponse = q.status === "responded";
-        const hasUnreadNotif = q.session_id ? notifications.some((n: any) => !n.is_read && n.url === `/chat/${q.session_id}`) : false;
-        return (!hasResponse) || hasUnreadNotif || (q.latest_message_body && q.latest_message_sender !== "responder");
-      }
+      return isChatTrulyUnread(item);
     }
     return true;
   });
@@ -654,85 +643,10 @@ function getStoredInboxCache(): any {
         >
           Unread {unreadCount > 0 && <span className="ml-1 opacity-80">{unreadCount}</span>}
         </button>
-        <button
-          onClick={() => setActiveTab("suggestions")}
-          className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer ${
-            activeTab === "suggestions"
-              ? "bg-[var(--color-primary)] text-white shadow-sm"
-              : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
-          }`}
-        >
-          AI Suggestions
-        </button>
       </div>
 
       <div className="animate-fadeInUp">
-        {activeTab === "suggestions" ? (
-          <div className="flex flex-col gap-4">
-            <div className="mb-2">
-              <h2 className="text-h3 text-primary flex items-center gap-2">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary animate-pulse">
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                </svg>
-                AI Suggested Connections
-              </h2>
-              <p className="text-caption text-text-secondary mt-1">
-                Top local professionals matching your background within 5km.
-              </p>
-            </div>
-
-            {filteredSuggestions.length === 0 ? (
-              <div className="card p-8 text-center border border-dashed border-border flex flex-col items-center justify-center min-h-[200px]">
-                <p className="text-body text-text-secondary font-medium">No matches found.</p>
-                <p className="text-caption mt-1">Try searching for other terms or checking your profile.</p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {filteredSuggestions.map((s: any) => (
-                  <div key={s.user.id} className="card p-5 border border-[var(--color-border-light)] hover:border-[var(--color-primary)] transition-all flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-surface shadow-sm rounded-xl">
-                    <div className="flex gap-4">
-                      <div className="avatar avatar-md shrink-0 bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold">
-                        {s.user.full_name ? getInitials(s.user.full_name) : "PR"}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-body font-semibold text-text m-0">{s.user.job_title || "Professional"}</h4>
-                          <span className="badge bg-primary/10 text-primary border border-primary/20 font-bold text-[10px] px-2 py-0.5 rounded-full">
-                            {Math.round(s.score)}% Match
-                          </span>
-                        </div>
-                        <p className="text-body-sm text-text-secondary font-medium mt-0.5">{s.user.company || "Local Network"}</p>
-                        
-                        {s.reason && (
-                          <div className="mt-3 p-3 bg-primary-light/5 border border-primary/10 rounded-xl text-xs text-[var(--color-text)] flex items-start gap-2">
-                            <span className="text-base leading-none select-none">✨</span>
-                            <div>
-                              <strong className="text-[var(--color-primary)] font-semibold">Reason to Connect:</strong> <span className="leading-relaxed">{s.reason}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="shrink-0 flex items-center justify-end">
-                      <button 
-                        onClick={() => {
-                          if (onOpenDirectQuestion) {
-                            onOpenDirectQuestion(s.user);
-                          }
-                        }}
-                        className="btn btn-primary btn-sm px-4"
-                      >
-                        Ask Question
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col rounded-xl overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border-light)] shadow-sm">
+        <div className="flex flex-col rounded-xl overflow-hidden bg-[var(--color-surface)] border border-[var(--color-border-light)] shadow-sm">
             {/* Pinned ProxNet AI Chat */}
             <div 
               key="ai-session"
@@ -853,7 +767,7 @@ function getStoredInboxCache(): any {
                   const rawTitle = q.target_alias || (hasResponse ? "Responder" : "Nearby Professional");
                   const { jobTitle, company } = parseAlias(rawTitle);
                   const previewText = q.latest_message_body ? (q.latest_message_sender === "asker" ? "You: " + q.latest_message_body : q.latest_message_body) : "You: " + q.body;
-                  const isUnread = q.session_id ? notifications.some((n: any) => !n.is_read && n.url === `/chat/${q.session_id}`) : false;
+                  const isUnread = isChatTrulyUnread(item);
 
                   return (
                     <div 
@@ -891,7 +805,7 @@ function getStoredInboxCache(): any {
                   const rawTitle = q.asker_alias;
                   const { jobTitle, company } = parseAlias(rawTitle);
                   const previewText = q.latest_message_body ? (q.latest_message_sender === "responder" ? "You: " + q.latest_message_body : q.latest_message_body) : q.body;
-                  const isUnread = (!hasResponse) || (q.session_id ? notifications.some((n: any) => !n.is_read && n.url === `/chat/${q.session_id}`) : false);
+                  const isUnread = isChatTrulyUnread(item);
 
                   return (
                     <div 
@@ -905,19 +819,16 @@ function getStoredInboxCache(): any {
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-baseline mb-0.5">
                           <h4 className="text-body font-semibold truncate text-[var(--color-text)]">{jobTitle}</h4>
-                          <span className="text-[11px] font-normal whitespace-nowrap ml-2" style={{ color: isUnread && !hasResponse ? "var(--color-error)" : "var(--color-text-tertiary)", fontWeight: isUnread ? 600 : 400 }}>
+                          <span className="text-[11px] font-normal whitespace-nowrap ml-2" style={{ color: isUnread ? "var(--color-primary)" : "var(--color-text-tertiary)", fontWeight: isUnread ? 600 : 400 }}>
                             {formatWhatsAppTime(q.latest_activity_at)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-2">
-                          <div className={`text-body-sm truncate flex-1 ${isUnread && !hasResponse ? "text-[var(--color-text)] font-semibold" : "text-[var(--color-text-secondary)] font-normal"}`}>
+                          <div className={`text-body-sm truncate flex-1 ${isUnread ? "text-[var(--color-text)] font-semibold" : "text-[var(--color-text-secondary)] font-normal"}`}>
                             {previewText}
                           </div>
-                          {isUnread && !hasResponse && (
-                            <span className="w-5 h-5 rounded-full bg-[var(--color-error)] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">1</span>
-                          )}
-                          {isUnread && hasResponse && (
-                            <span className="w-5 h-5 rounded-full bg-[var(--color-accent)] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">1</span>
+                          {isUnread && (
+                            <span className="w-5 h-5 rounded-full bg-[var(--color-primary)] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">1</span>
                           )}
                         </div>
                       </div>
@@ -927,7 +838,6 @@ function getStoredInboxCache(): any {
               })
             )}
           </div>
-        )}
       </div>
 
       {/* Floating bottom pencil write icon to create new chat */}

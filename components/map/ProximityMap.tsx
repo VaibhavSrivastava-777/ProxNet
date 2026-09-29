@@ -457,14 +457,25 @@ export function ProximityMap() {
       if (aBeacon && !bBeacon) return -1;
       if (!aBeacon && bBeacon) return 1;
 
-      // 3. Secondary sort: shortest distance ascending
+      // 3. Likelihood of profile match: sort by cosine similarity match score descending!
+      const scoreA = typeof a.match_score === "number"
+        ? a.match_score
+        : (typeof a.similarity === "number" ? Math.round(a.similarity * 100) : 0);
+      const scoreB = typeof b.match_score === "number"
+        ? b.match_score
+        : (typeof b.similarity === "number" ? Math.round(b.similarity * 100) : 0);
+      if (scoreB !== scoreA) {
+        return scoreB - scoreA;
+      }
+
+      // 4. Secondary sort: shortest distance ascending
       const distA = typeof a.distance === "number" && !isNaN(a.distance) ? a.distance : Infinity;
       const distB = typeof b.distance === "number" && !isNaN(b.distance) ? b.distance : Infinity;
       if (distA !== distB) {
         return distA - distB;
       }
 
-      // 4. Tie-breaker by company name alphabetically
+      // 5. Tie-breaker by company name alphabetically
       return (a.company || "").localeCompare(b.company || "");
     });
   }, [filteredPeople, activeBeacons, activeBeaconMap, profile, center]);
@@ -1144,9 +1155,16 @@ export function ProximityMap() {
                     <div className="flex items-center gap-3 min-w-0">
                       <CompanyLogo company={p.company} size={40} />
                       <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-bold text-[var(--color-text)] truncate">
-                          {p.company}
-                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold text-[var(--color-text)] truncate">
+                            {p.company}
+                          </span>
+                          {(typeof p.match_score === "number" || typeof p.similarity === "number") && (
+                            <span className="text-[10px] font-bold text-[var(--color-primary)] bg-[var(--color-primary-subtle)] border border-[var(--color-primary)]/20 px-1.5 py-0.2 rounded-full">
+                              {p.match_score || Math.round(p.similarity * 100)}% Match
+                            </span>
+                          )}
+                        </div>
                         <span className="text-xs text-[var(--color-text-secondary)] font-medium truncate mt-0.5">
                           {p.job_title}
                         </span>

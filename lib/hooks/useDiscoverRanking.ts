@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { CompanyJobBundle } from "@/app/api/jobs/discover-company-jobs/route";
+import { calculateProfileMatchScore } from "@/lib/matching/profile-similarity";
 
 export interface MatchReason {
   label: string;
@@ -85,7 +86,11 @@ export function rankDiscoverProfiles({
       if (currentUserId && person.id === currentUserId) continue;
       if (person.is_me) continue;
 
-      let score = 20; // baseline connection readiness
+      // ── Cosine Similarity Matching Score ──
+      // Driven strictly by cosine similarity between profiles instead of business logic rule points
+      const { score: cosineScore, similarity } = calculateProfileMatchScore(profile, person);
+      const finalScore = typeof person.match_score === "number" ? person.match_score : cosineScore;
+
       const reasons: MatchReason[] = [];
 
       const targetCompany = normalize(person.company);
@@ -96,9 +101,8 @@ export function rankDiscoverProfiles({
       const targetAskMeAbout = person.ask_me_about || [];
       const targetTinkering = person.tinkering_with || [];
 
-      // 1. Same Company
+      // 1. Same Company badge
       if (myCompany && targetCompany && myCompany === targetCompany && myCompany.length > 1) {
-        score += 30;
         reasons.push({
           label: `Both of you work at ${person.company}`,
           icon: "🏢",
@@ -106,9 +110,8 @@ export function rankDiscoverProfiles({
         });
       }
 
-      // 2. Same Alumni Network
+      // 2. Same Alumni Network badge
       if (myInst && targetInst && myInst === targetInst) {
-        score += 25;
         reasons.push({
           label: `Alumni of ${person.institute_name}`,
           icon: "🎓",
@@ -116,9 +119,8 @@ export function rankDiscoverProfiles({
         });
       }
 
-      // 3. Same Residential Society
+      // 3. Same Residential Society badge
       if (mySoc && targetSoc && mySoc === targetSoc) {
-        score += 20;
         reasons.push({
           label: `Neighbour in ${person.society_name}`,
           icon: "🏡",
@@ -126,9 +128,8 @@ export function rankDiscoverProfiles({
         });
       }
 
-      // 4. Role Match
+      // 4. Role Match badge
       if (wordMatchOverlap(myRole, targetRole)) {
-        score += 15;
         reasons.push({
           label: `Both working in ${targetRole || "similar"} roles`,
           icon: "💼",
@@ -136,12 +137,11 @@ export function rankDiscoverProfiles({
         });
       }
 
-      // 5. Scrapbook Synergy
+      // 5. Scrapbook Synergy badge
       const offersMatchNeeds = arrayOverlap(targetHelpOffers, [...myAskMeAbout, ...myTinkering]);
       const myOffersMatchNeeds = arrayOverlap(myHelpOffers, [...targetAskMeAbout, ...targetTinkering]);
 
       if (offersMatchNeeds || myOffersMatchNeeds) {
-        score += 12;
         const offerSample = targetHelpOffers[0] || myHelpOffers[0];
         reasons.push({
           label: offerSample ? `Synergy: Can help with ${offerSample}` : "Complementary skills in scrapbook",
@@ -159,14 +159,12 @@ export function rankDiscoverProfiles({
           const compCount = jobsBundle.competitorJobs.length;
 
           if (exactCount > 0) {
-            score += 10;
             reasons.push({
               label: `${exactCount} open role${exactCount > 1 ? "s" : ""} at ${person.company}`,
               icon: "🔥",
               category: "jobs",
             });
           } else if (compCount > 0) {
-            score += 6;
             reasons.push({
               label: `${compCount} role${compCount > 1 ? "s" : ""} at competitor companies`,
               icon: "⚔️",
@@ -176,29 +174,22 @@ export function rankDiscoverProfiles({
         }
       }
 
-      // 7. Distance Proximity Bonus
+      // 7. Distance Proximity badge
       if (person.distance != null) {
         if (person.distance <= 500) {
-          score += 10;
           reasons.push({
             label: `Super close: within ${Math.round(person.distance)}m`,
             icon: "📍",
             category: "proximity",
           });
         } else if (person.distance <= 1500) {
-          score += 7;
           reasons.push({
             label: `Nearby: ${(person.distance / 1000).toFixed(1)}km away`,
             icon: "📍",
             category: "proximity",
           });
-        } else if (person.distance <= 3000) {
-          score += 4;
         }
       }
-
-      // Cap at 99
-      const finalScore = Math.min(99, Math.max(35, score));
 
       // Choose most compelling primary reason
       let primaryReason = reasons[0]?.label || "Verified professional in your neighbourhood";

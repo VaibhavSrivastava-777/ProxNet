@@ -47,8 +47,8 @@ async function runValidation() {
   const notifCenterPath = path.join(cwd, "components", "NotificationCenter.tsx");
   const notifCenter = fs.readFileSync(notifCenterPath, "utf-8");
 
-  assert(notifCenter.includes("animate-fadeInDown"), "Notification dropdown uses fadeInDown animation");
-  assert(notifCenter.includes("fixed inset-x-3 top-16"), "Notification dropdown is centered on mobile (fixed inset-x-3)");
+  assert(notifCenter.includes("fixed inset-x-3"), "Notification dropdown is centered on mobile (fixed inset-x-3)");
+  assert(notifCenter.includes("top-[calc(var(--nav-height,56px)+env(safe-area-inset-top,0px)+16px)]") || notifCenter.includes("top-16"), "Notification dropdown is positioned below mobile header");
   assert(notifCenter.includes("md:absolute md:inset-x-auto md:right-0 md:top-full"), "Notification dropdown is anchored right under bell on desktop");
   assert(notifCenter.includes("z-[1050]"), "Notification dropdown has elevated z-index (z-[1050])");
 

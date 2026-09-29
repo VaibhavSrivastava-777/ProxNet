@@ -3,15 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
 import type { User, UserVisibility } from "@/lib/types";
-
-function dotProduct(a: number[] | null, b: number[] | null): number {
-  if (!a || !b || a.length !== b.length) return 0;
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) {
-    sum += a[i] * b[i];
-  }
-  return sum;
-}
+import { calculateProfileMatchScore } from "@/lib/matching/profile-similarity";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -42,10 +34,22 @@ export async function GET(request: Request) {
 
   const supabase = createAdminClient();
 
-  // Fetch all active users (omit embedding completely)
+  // Fetch current user's full profile and embedding for cosine similarity matching
+  const { data: currentUserData } = await supabase
+    .from("users")
+    .select("id, embedding, job_title, company, about, professional_bio, tags, profile_digest, institute_name:user_institute_affiliations(institute:institutes(name, short_code))")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const currentProfile = {
+    ...user,
+    ...(currentUserData || {}),
+  };
+
+  // Fetch all active users with profile fields and embeddings for cosine similarity
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("id, full_name, company, job_title, about, professional_bio, tags, profile_digest, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility")
+    .select("id, full_name, company, job_title, about, professional_bio, tags, profile_digest, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility, embedding")
     .eq("is_active", true)
     .neq("id", user.id);
 
@@ -116,6 +120,8 @@ export async function GET(request: Request) {
 
     if (effectiveUnfiltered || minDistance <= radius || (targetId && u.id === targetId)) {
       const digest = (u as any).profile_digest || {};
+      const { score: matchScore, similarity } = calculateProfileMatchScore(currentProfile, u);
+
       nearbyPeople.push({
         id: u.id,
         full_name: u.full_name || null,
@@ -135,6 +141,8 @@ export async function GET(request: Request) {
         distance: minDistance === Infinity ? null : minDistance,
         is_followed: followingIds.has(u.id),
         institute_name: affiliationMap.get(u.id) ?? null,
+        similarity: Number(similarity.toFixed(4)),
+        match_score: matchScore,
       });
     }
   }
@@ -165,6 +173,8 @@ export async function GET(request: Request) {
       }
 
       const digest = (u as any).profile_digest || {};
+      const { score: matchScore, similarity } = calculateProfileMatchScore(currentProfile, u);
+
       nearbyPeople.push({
         id: u.id,
         full_name: u.full_name || null,
@@ -184,12 +194,17 @@ export async function GET(request: Request) {
         distance: minDistance === Infinity ? null : minDistance,
         is_followed: followingIds.has(u.id),
         institute_name: affiliationMap.get(u.id) ?? null,
+        similarity: Number(similarity.toFixed(4)),
+        match_score: matchScore,
       });
     }
   }
 
-  // Sort by distance ascending, then by company name alphabetically
+  // Sort by likelihood of profile match (cosine similarity descending), then by distance ascending
   nearbyPeople.sort((a, b) => {
+    if (b.match_score !== a.match_score) {
+      return b.match_score - a.match_score;
+    }
     const distA = a.distance === null ? Infinity : a.distance;
     const distB = b.distance === null ? Infinity : b.distance;
     if (distA !== distB) {
