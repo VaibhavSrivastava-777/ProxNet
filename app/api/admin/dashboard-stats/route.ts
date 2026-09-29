@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isSameCompany } from "@/lib/jobs/job-filters";
 
 export async function GET() {
   const session = await getAdminSession();
@@ -64,22 +65,60 @@ export async function GET() {
 
     const completeProfilesCount = Math.max(0, totalUsersCount - incompleteProfilesCount);
 
+    const JUNK_COMPANY_TOKENS = new Set([
+      "retired",
+      "independent advisory practice",
+      "ex tcs n tech mahindra , consulting",
+      "proxnet",
+      "motiveminds consulting pvt ltd",
+      "t",
+      "x",
+      "self employed",
+      "freelance",
+      "none",
+      "n/a",
+      "na"
+    ]);
+
     const validConfigs = (configs || []).filter(c => c.provider && c.provider !== "none" && c.provider !== "cron_status");
-    const configuredCompaniesSet = new Set(validConfigs.map(c => c.company_name.toLowerCase().trim()));
+    const noneConfigs = (configs || []).filter(c => c.provider === "none");
+    const noneSet = new Set(noneConfigs.map(c => c.company_name.toLowerCase().trim()));
 
     const unmappedCompanies: { name: string; userCount: number }[] = [];
-    for (const [compName, count] of userCompaniesMap.entries()) {
-      if (!configuredCompaniesSet.has(compName.toLowerCase().trim())) {
-        unmappedCompanies.push({ name: compName, userCount: count });
-      }
-    }
-    unmappedCompanies.sort((a, b) => b.userCount - a.userCount);
+    const directHiringCompanies: { name: string; userCount: number }[] = [];
+    let mappedNetworkCompanies = 0;
 
-    const totalNetworkCompanies = userCompaniesMap.size;
-    const mappedNetworkCompanies = Math.max(0, totalNetworkCompanies - unmappedCompanies.length);
+    for (const [compName, count] of userCompaniesMap.entries()) {
+      const lower = compName.toLowerCase().trim();
+      if (JUNK_COMPANY_TOKENS.has(lower) || lower.length <= 1) {
+        continue;
+      }
+
+      // 1. Direct or alias match to an active ATS config
+      const matched = validConfigs.find(c => isSameCompany(compName, c.company_name));
+      if (matched) {
+        mappedNetworkCompanies++;
+        continue;
+      }
+
+      // 2. Evaluated and confirmed to have no public ATS (direct hiring / enterprise portal)
+      if (noneSet.has(lower)) {
+        directHiringCompanies.push({ name: compName, userCount: count });
+        continue;
+      }
+
+      // 3. Truly unmapped (new company, never checked)
+      unmappedCompanies.push({ name: compName, userCount: count });
+    }
+
+    unmappedCompanies.sort((a, b) => b.userCount - a.userCount);
+    directHiringCompanies.sort((a, b) => b.userCount - a.userCount);
+
+    const totalNetworkCompanies = mappedNetworkCompanies + directHiringCompanies.length + unmappedCompanies.length;
+    const coveredNetworkCompanies = mappedNetworkCompanies + directHiringCompanies.length;
 
     const embeddingsCoveragePct = activeUsersCount > 0 ? Math.round((readyEmbeddingsCount / activeUsersCount) * 100) : 100;
-    const atsCoveragePct = totalNetworkCompanies > 0 ? Math.round((mappedNetworkCompanies / totalNetworkCompanies) * 100) : 100;
+    const atsCoveragePct = totalNetworkCompanies > 0 ? Math.round((coveredNetworkCompanies / totalNetworkCompanies) * 100) : 100;
     const profileCompletenessPct = totalUsersCount > 0 ? Math.round((completeProfilesCount / totalUsersCount) * 100) : 100;
     const totalJobsCount = totalJobs || 0;
     const freshJobsCount = freshJobs || 0;
@@ -104,7 +143,8 @@ export async function GET() {
       ats: {
         total: configs?.length || 0,
         mapped: validConfigs.length,
-        unmapped: unmappedCompanies.length
+        unmapped: unmappedCompanies.length,
+        directHiring: directHiringCompanies.length
       },
       // Rich Leading Indicators & Action Insights
       summary: {
@@ -116,6 +156,7 @@ export async function GET() {
         totalCarpools: totalCarpools || 0,
         totalNetworkCompanies,
         mappedNetworkCompanies,
+        directHiringCompanies: directHiringCompanies.length,
         unmappedNetworkCompanies: unmappedCompanies.length
       },
       leadingIndicators: {
@@ -131,6 +172,7 @@ export async function GET() {
         atsCoverage: {
           totalNetworkCompanies,
           mappedCount: mappedNetworkCompanies,
+          directHiringCount: directHiringCompanies.length,
           unmappedCount: unmappedCompanies.length,
           coveragePct: atsCoveragePct,
           status: unmappedCompanies.length === 0 ? "healthy" : unmappedCompanies.length > 10 ? "warning" : "healthy",
@@ -166,6 +208,7 @@ export async function GET() {
         }
       },
       unmappedCompanies,
+      directHiringCompanies,
       cronStatus
     });
   } catch (err: any) {

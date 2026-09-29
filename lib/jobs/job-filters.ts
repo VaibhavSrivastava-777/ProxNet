@@ -389,11 +389,21 @@ export function isSameCompany(compA?: string | null, compB?: string | null): boo
   const cleanA = stripSuffixes(a);
   const cleanB = stripSuffixes(b);
 
+  const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
   if (cleanA && cleanB) {
     if (cleanA === cleanB) return true;
-    if (cleanA.length >= 3 && cleanB.length >= 3) {
-      if (cleanA.startsWith(cleanB) || cleanB.startsWith(cleanA)) return true;
-      if (cleanA.includes(cleanB) || cleanB.includes(cleanA)) return true;
+
+    // Check multi-word phrase containment with strict word boundaries
+    // e.g. "bureau veritas" inside "bureau veritas via wrocus"
+    const hasWordBoundaryPhrase = (haystack: string, needle: string) => {
+      if (needle.length < 3) return false;
+      const regex = new RegExp(`(^|\\s)${escapeRegex(needle)}(\\s|$)`, "i");
+      return regex.test(haystack);
+    };
+
+    if (hasWordBoundaryPhrase(cleanA, cleanB) || hasWordBoundaryPhrase(cleanB, cleanA)) {
+      return true;
     }
   }
 
@@ -406,17 +416,34 @@ export function isSameCompany(compA?: string | null, compB?: string | null): boo
     ["chase", "jpmorgan"],
     ["lseg", "london stock exchange"],
     ["pwc", "pricewaterhousecoopers"],
+    ["ey", "ernst young"],
     ["ey", "ernst & young"],
     ["dell", "dell technologies"],
     ["msft", "microsoft"],
     ["fb", "meta"],
     ["goog", "google"],
+    ["hcl", "hcltech"],
+    ["hcl", "hcl technologies"],
+    ["hcltech", "hcl technologies"],
+    ["tcs", "tata consultancy services"],
   ];
 
+  const hasWord = (haystack: string, word: string) => {
+    if (!word || word.length < 2) return false;
+    const regex = new RegExp(`(^|\\s)${escapeRegex(word)}(\\s|$)`, "i");
+    return regex.test(haystack);
+  };
+
   for (const [alias1, alias2] of aliases) {
-    const match1 = cleanA === alias1 || cleanA.startsWith(alias1);
-    const match2 = cleanB === alias2 || cleanB.startsWith(alias2);
-    if ((match1 && match2) || (cleanA === alias2 && cleanB === alias1)) return true;
+    const cleanAlias1 = stripSuffixes(alias1);
+    const cleanAlias2 = stripSuffixes(alias2);
+
+    const matchA1 = cleanA === cleanAlias1 || hasWord(cleanA, cleanAlias1);
+    const matchA2 = cleanA === cleanAlias2 || hasWord(cleanA, cleanAlias2);
+    const matchB1 = cleanB === cleanAlias1 || hasWord(cleanB, cleanAlias1);
+    const matchB2 = cleanB === cleanAlias2 || hasWord(cleanB, cleanAlias2);
+
+    if ((matchA1 && matchB2) || (matchA2 && matchB1)) return true;
   }
 
   return false;

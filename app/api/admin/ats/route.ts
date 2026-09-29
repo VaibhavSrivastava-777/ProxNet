@@ -64,10 +64,40 @@ export async function POST(request: Request) {
   // Auto-discovery if provider and board token are not provided
   if (!provider && !board_token_or_url) {
     try {
+      // 1. Check if this company is an alias of an already configured board
+      const { data: existingConfigs } = await supabase.from("company_ats_config").select("*");
+      const { isSameCompany } = await import("@/lib/jobs/job-filters");
+      const matched = (existingConfigs || []).find(c => 
+        c.provider && c.provider !== "none" && c.provider !== "cron_status" && isSameCompany(company_name, c.company_name)
+      );
+
+      if (matched) {
+        return NextResponse.json({
+          success: true,
+          message: `"${company_name}" is already covered by configured board "${matched.company_name}" (${matched.provider}: ${matched.board_token_or_url})`,
+          config: matched
+        });
+      }
+
+      // 2. Probe ATS endpoints
       const { discoverAts } = await import("@/lib/ats-discovery");
       const discovery = await discoverAts(company_name);
       if (!discovery) {
-        return NextResponse.json({ error: `Could not auto-discover ATS strategy for "${company_name}"` }, { status: 404 });
+        // Record as provider: "none" so it's recognized as reviewed direct hiring
+        await supabase
+          .from("company_ats_config")
+          .upsert({
+            company_name,
+            provider: "none",
+            board_token_or_url: "none"
+          }, { onConflict: "company_name" });
+
+        return NextResponse.json({
+          success: true,
+          noBoard: true,
+          message: `No public ATS board (Greenhouse/Lever/Ashby) detected for "${company_name}". Recorded as Direct Outreach / Custom.`,
+          config: { company_name, provider: "none", board_token_or_url: "none" }
+        });
       }
       provider = discovery.provider;
       board_token_or_url = discovery.board;
@@ -107,7 +137,7 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase
     .from("company_ats_config")
-    .insert({ company_name, provider, board_token_or_url })
+    .upsert({ company_name, provider, board_token_or_url }, { onConflict: "company_name" })
     .select()
     .single();
 

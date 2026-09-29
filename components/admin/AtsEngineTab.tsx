@@ -66,7 +66,7 @@ export function AtsEngineTab({ unmappedCompanies, onRefresh }: AtsEngineTabProps
       });
       const data = await res.json();
       if (res.ok) {
-        alert(`Success! Discovered and configured ${data.config?.provider || "ATS"} board for "${companyName}".`);
+        alert(data.message || `Success! Discovered and configured ${data.config?.provider || "ATS"} board for "${companyName}".`);
         await fetchAtsConfigs();
         await onRefresh();
       } else {
@@ -245,6 +245,17 @@ export function AtsEngineTab({ unmappedCompanies, onRefresh }: AtsEngineTabProps
         <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 p-3 rounded-xl text-xs font-mono flex items-center justify-between animate-fadeIn">
           <span>{scraperLog}</span>
           <button onClick={() => setScraperLog(null)} className="text-xs opacity-60 hover:opacity-100">✕</button>
+        </div>
+      )}
+
+      {/* Optimal Network Coverage Banner */}
+      {unmappedCompanies.length === 0 && (
+        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 p-4 rounded-2xl flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-base">✅</span>
+            <span className="font-semibold">Network ATS Coverage Optimal:</span>
+            <span>All registered user companies are actively mapped to ATS scrapers or verified for direct candidate referrals.</span>
+          </div>
         </div>
       )}
 

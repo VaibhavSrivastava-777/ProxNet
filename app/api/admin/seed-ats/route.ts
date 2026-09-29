@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { companyMappings } from "@/lib/anonymize";
 import { getAdminSession } from "@/lib/admin-session";
 import { discoverAts } from "@/lib/ats-discovery";
+import { isSameCompany } from "@/lib/jobs/job-filters";
 
 export async function GET(request: Request) {
   return handleRequest(request);
@@ -56,25 +57,45 @@ async function handleRequest(request: Request) {
   // 3. Fetch existing configurations to skip them
   const { data: existingConfigs, error: configsError } = await supabase
     .from("company_ats_config")
-    .select("company_name");
+    .select("company_name, provider");
     
   if (configsError) return NextResponse.json({ error: configsError.message }, { status: 500 });
 
+  const JUNK_COMPANY_TOKENS = new Set([
+    "retired",
+    "independent advisory practice",
+    "ex tcs n tech mahindra , consulting",
+    "proxnet",
+    "motiveminds consulting pvt ltd",
+    "t",
+    "x",
+    "self employed",
+    "freelance",
+    "none",
+    "n/a",
+    "na"
+  ]);
+
+  const validConfigs = (existingConfigs || []).filter(c => c.provider && c.provider !== "none" && c.provider !== "cron_status");
   const seededCompanies = new Set(
     existingConfigs.map(c => c.company_name.toLowerCase().trim())
   );
 
-  // 4. Filter down to unseeded companies
-  const unseededCompanies = allCompanies.filter(
-    c => !seededCompanies.has(c.toLowerCase().trim())
-  );
+  // 4. Filter down to truly unseeded companies (not in DB, not an alias of an active board, not junk)
+  const unseededCompanies = allCompanies.filter(c => {
+    const lower = c.toLowerCase().trim();
+    if (JUNK_COMPANY_TOKENS.has(lower) || lower.length <= 1) return false;
+    if (seededCompanies.has(lower)) return false;
+    if (validConfigs.some(vc => isSameCompany(c, vc.company_name))) return false;
+    return true;
+  });
 
   if (unseededCompanies.length === 0) {
     return NextResponse.json({
       success: true,
       message: force 
         ? "Purged configurations and successfully re-seeded statically known boards!"
-        : "All target companies are already seeded!",
+        : "All network companies are already mapped to active ATS scrapers or verified as direct hiring!",
       seededCount: seededCompanies.size,
       remainingCount: 0
     });
