@@ -14,6 +14,7 @@ import { JobInbox } from "./JobInbox";
 import { playNotificationSound } from "@/lib/sound";
 import { cleanJobTitle, isSameCompany } from "@/lib/jobs/job-filters";
 import { ProximityCardModal } from "@/components/profile/ProximityCardModal";
+import { DeepFetchModal } from "./DeepFetchModal";
 
 interface SuggestedJob {
   id: string;
@@ -69,7 +70,7 @@ interface JobsCachePayload {
   timestamp: number;
 }
 
-const JOBS_CACHE_KEY = "proxnet_last_jobs_pull_v1";
+const JOBS_CACHE_KEY = "proxnet_last_jobs_pull_v2";
 
 // In-memory module cache to persist across client-side tab switching without any disk hit
 let memoryJobsCache: JobsCachePayload | null = null;
@@ -211,7 +212,14 @@ export function SuggestedJobs() {
             reason: bp.whyThisOpportunity,
           };
 
-          const referralContacts = bp.connector?.proxnetUserId
+          // Strictly validate that the connector is actually at bp.company and not a mismatched profile
+          const isPramodMismatched = bp.connector?.proxnetUserId === "6052f1f7-b42c-4fab-bd08-2d98b0ff5252" && bp.company.toLowerCase().trim() !== "t";
+          const connectorRoleCompany = bp.connector?.role?.split("@")[1]?.trim();
+          const connectorPathCompany = bp.connector?.connectionPath?.split("@")[1]?.replace(")", "").trim();
+          const connCompany = connectorRoleCompany || connectorPathCompany;
+          const isCompanyValid = connCompany ? isSameCompany(connCompany, bp.company) : true;
+
+          const referralContacts = (bp.connector?.proxnetUserId && !isPramodMismatched && isCompanyValid)
             ? [
                 {
                   id: bp.connector.proxnetUserId,
@@ -229,10 +237,14 @@ export function SuggestedJobs() {
             );
             existingJobs.unshift(jobObj);
             existingJobs.sort((a, b) => (b.score ?? b.matchRate ?? 0) - (a.score ?? a.matchRate ?? 0));
+            const cleanExistingReferrals = (existingComp.referralContacts || []).filter((c) => {
+              const isPramod = c.id === "6052f1f7-b42c-4fab-bd08-2d98b0ff5252" && existingComp.company.toLowerCase().trim() !== "t";
+              return !isPramod;
+            });
             updated[compIdx] = {
               ...existingComp,
-              contactsCount: Math.max(existingComp.contactsCount, referralContacts.length),
-              referralContacts: existingComp.referralContacts?.length ? existingComp.referralContacts : referralContacts,
+              contactsCount: Math.max(cleanExistingReferrals.length, referralContacts.length),
+              referralContacts: cleanExistingReferrals.length ? cleanExistingReferrals : referralContacts,
               jobs: existingJobs,
             };
           } else {
@@ -298,12 +310,25 @@ export function SuggestedJobs() {
             const existingJobs = existingComp.jobs.filter((j) => j.id !== m.id);
             existingJobs.unshift(jobObj);
             existingJobs.sort((a, b) => (b.score ?? b.matchRate ?? 0) - (a.score ?? a.matchRate ?? 0));
-            updated[compIdx] = { ...existingComp, jobs: existingJobs };
+            const cleanExistingReferrals = (existingComp.referralContacts || []).filter((c) => {
+              const isPramod = c.id === "6052f1f7-b42c-4fab-bd08-2d98b0ff5252" && existingComp.company.toLowerCase().trim() !== "t";
+              return !isPramod;
+            });
+            updated[compIdx] = {
+              ...existingComp,
+              contactsCount: cleanExistingReferrals.length,
+              referralContacts: cleanExistingReferrals,
+              jobs: existingJobs,
+            };
           } else {
+            const cleanReferrals = (m.referralContacts || []).filter((c: any) => {
+              const isPramod = c.id === "6052f1f7-b42c-4fab-bd08-2d98b0ff5252" && m.company.toLowerCase().trim() !== "t";
+              return !isPramod;
+            });
             updated.unshift({
               company: m.company,
-              contactsCount: m.referralContacts?.length || 0,
-              referralContacts: m.referralContacts || [],
+              contactsCount: cleanReferrals.length,
+              referralContacts: cleanReferrals,
               jobs: [jobObj],
             });
           }
@@ -417,7 +442,29 @@ export function SuggestedJobs() {
           newProfileDigest = data.profileDigest;
           setProfileDigest(newProfileDigest);
           if (Array.isArray(data.profileDigest.deep_career_blueprints) && data.profileDigest.deep_career_blueprints.length > 0) {
-            newBlueprints = data.profileDigest.deep_career_blueprints;
+            newBlueprints = data.profileDigest.deep_career_blueprints.map((bp: ConversionBlueprint) => {
+              if (bp.connector && bp.connector.type === "proxnet") {
+                const isPramodMismatched = bp.connector.proxnetUserId === "6052f1f7-b42c-4fab-bd08-2d98b0ff5252" && bp.company.toLowerCase().trim() !== "t";
+                const roleComp = bp.connector.role?.split("@")[1]?.trim();
+                const pathComp = bp.connector.connectionPath?.split("@")[1]?.replace(")", "").trim();
+                const connComp = roleComp || pathComp;
+                const isSame = connComp && isSameCompany(connComp, bp.company) && (connComp.toLowerCase().trim() !== "t" || bp.company.toLowerCase().trim() === "t");
+
+                if (isPramodMismatched || !isSame) {
+                  return {
+                    ...bp,
+                    connector: {
+                      type: "linkedin",
+                      linkedinSearchUrl: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(bp.company + " (Director OR Head OR VP)")}`,
+                      linkedinAlumniUrl: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(bp.company)}`,
+                      outreachMessage: `Hi [Name], I noticed ${bp.company}'s ${bp.title}. With my background, I'd love to connect and learn about the team's roadmap.`,
+                      connectionPath: `LinkedIn Direct: Hiring Leader at ${bp.company}`,
+                    },
+                  };
+                }
+              }
+              return bp;
+            });
             setDeepConversionBlueprints(newBlueprints);
           }
         }
@@ -1767,7 +1814,7 @@ export function SuggestedJobs() {
                     ) : (
                       <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
                         <span>🤝</span>
-                        <span>{m.referralContacts?.length || 1} Insider Referrer(s) Available</span>
+                        <span>{(m.referralContacts && m.referralContacts.length > 0) ? m.referralContacts.length : "Verified"} Insider Referrer(s) Available</span>
                       </div>
                     )}
 
@@ -2633,6 +2680,19 @@ export function SuggestedJobs() {
         wallet={userWallet ?? 0}
         hasResume={hasResume}
         onBlueprintsFetched={handleBlueprintsFetched}
+        onOpenResumeUpload={() => {
+          const el = document.getElementById("resume-upload-input");
+          if (el) el.click();
+        }}
+      />
+
+      {/* Deep ATS Match Hunter Modal */}
+      <DeepFetchModal
+        isOpen={showDeepFetchModal}
+        onClose={() => setShowDeepFetchModal(false)}
+        wallet={userWallet ?? 0}
+        hasResume={hasResume}
+        onMatchesFetched={handleMatchesFetched}
         onOpenResumeUpload={() => {
           const el = document.getElementById("resume-upload-input");
           if (el) el.click();

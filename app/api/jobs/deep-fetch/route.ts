@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { STRATEGIES, stripHtml } from "@/lib/scrape-strategies";
-import { isJobEligible, cleanJobTitle, normalizeJobTitle, normalizeJobUrl } from "@/lib/jobs/job-filters";
+import { isJobEligible, cleanJobTitle, normalizeJobTitle, normalizeJobUrl, isSameCompany as matchSameCompany } from "@/lib/jobs/job-filters";
 import { discoverCompetitorsForCompany } from "@/lib/competitors/discover-competitors";
 import { deductWalletCredits } from "@/lib/wallet";
 import { verifyJobUrlLive } from "@/lib/jobs/url-validator";
@@ -147,7 +147,13 @@ export async function POST(request: Request) {
           !isSameCompany(cfg.company_name) &&
           !seenCompanies.has(cKey) &&
           cfg.board_token_or_url &&
-          discoveredCompetitorNames.some(comp => comp === cKey || comp.includes(cKey) || cKey.includes(comp))
+          discoveredCompetitorNames.some(comp => {
+            const c = comp.toLowerCase().trim();
+            if (c.length <= 2 || cKey.length <= 2) {
+              return c === cKey;
+            }
+            return matchSameCompany(c, cKey);
+          })
         ) {
           seenCompanies.add(cKey);
           targetBoards.push({

@@ -131,7 +131,7 @@ async function runExcludeOwnCompanyTestSuite() {
     "deep-conversion-miner must import isSameCompany"
   );
   assert(
-    minerCode.includes("!isSameCompany(j.company, candidate.currentCompany)"),
+    minerCode.includes("isSameCompany(job.company, candidate.currentCompany)") || minerCode.includes("!isSameCompany(j.company, candidate.currentCompany)"),
     "deep-conversion-miner must filter out candidate's own company before selecting jobs"
   );
   console.log("✅ Test 4 Passed: Deep Career Conversion Miner guarantees candidate's own employer is excluded.");

@@ -507,6 +507,47 @@ Return ONLY a JSON object with:
       return maxB - maxA;
     });
 
+    // Sanitize any corrupt or mismatched connectors in deep_career_blueprints
+    if (profileDigest && Array.isArray((profileDigest as any).deep_career_blueprints)) {
+      let needsDbUpdate = false;
+      const cleanedBlueprints = (profileDigest as any).deep_career_blueprints.map((bp: any) => {
+        if (bp.connector && bp.connector.type === "proxnet") {
+          const isPramod = bp.connector.proxnetUserId === "6052f1f7-b42c-4fab-bd08-2d98b0ff5252" ||
+            (bp.connector.name && bp.connector.name.toLowerCase().includes("prmod"));
+          const roleComp = bp.connector.role?.split("@")[1]?.trim();
+          const pathComp = bp.connector.connectionPath?.split("@")[1]?.replace(")", "").trim();
+          const connComp = roleComp || pathComp || (isPramod ? "T" : "");
+
+          const isSame = connComp && isSameCompany(connComp, bp.company) && (connComp.toLowerCase().trim() !== "t" || bp.company.toLowerCase().trim() === "t");
+
+          if (isPramod || !isSame) {
+            needsDbUpdate = true;
+            return {
+              ...bp,
+              connector: {
+                type: "linkedin",
+                linkedinSearchUrl: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(bp.company + " (Director OR Head OR VP)")}`,
+                linkedinAlumniUrl: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(bp.company)}`,
+                outreachMessage: `Hi [Name], I noticed ${bp.company}'s ${bp.title}. With my background, I'd love to connect and learn about the team's roadmap.`,
+                connectionPath: `LinkedIn Direct: Hiring Leader at ${bp.company}`,
+              },
+            };
+          }
+        }
+        return bp;
+      });
+
+      (profileDigest as any).deep_career_blueprints = cleanedBlueprints;
+
+      if (needsDbUpdate) {
+        (async () => {
+          try {
+            await supabase.from("users").update({ profile_digest: profileDigest }).eq("id", user.id);
+          } catch {}
+        })();
+      }
+    }
+
     return NextResponse.json({
       success: true,
       isMatchingCompleted: true,

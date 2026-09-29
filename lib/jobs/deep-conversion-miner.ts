@@ -420,7 +420,10 @@ export async function crawlCandidateTargetAts(
 
     const matchesTarget = allTargetNames.some(t => {
       const tNorm = t.toLowerCase().trim();
-      return isSameCompany(tNorm, cKey) || tNorm.includes(cKey) || cKey.includes(tNorm);
+      if (tNorm.length <= 2 || cKey.length <= 2) {
+        return tNorm === cKey;
+      }
+      return isSameCompany(tNorm, cKey);
     });
 
     if (matchesTarget && cfg.board_token_or_url) {
@@ -782,6 +785,13 @@ export async function resolveConnector(
     .eq("is_active", true);
 
   const insider = (users || []).find(u => {
+    if (!u.company) return false;
+    const cleanU = u.company.trim().toLowerCase();
+    const cleanTarget = companyName.trim().toLowerCase();
+    // Short company names (<= 2 chars, like "T") must strictly match exact only
+    if (cleanU.length <= 2 || cleanTarget.length <= 2) {
+      return cleanU === cleanTarget;
+    }
     return isSameCompany(u.company, companyName);
   });
 
