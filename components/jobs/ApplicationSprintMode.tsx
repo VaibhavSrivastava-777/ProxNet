@@ -44,10 +44,21 @@ export function ApplicationSprintMode({
   const [actionToast, setActionToast] = useState<string | null>(null);
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [newGoal, setNewGoal] = useState("15");
+  const [showGuideModal, setShowGuideModal] = useState(false);
 
   useEffect(() => {
     fetchSprintStatus();
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && showGuideModal) {
+        setShowGuideModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showGuideModal]);
 
   const fetchSprintStatus = async () => {
     setLoading(true);
@@ -85,6 +96,7 @@ export function ApplicationSprintMode({
       if (typeof data.remainingWallet === "number") {
         onWalletUpdated(data.remainingWallet);
       }
+      setShowGuideModal(true);
       showToast("🚀 Application Sprint activated for 7 days! Let's crush your goals.");
     } catch (e) {
       console.error("Sprint activation failed", e);
@@ -230,6 +242,15 @@ export function ApplicationSprintMode({
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowGuideModal(true)}
+                className="px-2.5 py-1.5 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] hover:border-primary/40 text-xs font-semibold text-primary transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                title="View Sprint Playbook & How It Works"
+              >
+                <span>ℹ️</span>
+                <span>Sprint Playbook</span>
+              </button>
               {onFilterPioneerJobs && (
                 <button
                   type="button"
@@ -416,6 +437,162 @@ export function ApplicationSprintMode({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Sprint Playbook & Action Guide Modal */}
+      {showGuideModal && (
+        <div
+          className="fixed inset-0 z-[100000] flex flex-col items-center justify-end sm:justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 overflow-hidden pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),0.75rem)] animate-fadeIn"
+          onClick={() => setShowGuideModal(false)}
+        >
+          <div
+            className="bg-[var(--color-surface)] w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] animate-scaleIn flex flex-col h-[90dvh] sm:h-auto sm:max-h-[86vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 z-20">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-xl">🚀</span>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0">
+                    Application Sprint Playbook
+                  </h3>
+                  <p className="text-[11px] text-[var(--color-text-secondary)] m-0">
+                    How to proceed & maximize your 7-day sprint
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGuideModal(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] bg-[var(--color-surface)] cursor-pointer transition-colors shrink-0 shadow-2xs active:scale-95"
+                aria-label="Close guide"
+                title="Close"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 flex flex-col gap-4 min-h-0 text-xs text-[var(--color-text)] overscroll-contain">
+              {/* Introduction Banner */}
+              <div className="p-3.5 rounded-xl bg-gradient-to-r from-primary/15 via-indigo-500/10 to-emerald-500/15 border border-primary/25 space-y-1">
+                <div className="font-bold text-xs text-primary flex items-center gap-1.5">
+                  <span>⚡</span>
+                  <span>Sprint Philosophy: High-Intent Quality & Steady Velocity</span>
+                </div>
+                <p className="text-[11.5px] text-[var(--color-text-secondary)] m-0 leading-relaxed">
+                  Job search momentum comes from combining <strong>self-effort direct applications</strong> with <strong>outreach to human decision-makers</strong>. Here is your daily roadmap:
+                </p>
+              </div>
+
+              {/* Part 1: What You Should Do (Self-Effort) */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold uppercase text-[var(--color-text-tertiary)] tracking-wider block">
+                  🎯 1. Your Daily Self-Effort Routine
+                </span>
+
+                <div className="space-y-2">
+                  <div className="p-3 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex items-start gap-2.5">
+                    <span className="text-base shrink-0 mt-0.5">📝</span>
+                    <div className="space-y-0.5">
+                      <strong className="text-[var(--color-text)]">Target 2–3 Quality Applications Daily:</strong>
+                      <p className="text-[11px] text-[var(--color-text-secondary)] m-0 leading-relaxed">
+                        Rather than blindly applying to dozens of openings, pick 2–3 roles with &gt;70% match. Click <strong>Apply Direct</strong> to submit directly on the company&apos;s ATS (Greenhouse, Lever, Ashby, etc.) with a tailored resume.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex items-start gap-2.5">
+                    <span className="text-base shrink-0 mt-0.5">✉️</span>
+                    <div className="space-y-0.5">
+                      <strong className="text-[var(--color-text)]">Pair Every Application With Outreach:</strong>
+                      <p className="text-[11px] text-[var(--color-text-secondary)] m-0 leading-relaxed">
+                        For every ATS application, find the recruiter or hiring manager on LinkedIn using our 1-click search buttons. Send a friendly 3-sentence note introducing your experience and mentioning that you applied.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] flex items-start gap-2.5">
+                    <span className="text-base shrink-0 mt-0.5">🤝</span>
+                    <div className="space-y-0.5">
+                      <strong className="text-[var(--color-text)]">Ask ProxNet Insiders for Referrals:</strong>
+                      <p className="text-[11px] text-[var(--color-text-secondary)] m-0 leading-relaxed">
+                        When an opening has ProxNet members, click <strong>Ask Referral</strong> to get an insider introduction. Referred candidates are 4x more likely to secure an interview.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Part 2: How to Log Your Actions */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold uppercase text-[var(--color-text-tertiary)] tracking-wider block">
+                  📊 2. Logging What Happens (+1 Log Buttons)
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-primary text-xs">+1 Log</span>
+                      <span className="text-xs">📄</span>
+                    </div>
+                    <p className="text-[11px] text-[var(--color-text-secondary)] m-0 leading-tight">
+                      Click after you submit a direct ATS application on a career portal.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-amber-700 dark:text-amber-300 text-xs">+1 Log DM</span>
+                      <span className="text-xs">💬</span>
+                    </div>
+                    <p className="text-[11px] text-[var(--color-text-secondary)] m-0 leading-tight">
+                      Click after sending a personalized LinkedIn InMail, DM, or email.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-blue-600 dark:text-blue-400 text-xs">+1 Log Ref</span>
+                      <span className="text-xs">🤝</span>
+                    </div>
+                    <p className="text-[11px] text-[var(--color-text-secondary)] m-0 leading-tight">
+                      Click after initiating a referral conversation with an insider.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-[11px] text-[var(--color-text-secondary)] flex items-center gap-2">
+                  <span className="text-sm shrink-0">📈</span>
+                  <span>All 3 counts advance your weekly <strong>Sprint Velocity Goal</strong> (default: 15 actions/week). Keeping a consistent pace keeps your momentum strong.</span>
+                </div>
+              </div>
+
+              {/* Part 3: Follow-Up Cadence */}
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2.5 text-[11.5px] text-emerald-800 dark:text-emerald-200">
+                <span className="text-base shrink-0">⏰</span>
+                <div className="leading-relaxed">
+                  <strong>5-Day Follow-Up Cadence:</strong> If an application or outreach message receives no response after 5 business days, send a brief, courteous follow-up on LinkedIn. 40% of recruiter responses happen on the follow-up!
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer / Close Action */}
+            <div className="px-4 py-3 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 z-20 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowGuideModal(false)}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary to-indigo-600 hover:from-primary/90 hover:to-indigo-500 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer border-none flex items-center justify-center gap-1.5"
+              >
+                <span>Got It, Let&apos;s Sprint! 🚀</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

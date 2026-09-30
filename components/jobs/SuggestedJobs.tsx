@@ -406,15 +406,38 @@ export function SuggestedJobs() {
     return () => window.removeEventListener("job_application_updated", onUpdated);
   }, [fetchSavedApplications]);
 
+  const handleCloseCompanyModal = useCallback(() => {
+    setActiveCompanyModal(null);
+    if (typeof window !== "undefined" && window.history.state?.modal === "company-openings") {
+      window.history.back();
+    }
+  }, []);
+
   useEffect(() => {
+    if (!activeCompanyModal) return;
+
+    if (typeof window !== "undefined" && window.history.state?.modal !== "company-openings") {
+      window.history.pushState({ modal: "company-openings" }, "");
+    }
+
+    const handlePopState = () => {
+      setActiveCompanyModal(null);
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && activeCompanyModal) {
-        setActiveCompanyModal(null);
+      if (e.key === "Escape") {
+        handleCloseCompanyModal();
       }
     };
+
+    window.addEventListener("popstate", handlePopState);
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeCompanyModal]);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeCompanyModal, handleCloseCompanyModal]);
 
   const loadData = useCallback(async (forceRefresh: boolean = false) => {
     try {
@@ -2533,25 +2556,42 @@ export function SuggestedJobs() {
       {/* Openings Detail Modal */}
       {activeCompanyModal && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto"
-          onClick={() => setActiveCompanyModal(null)}
+          className="fixed inset-0 z-[100000] flex flex-col items-center justify-end sm:justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 overflow-hidden pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),0.75rem)]"
+          onClick={handleCloseCompanyModal}
         >
           <div 
-            className="bg-[var(--color-surface)] w-full max-w-lg rounded-2xl shadow-2xl border border-[var(--color-border)] animate-scaleIn flex flex-col max-h-[85vh] overflow-hidden my-auto"
+            className="bg-[var(--color-surface)] w-full max-w-xl rounded-t-2xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] animate-scaleIn flex flex-col h-[90dvh] sm:h-auto sm:max-h-[86vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Pinned Sticky Header */}
-            <div className="flex justify-between items-center px-5 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 z-20">
-              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <div className="flex items-center justify-between px-3.5 sm:px-5 py-3 sm:py-3.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 z-30 gap-2">
+              <button
+                type="button"
+                onClick={handleCloseCompanyModal}
+                className="px-2.5 py-1.5 rounded-lg bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border-light)] text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shrink-0 shadow-2xs"
+                title="Back to Jobs"
+                aria-label="Back to Jobs"
+              >
+                <span className="text-sm font-bold leading-none">←</span>
+                <span className="text-xs">Back</span>
+              </button>
+
+              <div className="flex items-center gap-2 min-w-0 flex-1 px-1">
                 <CompanyLogo company={activeCompanyModal.company} size={28} />
-                <h3 className="text-base sm:text-lg font-bold text-[var(--color-text)] m-0 truncate">
-                  Openings at {activeCompanyModal.company}
-                </h3>
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0 truncate">
+                    {activeCompanyModal.company}
+                  </h3>
+                  <p className="text-[11px] text-[var(--color-text-secondary)] m-0 truncate">
+                    {activeCompanyModal.jobs.length} Open Position{activeCompanyModal.jobs.length > 1 ? "s" : ""}
+                  </p>
+                </div>
               </div>
+
               <button 
                 type="button"
-                onClick={() => setActiveCompanyModal(null)} 
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] bg-[var(--color-surface)] cursor-pointer transition-colors shrink-0 shadow-2xs"
+                onClick={handleCloseCompanyModal} 
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] bg-[var(--color-surface)] cursor-pointer transition-colors shrink-0 shadow-2xs active:scale-95"
                 aria-label="Close modal"
                 title="Close (Esc)"
               >
@@ -2563,7 +2603,7 @@ export function SuggestedJobs() {
             </div>
 
             {/* Scrollable Content Area */}
-            <div className="p-4 sm:p-5 overflow-y-auto flex-1 flex flex-col gap-3.5 min-h-0">
+            <div className="p-3.5 sm:p-5 overflow-y-auto flex-1 flex flex-col gap-3.5 min-h-0 overscroll-contain">
 
             {(() => {
               const count = (activeCompanyModal.referralContacts || []).filter(c => !currentUserId || c.id !== currentUserId).length;
@@ -2768,7 +2808,7 @@ export function SuggestedJobs() {
                             <button
                               type="button"
                               onClick={() => {
-                                setActiveCompanyModal(null);
+                                handleCloseCompanyModal();
                                 window.scrollTo({ top: 0, behavior: "smooth" });
                               }}
                               className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 p-0 font-medium"
@@ -3022,6 +3062,22 @@ export function SuggestedJobs() {
                   );
                 })}
             </div>
+            </div>
+
+            {/* Pinned Sticky Footer */}
+            <div className="px-4 py-3 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 z-20 flex items-center justify-between gap-3 shadow-xs">
+              <span className="text-xs text-[var(--color-text-tertiary)] flex items-center gap-1.5 font-medium">
+                <span>💼</span>
+                <span>Showing {activeCompanyModal.jobs.length} role{activeCompanyModal.jobs.length > 1 ? "s" : ""}</span>
+              </span>
+              <button
+                type="button"
+                onClick={handleCloseCompanyModal}
+                className="px-4 py-2 rounded-lg bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] text-xs font-bold text-[var(--color-text)] cursor-pointer transition-colors active:scale-95 flex items-center gap-1.5 shadow-2xs"
+              >
+                <span>←</span>
+                <span>Back to Jobs</span>
+              </button>
             </div>
           </div>
         </div>
