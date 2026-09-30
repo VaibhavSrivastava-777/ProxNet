@@ -1133,6 +1133,35 @@ export function SuggestedJobs() {
     return list.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 6);
   }, [companies, allCompanies]);
 
+  const handleSelectSprintJob = (job: { id: string; title: string; company: string; score?: number; url?: string }) => {
+    const found =
+      companies.find((c) => isSameCompany(c.company, job.company)) ||
+      allCompanies.find((c) => isSameCompany(c.company, job.company));
+
+    if (found) {
+      setActiveCompanyModal(found);
+    } else {
+      setActiveCompanyModal({
+        company: job.company,
+        jobs: [
+          {
+            id: job.id,
+            title: job.title,
+            location: "Flexible / Remote",
+            url: job.url || "",
+            description: "",
+            posted_at: new Date().toISOString(),
+            keywords: [],
+            score: job.score,
+            matchRate: job.score || 80,
+          },
+        ],
+        contactsCount: 0,
+        referralContacts: [],
+      });
+    }
+  };
+
   const similarCompaniesWithReferrers = useMemo(() => {
     return companies
       .filter((c) => c.contactsCount > 0)
@@ -1224,6 +1253,7 @@ export function SuggestedJobs() {
             window.dispatchEvent(new CustomEvent("wallet-updated", { detail: newWallet }));
           }}
           topSprintJobs={topSprintJobs}
+          onSelectJob={handleSelectSprintJob}
           onFilterPioneerJobs={() => {
             setJobsViewMode("all");
             setHasReferrersOnly(false);
@@ -1572,31 +1602,97 @@ export function SuggestedJobs() {
                     {bp.connector && (
                       <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
                         <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm">{isProxNet ? "🟢" : "🔵"}</span>
-                            <span className="font-bold text-xs text-[var(--color-text)]">
-                              {bp.connector.connectionPath}
-                            </span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-sm shrink-0">{isProxNet ? "🟢" : "🔵"}</span>
+                            {isProxNet ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (bp.connector?.proxnetUserId) {
+                                    handleOpenProximityProfile({
+                                      id: bp.connector.proxnetUserId,
+                                      full_name: bp.connector.name || "Insider",
+                                      anonymous_name: bp.connector.name || "Insider",
+                                      job_title: bp.connector.role || "Insider",
+                                      company: bp.company,
+                                    });
+                                  }
+                                }}
+                                className="font-bold text-xs text-[var(--color-text)] hover:underline cursor-pointer bg-transparent border-0 p-0 text-left truncate"
+                                title="View Proximity Profile of Insider"
+                              >
+                                {bp.connector.connectionPath} ↗
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handlePioneerClick(
+                                    bp.company,
+                                    "Director OR VP OR Head OR Hiring Manager",
+                                    `Search Hiring Leaders at ${bp.company}`
+                                  );
+                                }}
+                                className="font-bold text-xs text-[var(--color-text)] hover:underline cursor-pointer bg-transparent border-0 p-0 text-left truncate"
+                                title="Click to view safe search options for hiring leaders"
+                              >
+                                {bp.connector.connectionPath}
+                              </button>
+                            )}
                           </div>
 
-                          {!isProxNet && bp.connector.linkedinAlumniUrl && (
-                            <div className="flex items-center gap-1.5">
-                              <a
-                                href={bp.connector.linkedinAlumniUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2.5 py-1 rounded bg-[#0077b5]/15 text-[#0077b5] dark:text-[#00a0dc] font-bold text-[10px] border border-[#0077b5]/30 hover:bg-[#0077b5] hover:text-white transition-all"
+                          {!isProxNet && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handlePioneerClick(
+                                    bp.company,
+                                    "Director OR VP OR Head OR Hiring Manager",
+                                    `Search Hiring Leaders at ${bp.company}`
+                                  );
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-[#0077b5]/15 hover:bg-[#0077b5] text-[#0077b5] hover:text-white dark:text-[#00a0dc] font-bold text-[10px] border border-[#0077b5]/30 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                                title="Safe in-app search options for Hiring Leaders"
                               >
-                                Alumni Search ↗
-                              </a>
-                              <a
-                                href={bp.connector.linkedinSearchUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2.5 py-1 rounded bg-[#0077b5]/15 text-[#0077b5] dark:text-[#00a0dc] font-bold text-[10px] border border-[#0077b5]/30 hover:bg-[#0077b5] hover:text-white transition-all"
+                                <span>🔍</span>
+                                <span>Leaders ↗</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handlePioneerClick(
+                                    bp.company,
+                                    "Alumni",
+                                    `Search Alumni at ${bp.company}`
+                                  );
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-[#0077b5]/15 hover:bg-[#0077b5] text-[#0077b5] hover:text-white dark:text-[#00a0dc] font-bold text-[10px] border border-[#0077b5]/30 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                                title="Safe in-app search options for Alumni"
                               >
-                                Leaders ↗
-                              </a>
+                                <span>🎓</span>
+                                <span>Alumni Search ↗</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setColdOutreachModalJob({
+                                    job: {
+                                      id: bp.jobId || `bp_${bIdx}`,
+                                      title: bp.title,
+                                      description: bp.whyThisOpportunity || "",
+                                      keywords: bp.focusY?.keywordsToAdd || [],
+                                      score: bp.matchScore,
+                                    },
+                                    company: bp.company,
+                                  });
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                                title="Draft customized AI message for Hiring Leaders in ProxNet (FREE)"
+                              >
+                                <span>✉️</span>
+                                <span>Custom Pitch</span>
+                              </button>
                             </div>
                           )}
                         </div>
@@ -3216,35 +3312,54 @@ export function SuggestedJobs() {
 
               {/* Action Buttons */}
               <div className="flex flex-col gap-2.5 pt-1">
-                <a
-                  href={linkedInLaunchData.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
                   onClick={() => {
-                    setInviteToast(`🔗 Invite link for ${linkedInLaunchData.company} copied! Paste it in LinkedIn DMs.`);
+                    try {
+                      navigator.clipboard.writeText(linkedInLaunchData.inviteUrl);
+                    } catch {}
+                    setInviteToast(`🔗 Link copied! Opening LinkedIn search...`);
+                    if (typeof window !== "undefined") {
+                      window.open(linkedInLaunchData.url, "_blank", "noopener,noreferrer");
+                    }
                     setTimeout(() => {
                       setInviteToast(null);
                       setLinkedInLaunchData(null);
-                    }, 4000);
+                    }, 2000);
                   }}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#0077b5] hover:bg-[#005885] text-white font-bold text-sm shadow-lg transition-all active:scale-[0.98] no-underline"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#0077b5] hover:bg-[#005885] text-white font-bold text-sm shadow-lg transition-all active:scale-[0.98] cursor-pointer"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
                   <span>{linkedInLaunchData.title ? `${linkedInLaunchData.title} ↗` : `Search ${linkedInLaunchData.company} on LinkedIn ↗`}</span>
-                </a>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      navigator.clipboard.writeText(linkedInLaunchData.url);
+                      setInviteToast("✓ LinkedIn search link copied! You can paste it directly in the LinkedIn App.");
+                      setTimeout(() => setInviteToast(null), 3500);
+                    } catch {}
+                  }}
+                  className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[#0077b5] dark:text-[#00a0dc] font-bold text-xs border border-[#0077b5]/30 cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <span>📋</span>
+                  <span>Copy Search Link (Open in LinkedIn App)</span>
+                </button>
 
                 <button
                   type="button"
                   onClick={() => setLinkedInLaunchData(null)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] font-semibold text-xs border border-[var(--color-border-light)] cursor-pointer transition-colors"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] font-bold text-xs border border-[var(--color-border-light)] cursor-pointer transition-colors"
                 >
-                  Stay in ProxNet
+                  ✕ Stay in ProxNet
                 </button>
               </div>
 
               {/* Return hint */}
               <p className="text-[10px] text-center text-[var(--color-text-tertiary)] m-0 leading-relaxed">
-                💡 LinkedIn opens in a new tab. Swipe back or tap your browser&apos;s back button to return here.
+                💡 LinkedIn opens externally in your browser or LinkedIn app. Your ProxNet app and active session remain right here!
               </p>
             </div>
           </div>

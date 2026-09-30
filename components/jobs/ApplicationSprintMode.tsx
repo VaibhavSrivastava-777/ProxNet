@@ -14,6 +14,7 @@ export interface ApplicationSprintModeProps {
   onWalletUpdated: (newWallet: number) => void;
   onOpenBatchOutreach?: () => void;
   onFilterPioneerJobs?: () => void;
+  onSelectJob?: (job: { id: string; title: string; company: string; score?: number; url?: string }) => void;
   topSprintJobs?: Array<{
     id: string;
     title: string;
@@ -27,6 +28,7 @@ export function ApplicationSprintMode({
   userWallet,
   onWalletUpdated,
   onFilterPioneerJobs,
+  onSelectJob,
   topSprintJobs = [],
 }: ApplicationSprintModeProps) {
   const [active, setActive] = useState(false);
@@ -381,19 +383,22 @@ export function ApplicationSprintMode({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {topSprintJobs.slice(0, 3).map((job) => (
-                  <div
+                  <button
                     key={job.id}
-                    className="p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)] flex flex-col justify-between gap-1.5"
+                    type="button"
+                    onClick={() => onSelectJob?.(job)}
+                    className="p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)] hover:border-primary/50 flex flex-col justify-between gap-1.5 text-left transition-all cursor-pointer shadow-2xs hover:shadow-xs group w-full"
+                    title={`View ${job.title} at ${job.company} in ProxNet`}
                   >
                     <div>
-                      <div className="text-xs font-bold text-[var(--color-text)] truncate">
+                      <div className="text-xs font-bold text-[var(--color-text)] group-hover:text-primary transition-colors truncate">
                         {job.title}
                       </div>
                       <div className="text-[11px] text-[var(--color-text-secondary)]">
                         🏢 {job.company}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between gap-1 pt-1 border-t border-[var(--color-border-light)]/40">
+                    <div className="flex items-center justify-between gap-1 pt-1 border-t border-[var(--color-border-light)]/40 w-full">
                       {job.score ? (
                         <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
                           {job.score}% Fit
@@ -401,18 +406,12 @@ export function ApplicationSprintMode({
                       ) : (
                         <span className="text-[10px] text-primary font-semibold">Priority</span>
                       )}
-                      {job.url && (
-                        <a
-                          href={job.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] text-primary hover:underline font-bold"
-                        >
-                          View Job ↗
-                        </a>
-                      )}
+                      <span className="text-[10px] text-primary font-bold flex items-center gap-0.5 group-hover:underline">
+                        <span>View Role</span>
+                        <span>↗</span>
+                      </span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>

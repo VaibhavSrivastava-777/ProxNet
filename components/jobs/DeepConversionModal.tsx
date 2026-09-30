@@ -76,6 +76,27 @@ export function DeepConversionModal({
   const [creditsExpended, setCreditsExpended] = useState<number | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [activeTabMap, setActiveTabMap] = useState<Record<number, "x" | "y" | "z">>({});
+  const [linkedInLaunchData, setLinkedInLaunchData] = useState<{
+    company: string;
+    url: string;
+    title: string;
+    outreachMessage?: string;
+  } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleLaunchLinkedIn = (company: string, url: string, title: string, outreachMessage?: string) => {
+    if (outreachMessage) {
+      try {
+        navigator.clipboard.writeText(outreachMessage);
+      } catch {}
+    }
+    setLinkedInLaunchData({ company, url, title, outreachMessage });
+  };
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -443,15 +464,18 @@ export function DeepConversionModal({
                           <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-extrabold text-xs border border-emerald-500/20">
                             {bp.matchScore}% Match
                           </span>
-                          <a
-                            href={bp.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2.5 py-1 rounded-lg bg-[var(--color-surface-secondary)] hover:bg-primary hover:text-white text-[var(--color-text)] font-semibold text-xs border border-[var(--color-border-light)] transition-all flex items-center gap-1"
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (bp.url && typeof window !== "undefined") {
+                                window.open(bp.url, "_blank", "noopener,noreferrer");
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-[var(--color-surface-secondary)] hover:bg-primary hover:text-white text-[var(--color-text)] font-semibold text-xs border border-[var(--color-border-light)] transition-all flex items-center gap-1 cursor-pointer"
                           >
                             <span>Apply</span>
                             <span>↗</span>
-                          </a>
+                          </button>
                         </div>
                       </div>
 
@@ -557,32 +581,70 @@ export function DeepConversionModal({
 
                       {/* Warm Connector Card (Mr. A) */}
                       <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm">{isProxNet ? "🟢" : "🔵"}</span>
-                            <span className="font-bold text-xs text-[var(--color-text)]">
-                              {bp.connector.connectionPath}
-                            </span>
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-sm shrink-0">{isProxNet ? "🟢" : "🔵"}</span>
+                            {isProxNet ? (
+                              <span className="font-bold text-xs text-[var(--color-text)] truncate">
+                                {bp.connector.connectionPath}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleLaunchLinkedIn(
+                                    bp.company,
+                                    bp.connector.linkedinSearchUrl || bp.connector.linkedinAlumniUrl || "",
+                                    `Search Hiring Leaders at ${bp.company}`,
+                                    bp.connector.outreachMessage
+                                  )
+                                }
+                                className="font-bold text-xs text-[var(--color-text)] hover:underline cursor-pointer bg-transparent border-0 p-0 text-left truncate"
+                                title="Click to view safe search options for hiring leaders"
+                              >
+                                {bp.connector.connectionPath}
+                              </button>
+                            )}
                           </div>
 
-                          {!isProxNet && bp.connector.linkedinAlumniUrl && (
-                            <div className="flex items-center gap-1.5">
-                              <a
-                                href={bp.connector.linkedinAlumniUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2 py-1 rounded bg-[#0077b5]/15 text-[#0077b5] dark:text-[#00a0dc] font-bold text-[10px] border border-[#0077b5]/30 hover:bg-[#0077b5] hover:text-white transition-all"
-                              >
-                                Alumni Search ↗
-                              </a>
-                              <a
-                                href={bp.connector.linkedinSearchUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2 py-1 rounded bg-[#0077b5]/15 text-[#0077b5] dark:text-[#00a0dc] font-bold text-[10px] border border-[#0077b5]/30 hover:bg-[#0077b5] hover:text-white transition-all"
-                              >
-                                Leaders ↗
-                              </a>
+                          {!isProxNet && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {bp.connector.linkedinAlumniUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleLaunchLinkedIn(
+                                      bp.company,
+                                      bp.connector.linkedinAlumniUrl || "",
+                                      `Search Alumni at ${bp.company}`,
+                                      bp.connector.outreachMessage
+                                    )
+                                  }
+                                  className="px-2.5 py-1 rounded bg-[#0077b5]/15 text-[#0077b5] dark:text-[#00a0dc] font-bold text-[10px] border border-[#0077b5]/30 hover:bg-[#0077b5] hover:text-white transition-all cursor-pointer flex items-center gap-1"
+                                  title="Safe in-app search options for Alumni"
+                                >
+                                  <span>🎓</span>
+                                  <span>Alumni Search ↗</span>
+                                </button>
+                              )}
+                              {bp.connector.linkedinSearchUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleLaunchLinkedIn(
+                                      bp.company,
+                                      bp.connector.linkedinSearchUrl || "",
+                                      `Search Hiring Leaders at ${bp.company}`,
+                                      bp.connector.outreachMessage
+                                    )
+                                  }
+                                  className="px-2.5 py-1 rounded bg-[#0077b5]/15 text-[#0077b5] dark:text-[#00a0dc] font-bold text-[10px] border border-[#0077b5]/30 hover:bg-[#0077b5] hover:text-white transition-all cursor-pointer flex items-center gap-1"
+                                  title="Safe in-app search options for Hiring Leaders"
+                                >
+                                  <span>🔍</span>
+                                  <span>Leaders ↗</span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -868,6 +930,116 @@ export function DeepConversionModal({
           )}
         </div>
       </div>
+
+      {/* Toast feedback */}
+      {toastMessage && (
+        <div className="fixed top-5 right-5 z-[100002] px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-xl animate-fadeIn flex items-center gap-2">
+          <span>✓</span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Safe LinkedIn External Launch Interstitial */}
+      {linkedInLaunchData && (
+        <div
+          className="fixed inset-0 z-[100001] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setLinkedInLaunchData(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border-light)] shadow-2xl p-4 sm:p-6 space-y-4 animate-scaleIn text-[var(--color-text)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-[#0077b5]/15 text-[#0077b5] dark:text-[#00a0dc] flex items-center justify-center text-xl shrink-0">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--color-text)] m-0">
+                    Safe External Launch: {linkedInLaunchData.company}
+                  </h3>
+                  <p className="text-[11px] text-[var(--color-text-secondary)] m-0">
+                    {linkedInLaunchData.title || `Outreach at ${linkedInLaunchData.company}`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLinkedInLaunchData(null)}
+                className="w-7 h-7 rounded-lg bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] flex items-center justify-center text-sm font-bold transition-colors cursor-pointer border-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Note feedback */}
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-start gap-2.5">
+              <span className="text-sm shrink-0">✓</span>
+              <div className="text-xs text-emerald-800 dark:text-emerald-200">
+                <strong>Outreach Note Copied!</strong> Your high-conversion pitch is already on your clipboard, ready to paste into LinkedIn.
+              </div>
+            </div>
+
+            {/* Note preview if available */}
+            {linkedInLaunchData.outreachMessage && (
+              <div className="p-2.5 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-[11px] font-mono text-[var(--color-text-secondary)] max-h-24 overflow-y-auto leading-relaxed">
+                {linkedInLaunchData.outreachMessage}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    if (linkedInLaunchData.outreachMessage) {
+                      navigator.clipboard.writeText(linkedInLaunchData.outreachMessage);
+                    }
+                  } catch {}
+                  if (typeof window !== "undefined") {
+                    window.open(linkedInLaunchData.url, "_blank", "noopener,noreferrer");
+                  }
+                  showToast("Opening LinkedIn in new window... Your ProxNet app stays active!");
+                  setLinkedInLaunchData(null);
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0077b5] hover:bg-[#005885] text-white font-bold text-xs shadow-md transition-all active:scale-[0.98] cursor-pointer"
+              >
+                <span>Open Search in New Window ↗</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    navigator.clipboard.writeText(linkedInLaunchData.url);
+                    showToast("✓ LinkedIn search link copied! Open your native LinkedIn app to paste.");
+                  } catch {}
+                }}
+                className="w-full px-4 py-2 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[#0077b5] dark:text-[#00a0dc] font-bold text-xs border border-[#0077b5]/30 cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+              >
+                <span>📋</span>
+                <span>Copy Search Link (Open in LinkedIn App)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setLinkedInLaunchData(null)}
+                className="w-full px-4 py-2 rounded-xl bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] font-bold text-xs border border-[var(--color-border-light)] cursor-pointer transition-colors"
+              >
+                ✕ Stay in ProxNet
+              </button>
+            </div>
+
+            <p className="text-[10px] text-center text-[var(--color-text-tertiary)] m-0 leading-relaxed">
+              💡 Your ProxNet app and active conversion dossier remain open with zero interruption.
+            </p>
+          </div>
+        </div>
+      )}
     </div>,
     document.body
   );
