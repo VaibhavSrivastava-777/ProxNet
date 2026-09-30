@@ -1,6 +1,9 @@
 name: Scrape Jobs Daily
 
 on:
+  schedule:
+    # Run daily at 00:00 UTC (05:30 AM IST) so jobs and referrals are fresh every morning
+    - cron: '0 0 * * *'
   # Allow manual trigger from the GitHub UI
   workflow_dispatch:
 
@@ -28,7 +31,7 @@ jobs:
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          npx tsx scripts/run-scraper.ts
+          npx tsx scripts/scrape-jobs.ts
 
       - name: Trigger Errand Boy (Nudges)
         env:

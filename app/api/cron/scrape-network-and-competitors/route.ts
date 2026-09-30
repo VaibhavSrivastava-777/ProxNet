@@ -17,6 +17,7 @@ export async function POST(request: Request) {
 }
 
 async function handleScrape(request: Request) {
+  const startTime = Date.now();
   // Authorization: Vercel Cron Secret, Cron Header, Admin Session, or ?secret= param
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET?.trim();
@@ -105,7 +106,7 @@ async function handleScrape(request: Request) {
             await supabase.from("company_ats_config").upsert({
               company_name: comp,
               provider: "custom",
-              board_token_or_url: `https://www.google.com/search?q=${encodeURIComponent(comp + " careers jobs")}`,
+              board_token_or_url: `https://www.${comp.toLowerCase().replace(/[^a-z0-9]/g, "")}.com/careers`,
               scrape_notes: "Pioneer company pending career portal mapping"
             }, { onConflict: "company_name" });
           }
@@ -163,6 +164,12 @@ async function handleScrape(request: Request) {
 
   // Step 3: Scrape batch
   for (const target of targetBatch) {
+    // Safety guard for Vercel Serverless execution limits (max 60s)
+    if (Date.now() - startTime > 45000) {
+      console.log(`[scrape-network-and-competitors] Approaching 45s execution limit; gracefully concluding batch.`);
+      break;
+    }
+
     const strategy = STRATEGIES[target.provider];
     if (!strategy) {
       companyReports.push({

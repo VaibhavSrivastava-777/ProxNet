@@ -264,6 +264,18 @@ async function main() {
       .eq("company_name", config.company_name);
   }
 
+  // Update global cron status for admin dashboard
+  await supabase
+    .from("company_ats_config")
+    .upsert({
+      company_name: "cron_status",
+      provider: "cron_status",
+      board_token_or_url: "cron_status",
+      last_scraped_at: new Date().toISOString(),
+      total_jobs_found: totalProcessed,
+      scrape_notes: `Daily Morning Scraper finished successfully. Processed: ${totalProcessed} total postings. Saved: ${totalAdded} fresh jobs across ${configs.length} companies.`,
+    }, { onConflict: "company_name" });
+
   console.log(`\n🎉 Finished Scraping All Configs!`);
   console.log(`  Total Processed across all companies: ${totalProcessed}`);
   console.log(`  Total Successfully Added/Updated: ${totalAdded}`);

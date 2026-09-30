@@ -17,6 +17,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const startTime = Date.now();
   const supabase = createAdminClient();
   const openaiKey = process.env.OPENAI_API_KEY;
 
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
   }
 
-  // 1. Aggregate target companies from ALL sources (multi-user + global network)
+  // 1. Aggregate target companies from active user preferences and user_target_companies
   const companySet = new Map<string, { company_name: string; ats_provider: string; ats_board_token: string; careers_url: string }>();
 
   // Source A: All users' profile_digest.target_companies
@@ -60,24 +61,13 @@ export async function GET(request: Request) {
     }
   }
 
-  // Source C: Global company_ats_config (network companies)
+  // Fetch global configs to resolve user targets and fill backlog
   const { data: globalConfigs } = await supabase
     .from("company_ats_config")
-    .select("*");
+    .select("*")
+    .not("provider", "in", '("none","error","cron_status")');
 
-  for (const config of globalConfigs || []) {
-    const key = config.company_name.toLowerCase().trim();
-    if (!companySet.has(key) && config.provider && config.provider !== "none") {
-      companySet.set(key, {
-        company_name: config.company_name,
-        ats_provider: config.provider,
-        ats_board_token: config.board_token_or_url || "",
-        careers_url: config.board_token_or_url || "",
-      });
-    }
-  }
-
-  // Also check if any user target names have a global config but weren't in user_target_companies
+  // Resolve user target names against global company_ats_config
   for (const name of allTargetNames) {
     const key = name.toLowerCase().trim();
     if (!companySet.has(key)) {
@@ -93,13 +83,34 @@ export async function GET(request: Request) {
     }
   }
 
-  const targets = Array.from(companySet.values());
-
-  if (targets.length === 0) {
-    return NextResponse.json({ success: true, message: "No scrapeable target companies found across any user or global config." });
+  // If user targets are fewer than 10, backfill with oldest unscraped network boards
+  if (companySet.size < 10 && globalConfigs && globalConfigs.length > 0) {
+    const sorted = [...globalConfigs].sort((a, b) => {
+      if (!a.last_scraped_at) return -1;
+      if (!b.last_scraped_at) return 1;
+      return new Date(a.last_scraped_at).getTime() - new Date(b.last_scraped_at).getTime();
+    });
+    for (const c of sorted) {
+      if (companySet.size >= 10) break;
+      const key = c.company_name.toLowerCase().trim();
+      if (!companySet.has(key)) {
+        companySet.set(key, {
+          company_name: c.company_name,
+          ats_provider: c.provider,
+          ats_board_token: c.board_token_or_url || "",
+          careers_url: c.board_token_or_url || "",
+        });
+      }
+    }
   }
 
-  console.log(`[scrape-user-targets] Found ${targets.length} unique companies to scrape from ${allUsers?.length || 0} users + ${globalConfigs?.length || 0} global configs.`);
+  const targets = Array.from(companySet.values()).slice(0, 10);
+
+  if (targets.length === 0) {
+    return NextResponse.json({ success: true, message: "No scrapeable target companies found." });
+  }
+
+  console.log(`[scrape-user-targets] Selected targeted batch of ${targets.length} companies to scrape.`);
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -109,8 +120,13 @@ export async function GET(request: Request) {
   let totalSaved = 0;
   const companySummaries: Array<{ company: string; provider: string; totalJobs: number; saved: number; status: string }> = [];
 
-  // 2. Scrape each target company
+  // 2. Scrape each target company with execution timeout guard
   for (const target of targets) {
+    if (Date.now() - startTime > 45000) {
+      console.log(`[scrape-user-targets] Approaching 45s execution limit; gracefully concluding.`);
+      break;
+    }
+
     const strategy = STRATEGIES[target.ats_provider];
     if (!strategy) {
       companySummaries.push({
