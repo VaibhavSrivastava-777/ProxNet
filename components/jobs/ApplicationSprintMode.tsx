@@ -169,7 +169,7 @@ export function ApplicationSprintMode({
                 </span>
               </div>
               <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed max-w-xl">
-                Designed for active job seekers & laid-off tech professionals. Accelerate your outreach with high-velocity tracking, cold DM templates, and daily focused action targets.
+                Designed for professionals actively looking for their next career opportunity. Accelerate your outreach with high-velocity tracking, cold DM templates, and daily focused action targets.
               </p>
               <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-[var(--color-text-tertiary)]">
                 <span className="flex items-center gap-1">⚡ <strong>Velocity Tracker</strong></span>
