@@ -147,6 +147,11 @@ export function SuggestedJobs() {
   });
 
   const [activeCompanyModal, setActiveCompanyModal] = useState<CompanyGroup | null>(null);
+  const [directApplyModalJob, setDirectApplyModalJob] = useState<{
+    job: SuggestedJob | { id?: string; title: string; url?: string; description?: string; location?: string; score?: number; matchRate?: number };
+    company: string;
+    directUrl: string;
+  } | null>(null);
   const [mounted, setMounted] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => initialCache?.currentUserId ?? null);
   const [currentUserCompany, setCurrentUserCompany] = useState<string | null>(() => initialCache?.currentUserCompany ?? null);
@@ -416,6 +421,19 @@ export function SuggestedJobs() {
     }
   }, []);
 
+  const handleCloseDirectApplyModal = useCallback(() => {
+    setDirectApplyModalJob(null);
+    if (typeof window !== "undefined" && window.history.state?.modal === "direct-apply") {
+      window.history.back();
+    }
+  }, []);
+
+  const handleOpenDirectApply = useCallback((job: SuggestedJob | { id?: string; title: string; url?: string; description?: string; location?: string; score?: number; matchRate?: number }, company: string) => {
+    const cleanDirectUrl = (job.url || "").replace(/&amp;/g, "&").trim();
+    if (!cleanDirectUrl) return;
+    setDirectApplyModalJob({ job, company, directUrl: cleanDirectUrl });
+  }, []);
+
   useEffect(() => {
     if (!activeCompanyModal) return;
 
@@ -441,6 +459,32 @@ export function SuggestedJobs() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [activeCompanyModal, handleCloseCompanyModal]);
+
+  useEffect(() => {
+    if (!directApplyModalJob) return;
+
+    if (typeof window !== "undefined" && window.history.state?.modal !== "direct-apply") {
+      window.history.pushState({ modal: "direct-apply" }, "");
+    }
+
+    const handlePopState = () => {
+      setDirectApplyModalJob(null);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleCloseDirectApplyModal();
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [directApplyModalJob, handleCloseDirectApplyModal]);
 
   const loadData = useCallback(async (forceRefresh: boolean = false) => {
     try {
@@ -725,18 +769,33 @@ export function SuggestedJobs() {
     const code = userInviteCode || "";
     const inviteUrl = code ? `${window.location.origin}/join/${code}?company=${encodeURIComponent(companyName)}` : `${window.location.origin}/grow`;
 
-    // Copy invite link to clipboard proactively
-    try {
-      navigator.clipboard.writeText(inviteUrl);
-    } catch { /* clipboard access may fail silently */ }
+    // 1. Immediately launch LinkedIn with search filters applied
+    if (typeof window !== "undefined") {
+      try {
+        window.open(linkedInUrl, "_blank", "noopener,noreferrer");
+      } catch (err) {
+        console.warn("Could not launch LinkedIn directly:", err);
+      }
+    }
 
-    // Show in-app interstitial instead of auto-opening (fixes PWA navigation loss)
-    setLinkedInLaunchData({
-      url: linkedInUrl,
-      company: cleanCompany,
-      inviteUrl,
-      title: title || `Search ${cleanCompany} on LinkedIn`,
-    });
+    // 2. Proactively copy the filtered LinkedIn URL (NOT the invite URL) as backup
+    try {
+      navigator.clipboard.writeText(linkedInUrl);
+    } catch {}
+
+    // 3. Notification confirming LinkedIn opened with filters
+    setInviteToast(`🔗 Opening LinkedIn with filters: "${query}" (Search link copied as backup)`);
+    setTimeout(() => setInviteToast(null), 4000);
+
+    // 4. Only show the Pioneer Bounty explanation modal when explicitly clicking a Pioneer Bounty button (no roleQuery)
+    if (!roleQuery) {
+      setLinkedInLaunchData({
+        url: linkedInUrl,
+        company: cleanCompany,
+        inviteUrl,
+        title: title || `Search ${cleanCompany} on LinkedIn`,
+      });
+    }
   };
 
   const handleToggleWatch = async (companyName: string) => {
@@ -931,7 +990,7 @@ export function SuggestedJobs() {
   };
 
   // Helper: save job to pipeline
-  const handleSaveJob = async (job: SuggestedJob, company: string) => {
+  const handleSaveJob = async (job: SuggestedJob | { id?: string; title: string; url?: string; description?: string; location?: string; score?: number; matchRate?: number }, company: string) => {
     const idKey = job.id ? `id:${job.id}` : null;
     const textKey = `text:${company.toLowerCase().trim()}:::${job.title.toLowerCase().trim()}`;
     const alreadySaved = (idKey && savedJobKeys.has(idKey)) || savedJobKeys.has(textKey);
@@ -942,7 +1001,7 @@ export function SuggestedJobs() {
       return;
     }
 
-    setSavingJobId(job.id);
+    setSavingJobId(job.id || null);
     try {
       const res = await fetch("/api/jobs/applications", {
         method: "POST",
@@ -1509,15 +1568,27 @@ export function SuggestedJobs() {
                           {bp.matchScore}% Match
                         </span>
                         {bp.url && (
-                          <a
-                            href={bp.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1 rounded-lg bg-primary hover:opacity-90 text-white font-bold text-xs transition-opacity flex items-center gap-1 shadow-2xs"
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleOpenDirectApply(
+                                {
+                                  id: bp.jobId,
+                                  title: bp.title,
+                                  url: bp.url,
+                                  location: bp.location,
+                                  description: bp.whyThisOpportunity,
+                                  score: bp.matchScore,
+                                },
+                                bp.company
+                              )
+                            }
+                            className="px-3 py-1 rounded-lg bg-primary hover:opacity-90 text-white font-bold text-xs transition-opacity flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                            title={`Apply directly for ${bp.title} at ${bp.company}`}
                           >
                             <span>Apply</span>
                             <span>↗</span>
-                          </a>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1871,14 +1942,26 @@ export function SuggestedJobs() {
                     )}
 
                     {m.url && (
-                      <a
-                        href={m.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1 rounded-lg bg-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity ml-auto"
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleOpenDirectApply(
+                            {
+                              id: m.id,
+                              title: m.title,
+                              url: m.url,
+                              location: m.location,
+                              description: m.description,
+                              score: m.score,
+                            },
+                            m.company
+                          )
+                        }
+                        className="px-3 py-1 rounded-lg bg-primary text-white text-xs font-semibold hover:opacity-90 transition-opacity ml-auto cursor-pointer active:scale-95"
+                        title={`Apply directly for ${m.title} at ${m.company}`}
                       >
                         Apply on ATS →
-                      </a>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -2024,15 +2107,15 @@ export function SuggestedJobs() {
                 )}
               </button>
             ) : heroJobItem.job.url ? (
-              <a
-                href={heroJobItem.job.url.replace(/&amp;/g, "&").trim()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="py-2.5 px-4 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text)] font-bold text-xs sm:text-sm text-center transition-all shadow-xs no-underline flex items-center justify-center gap-1"
+              <button
+                type="button"
+                onClick={() => handleOpenDirectApply(heroJobItem.job, heroJobItem.group.company)}
+                className="py-2.5 px-4 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text)] font-bold text-xs sm:text-sm text-center transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1"
+                title={`Apply for ${cleanJobTitle(heroJobItem.job.title)} at ${heroJobItem.group.company}`}
               >
                 <span>Apply on Career Website</span>
                 <span>↗</span>
-              </a>
+              </button>
             ) : (
               <button
                 type="button"
@@ -2938,15 +3021,15 @@ export function SuggestedJobs() {
                               </div>
 
                               {cleanDirectUrl ? (
-                                <a
-                                  href={cleanDirectUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="btn btn-sm bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] text-center text-xs font-semibold py-2 no-underline flex items-center justify-center gap-1 shadow-2xs"
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDirectApply(job, activeCompanyModal.company)}
+                                  className="btn btn-sm bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] text-center text-xs font-semibold py-2 no-underline flex items-center justify-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                                  title={`Apply directly for ${cleanJobTitle(job.title)} at ${activeCompanyModal.company}`}
                                 >
                                   <span>↗</span>
                                   <span>Apply Directly</span>
-                                </a>
+                                </button>
                               ) : (
                                 <button
                                   type="button"
@@ -3045,15 +3128,15 @@ export function SuggestedJobs() {
 
                               {/* Direct Career Site Apply Link */}
                               {cleanDirectUrl ? (
-                                <a
-                                  href={cleanDirectUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="btn btn-sm bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] text-center text-xs font-semibold py-1.5 no-underline flex items-center justify-center gap-1 shadow-2xs"
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDirectApply(job, activeCompanyModal.company)}
+                                  className="btn btn-sm bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] text-center text-xs font-semibold py-1.5 no-underline flex items-center justify-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                                  title={`Apply directly for ${cleanJobTitle(job.title)} at ${activeCompanyModal.company}`}
                                 >
                                   <span>↗</span>
                                   <span>Apply Direct</span>
-                                </a>
+                                </button>
                               ) : (
                                 <span className="text-[10px] text-center text-[var(--color-text-tertiary)] py-1.5">Direct N/A</span>
                               )}
@@ -3304,10 +3387,149 @@ export function SuggestedJobs() {
       )}
 
 
-      {/* ── LinkedIn Launch Interstitial (replaces auto window.open) ── */}
-      {linkedInLaunchData && (
+      {/* ── Direct Apply Safe Viewer Modal (Prevents PWA Full-Screen Hijack) ── */}
+      {directApplyModalJob && mounted && typeof document !== "undefined" && createPortal(
         <div
-          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4"
+          className="fixed inset-0 z-[100002] flex flex-col items-center justify-end sm:justify-center bg-black/80 backdrop-blur-md p-0 sm:p-4 overflow-hidden pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),0.75rem)] animate-fadeIn"
+          onClick={handleCloseDirectApplyModal}
+        >
+          <div
+            className="bg-[var(--color-surface)] w-full max-w-3xl rounded-t-2xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] animate-scaleIn flex flex-col h-[94dvh] sm:h-[88vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Pinned Top Navigation Bar - NEVER Disappears */}
+            <div className="flex items-center justify-between px-3.5 sm:px-5 py-3 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 z-30 gap-2 shadow-xs">
+              <button
+                type="button"
+                onClick={handleCloseDirectApplyModal}
+                className="px-3 py-1.5 rounded-lg bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border-light)] text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shrink-0 shadow-2xs"
+                title="Return to ProxNet"
+                aria-label="Back to ProxNet"
+              >
+                <span className="text-sm font-bold leading-none">←</span>
+                <span>Back to ProxNet</span>
+              </button>
+
+              <div className="flex items-center gap-2 min-w-0 flex-1 px-1">
+                <CompanyLogo company={directApplyModalJob.company} size={24} />
+                <div className="min-w-0">
+                  <h3 className="text-xs sm:text-sm font-bold text-[var(--color-text)] m-0 truncate">
+                    {cleanJobTitle(directApplyModalJob.job.title)}
+                  </h3>
+                  <p className="text-[10.5px] text-[var(--color-text-secondary)] m-0 truncate">
+                    {directApplyModalJob.company} • Career Portal
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCloseDirectApplyModal}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] bg-[var(--color-surface)] cursor-pointer transition-colors shrink-0 shadow-2xs active:scale-95"
+                aria-label="Close"
+                title="Close (Esc)"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+
+            {/* Quick Actions Strip */}
+            <div className="px-3.5 sm:px-5 py-2.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Launch External in Safari / Chrome */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      window.open(directApplyModalJob.directUrl, "_blank", "noopener,noreferrer");
+                    }
+                    setInviteToast("↗ Opened career portal in new tab!");
+                    setTimeout(() => setInviteToast(null), 3000);
+                  }}
+                  className="btn btn-xs bg-primary text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs hover:bg-primary/90 transition-all active:scale-95 border-0"
+                  title="Open in Safari / Chrome browser"
+                >
+                  <span>↗</span>
+                  <span>Open in Browser App</span>
+                </button>
+
+                {/* Copy Link */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      navigator.clipboard.writeText(directApplyModalJob.directUrl);
+                      setInviteToast("📋 Career portal link copied to clipboard!");
+                      setTimeout(() => setInviteToast(null), 3000);
+                    } catch {}
+                  }}
+                  className="btn btn-xs bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border-light)] font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                  title="Copy application URL"
+                >
+                  <span>📋</span>
+                  <span>Copy Link</span>
+                </button>
+              </div>
+
+              {/* Log Application Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  handleSaveJob(directApplyModalJob.job, directApplyModalJob.company);
+                  fetch("/api/jobs/sprint-mode", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "applied", delta: 1 }),
+                  }).catch(() => {});
+                  setInviteToast("🎉 Application logged to your Sprint velocity!");
+                  setTimeout(() => setInviteToast(null), 3500);
+                }}
+                className="btn btn-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95 border-0"
+                title="Record application as completed"
+              >
+                <span>✓</span>
+                <span>I Applied (+1 Log)</span>
+              </button>
+            </div>
+
+            {/* In-App Browser Frame & Fallback */}
+            <div className="flex-1 flex flex-col min-h-0 bg-neutral-900 relative">
+              <iframe
+                src={directApplyModalJob.directUrl}
+                title={`${directApplyModalJob.company} Job Application`}
+                className="w-full flex-1 border-0 bg-white"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+              />
+
+              {/* Fallback Banner at Bottom */}
+              <div className="p-2 sm:p-2.5 bg-[var(--color-surface)] border-t border-[var(--color-border-light)] shrink-0 flex items-center justify-between gap-2 text-[11px] text-[var(--color-text-secondary)]">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="shrink-0">🔒</span>
+                  <span className="truncate">
+                    If this ATS portal blocks in-frame view, tap <strong>Open in Browser App ↗</strong> above.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseDirectApplyModal}
+                  className="text-xs font-bold text-primary hover:underline cursor-pointer bg-transparent border-none p-0 shrink-0"
+                >
+                  Return to ProxNet
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── LinkedIn Launch Interstitial ── */}
+      {linkedInLaunchData && mounted && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[100003] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 overflow-hidden pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),0.75rem)]"
           onClick={() => setLinkedInLaunchData(null)}
         >
           <div
@@ -3345,40 +3567,12 @@ export function SuggestedJobs() {
                 </div>
               </div>
 
-              {/* Invite Link (already copied) */}
-              <div className="space-y-1.5">
-                <p className="text-[10px] uppercase font-bold text-[var(--color-text-tertiary)] m-0 tracking-wider">Your Invite Link (copied to clipboard ✓)</p>
-                <div className="relative">
-                  <input
-                    type="text"
-                    readOnly
-                    value={linkedInLaunchData.inviteUrl}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-[11px] font-mono text-[var(--color-text-secondary)] pr-16"
-                    onClick={(e) => (e.target as HTMLInputElement).select()}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(linkedInLaunchData.inviteUrl);
-                      setInviteToast("✓ Invite link copied!");
-                      setTimeout(() => setInviteToast(null), 2500);
-                    }}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold border-none cursor-pointer hover:bg-primary/20 transition-colors"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-
               {/* Action Buttons */}
               <div className="flex flex-col gap-2.5 pt-1">
                 <button
                   type="button"
                   onClick={() => {
-                    try {
-                      navigator.clipboard.writeText(linkedInLaunchData.inviteUrl);
-                    } catch {}
-                    setInviteToast(`🔗 Link copied! Opening LinkedIn search...`);
+                    setInviteToast(`🔗 Opening LinkedIn with filters...`);
                     if (typeof window !== "undefined") {
                       window.open(linkedInLaunchData.url, "_blank", "noopener,noreferrer");
                     }
@@ -3390,7 +3584,7 @@ export function SuggestedJobs() {
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#0077b5] hover:bg-[#005885] text-white font-bold text-sm shadow-lg transition-all active:scale-[0.98] cursor-pointer"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
-                  <span>{linkedInLaunchData.title ? `${linkedInLaunchData.title} ↗` : `Search ${linkedInLaunchData.company} on LinkedIn ↗`}</span>
+                  <span>{linkedInLaunchData.title ? `${linkedInLaunchData.title} ↗` : `Open LinkedIn with Filters ↗`}</span>
                 </button>
 
                 <button
@@ -3398,7 +3592,7 @@ export function SuggestedJobs() {
                   onClick={() => {
                     try {
                       navigator.clipboard.writeText(linkedInLaunchData.url);
-                      setInviteToast("✓ LinkedIn search link copied! You can paste it directly in the LinkedIn App.");
+                      setInviteToast("✓ Filtered LinkedIn search link copied to clipboard!");
                       setTimeout(() => setInviteToast(null), 3500);
                     } catch {}
                   }}
@@ -3423,7 +3617,8 @@ export function SuggestedJobs() {
               </p>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Cold Outreach Modal (Pioneer Jobs) ── */}

@@ -90,11 +90,31 @@ export function DeepConversionModal({
   };
 
   const handleLaunchLinkedIn = (company: string, url: string, title: string, outreachMessage?: string) => {
+    // 1. Immediately launch LinkedIn with search filters applied
+    if (url && typeof window !== "undefined") {
+      try {
+        window.open(url, "_blank", "noopener,noreferrer");
+      } catch (e) {
+        console.warn("Could not launch LinkedIn directly:", e);
+      }
+    }
+
+    // 2. If outreach pitch provided, copy it to clipboard ready to paste
     if (outreachMessage) {
       try {
         navigator.clipboard.writeText(outreachMessage);
+        showToast("🔗 Opening LinkedIn! (Outreach pitch copied to clipboard ready to paste)");
+      } catch {
+        showToast("🔗 Opening LinkedIn search with filters...");
+      }
+    } else {
+      try {
+        navigator.clipboard.writeText(url);
       } catch {}
+      showToast("🔗 Opening LinkedIn search with filters...");
     }
+
+    // 3. Keep companion modal state updated
     setLinkedInLaunchData({ company, url, title, outreachMessage });
   };
 
