@@ -35,8 +35,8 @@ function testApplyDirectAndLinkedInFilters() {
     "Sprint Priority roles and Deep Hunter must route Apply clicks to handleOpenDirectApply"
   );
 
-  // 2. Verify directApplyModalJob viewer implementation
-  console.log("\n2. Verifying Direct Apply Safe Viewer Modal Features...");
+  // 2. Verify directApplyModalJob Launchpad implementation
+  console.log("\n2. Verifying Direct Apply ATS Launchpad Sheet Features...");
   assert(
     suggestedSrc.includes("directApplyModalJob && mounted && typeof document !== \"undefined\" && createPortal("),
     "directApplyModalJob must be portaled to document.body"
@@ -50,27 +50,39 @@ function testApplyDirectAndLinkedInFilters() {
     "directApplyModalJob must feature a prominent 'Back to ProxNet' navigation button"
   );
   assert(
-    suggestedSrc.includes("Open in Browser App"),
-    "directApplyModalJob must provide an explicit 'Open in Browser App' button"
+    suggestedSrc.includes("← Back to Jobs"),
+    "directApplyModalJob must feature '← Back to Jobs' in sticky bottom bar"
   );
   assert(
-    suggestedSrc.includes("Copy Link"),
-    "directApplyModalJob must provide 'Copy Link' button"
+    suggestedSrc.includes("Copy Application Link"),
+    "directApplyModalJob must provide 'Copy Application Link' button"
   );
   assert(
     suggestedSrc.includes("I Applied (+1 Log)"),
     "directApplyModalJob must provide 'I Applied (+1 Log)' sprint velocity button"
   );
   assert(
-    suggestedSrc.includes("<iframe") && suggestedSrc.includes("sandbox="),
-    "directApplyModalJob must embed an iframe preview with proper sandbox attributes"
+    !suggestedSrc.includes("<iframe"),
+    "directApplyModalJob must NOT embed an iframe (which gets blocked by external ATS X-Frame-Options with ERR_BLOCKED_BY_RESPONSE)"
+  );
+  assert(
+    suggestedSrc.includes("detectAtsName("),
+    "SuggestedJobs must detect ATS platforms (Greenhouse, Lever, Workday, etc.)"
   );
   assert(
     suggestedSrc.includes("window.history.pushState({ modal: \"direct-apply\" }"),
     "directApplyModalJob must push history state for hardware/browser back button handling"
   );
 
-  console.log("✓ 'Apply Direct' safe in-app viewer verified with back navigation chrome and external launch option.");
+  // Check manifest.json for display_override
+  const manifestFile = path.resolve(process.cwd(), "public/manifest.json");
+  const manifestSrc = fs.readFileSync(manifestFile, "utf-8");
+  assert(
+    manifestSrc.includes("display_override") && manifestSrc.includes("minimal-ui"),
+    "public/manifest.json must specify display_override with minimal-ui for PWA back button support"
+  );
+
+  console.log("✓ 'Apply Direct' ATS Launchpad verified: zero ERR_BLOCKED_BY_RESPONSE iframes, back navigation chrome, and copy link tools.");
 
   // 3. Verify LinkedIn Filter Launch in handlePioneerClick
   console.log("\n3. Verifying LinkedIn Launches Directly with Applied Filters...");

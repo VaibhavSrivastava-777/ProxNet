@@ -428,6 +428,19 @@ export function SuggestedJobs() {
     }
   }, []);
 
+  const detectAtsName = (url: string) => {
+    const u = (url || "").toLowerCase();
+    if (u.includes("greenhouse.io")) return "Greenhouse ATS";
+    if (u.includes("lever.co")) return "Lever ATS";
+    if (u.includes("myworkdayjobs.com") || u.includes("workday")) return "Workday ATS";
+    if (u.includes("smartrecruiters.com")) return "SmartRecruiters";
+    if (u.includes("ashbyhq.com")) return "Ashby ATS";
+    if (u.includes("taleo.net")) return "Oracle Taleo";
+    if (u.includes("icims.com")) return "iCIMS ATS";
+    if (u.includes("jobvite.com")) return "Jobvite";
+    return "Direct Career Portal";
+  };
+
   const handleOpenDirectApply = useCallback((job: SuggestedJob | { id?: string; title: string; url?: string; description?: string; location?: string; score?: number; matchRate?: number }, company: string) => {
     const cleanDirectUrl = (job.url || "").replace(/&amp;/g, "&").trim();
     if (!cleanDirectUrl) return;
@@ -3394,11 +3407,11 @@ export function SuggestedJobs() {
           onClick={handleCloseDirectApplyModal}
         >
           <div
-            className="bg-[var(--color-surface)] w-full max-w-3xl rounded-t-2xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] animate-scaleIn flex flex-col h-[94dvh] sm:h-[88vh] overflow-hidden"
+            className="bg-[var(--color-surface)] w-full max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] animate-scaleIn flex flex-col max-h-[92dvh] sm:max-h-[85vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Pinned Top Navigation Bar - NEVER Disappears */}
-            <div className="flex items-center justify-between px-3.5 sm:px-5 py-3 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 z-30 gap-2 shadow-xs">
+            <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 z-30 gap-2 shadow-xs">
               <button
                 type="button"
                 onClick={handleCloseDirectApplyModal}
@@ -3411,13 +3424,13 @@ export function SuggestedJobs() {
               </button>
 
               <div className="flex items-center gap-2 min-w-0 flex-1 px-1">
-                <CompanyLogo company={directApplyModalJob.company} size={24} />
+                <CompanyLogo company={directApplyModalJob.company} size={26} />
                 <div className="min-w-0">
                   <h3 className="text-xs sm:text-sm font-bold text-[var(--color-text)] m-0 truncate">
                     {cleanJobTitle(directApplyModalJob.job.title)}
                   </h3>
-                  <p className="text-[10.5px] text-[var(--color-text-secondary)] m-0 truncate">
-                    {directApplyModalJob.company} • Career Portal
+                  <p className="text-[11px] text-[var(--color-text-secondary)] m-0 truncate">
+                    {directApplyModalJob.company} • Direct Application
                   </p>
                 </div>
               </div>
@@ -3436,88 +3449,179 @@ export function SuggestedJobs() {
               </button>
             </div>
 
-            {/* Quick Actions Strip */}
-            <div className="px-3.5 sm:px-5 py-2.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Launch External in Safari / Chrome */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof window !== "undefined") {
-                      window.open(directApplyModalJob.directUrl, "_blank", "noopener,noreferrer");
-                    }
-                    setInviteToast("↗ Opened career portal in new tab!");
-                    setTimeout(() => setInviteToast(null), 3000);
-                  }}
-                  className="btn btn-xs bg-primary text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs hover:bg-primary/90 transition-all active:scale-95 border-0"
-                  title="Open in Safari / Chrome browser"
-                >
-                  <span>↗</span>
-                  <span>Open in Browser App</span>
-                </button>
+            {/* Scrollable Body - Rich Launchpad Content (No iframe, No ERR_BLOCKED_BY_RESPONSE) */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+              {/* Opportunity Snapshot Card */}
+              <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 via-[var(--color-surface-secondary)] to-emerald-500/5 border border-primary/20 space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-primary text-white shadow-2xs">
+                      <span>⚡</span>
+                      <span>{detectAtsName(directApplyModalJob.directUrl)}</span>
+                    </span>
+                    <h2 className="text-base sm:text-lg font-extrabold text-[var(--color-text)] m-0 leading-snug">
+                      {cleanJobTitle(directApplyModalJob.job.title)}
+                    </h2>
+                    <p className="text-xs text-[var(--color-text-secondary)] m-0 flex items-center gap-2">
+                      <span className="font-semibold text-[var(--color-text)]">{directApplyModalJob.company}</span>
+                      <span>•</span>
+                      <span>📍 {directApplyModalJob.job.location || "Remote / Hybrid"}</span>
+                    </p>
+                  </div>
+                  {Boolean(directApplyModalJob.job.score || directApplyModalJob.job.matchRate) && (
+                    <div className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-black text-sm shrink-0 text-center">
+                      <div>{directApplyModalJob.job.score || directApplyModalJob.job.matchRate}%</div>
+                      <div className="text-[9px] font-semibold uppercase tracking-wider">Match</div>
+                    </div>
+                  )}
+                </div>
 
-                {/* Copy Link */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      navigator.clipboard.writeText(directApplyModalJob.directUrl);
-                      setInviteToast("📋 Career portal link copied to clipboard!");
-                      setTimeout(() => setInviteToast(null), 3000);
-                    } catch {}
-                  }}
-                  className="btn btn-xs bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border-light)] font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-                  title="Copy application URL"
-                >
-                  <span>📋</span>
-                  <span>Copy Link</span>
-                </button>
+                {directApplyModalJob.job.description && (
+                  <p className="text-xs text-[var(--color-text-secondary)] italic bg-[var(--color-surface)]/70 p-2.5 rounded-lg border border-[var(--color-border-light)] m-0 leading-relaxed">
+                    &quot;{directApplyModalJob.job.description.length > 220 ? `${directApplyModalJob.job.description.slice(0, 220)}...` : directApplyModalJob.job.description}&quot;
+                  </p>
+                )}
               </div>
 
-              {/* Log Application Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  handleSaveJob(directApplyModalJob.job, directApplyModalJob.company);
-                  fetch("/api/jobs/sprint-mode", {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: "applied", delta: 1 }),
-                  }).catch(() => {});
-                  setInviteToast("🎉 Application logged to your Sprint velocity!");
-                  setTimeout(() => setInviteToast(null), 3500);
-                }}
-                className="btn btn-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95 border-0"
-                title="Record application as completed"
-              >
-                <span>✓</span>
-                <span>I Applied (+1 Log)</span>
-              </button>
-            </div>
-
-            {/* In-App Browser Frame & Fallback */}
-            <div className="flex-1 flex flex-col min-h-0 bg-neutral-900 relative">
-              <iframe
-                src={directApplyModalJob.directUrl}
-                title={`${directApplyModalJob.company} Job Application`}
-                className="w-full flex-1 border-0 bg-white"
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-              />
-
-              {/* Fallback Banner at Bottom */}
-              <div className="p-2 sm:p-2.5 bg-[var(--color-surface)] border-t border-[var(--color-border-light)] shrink-0 flex items-center justify-between gap-2 text-[11px] text-[var(--color-text-secondary)]">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="shrink-0">🔒</span>
-                  <span className="truncate">
-                    If this ATS portal blocks in-frame view, tap <strong>Open in Browser App ↗</strong> above.
+              {/* Direct ATS URL Card with 1-Tap Copy & Share */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] flex items-center gap-1">
+                    <span>🔗</span>
+                    <span>Direct Career Portal Link</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                    ✓ Verified Link
                   </span>
                 </div>
+
+                <div className="p-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)] font-mono text-[11px] text-[var(--color-text-secondary)] break-all select-all leading-relaxed max-h-16 overflow-y-auto">
+                  {directApplyModalJob.directUrl}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        navigator.clipboard.writeText(directApplyModalJob.directUrl);
+                        setInviteToast("📋 Career portal link copied to clipboard!");
+                        setTimeout(() => setInviteToast(null), 3500);
+                      } catch {}
+                    }}
+                    className="flex-1 py-2 px-3 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-2xs"
+                  >
+                    <span>📋</span>
+                    <span>Copy Application Link</span>
+                  </button>
+
+                  {typeof navigator !== "undefined" && typeof navigator.share === "function" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          navigator.share({
+                            title: `${cleanJobTitle(directApplyModalJob.job.title)} at ${directApplyModalJob.company}`,
+                            url: directApplyModalJob.directUrl,
+                          }).catch(() => {});
+                        } catch {}
+                      }}
+                      className="py-2 px-3 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-primary border border-primary/30 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-2xs"
+                      title="Share link to Safari, Chrome, or Notes app"
+                    >
+                      <span>↗</span>
+                      <span>Share / Open in Browser</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Safe Navigation & Anti-Trapping Guidance */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-blue-500/10 border border-blue-500/25 space-y-2 text-xs">
+                <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-bold">
+                  <span>📱</span>
+                  <span>How to Apply Without Losing Your Place in ProxNet</span>
+                </div>
+                <p className="text-[11.5px] text-[var(--color-text-secondary)] m-0 leading-relaxed">
+                  Third-party career portals (Greenhouse, Lever, Workday) prohibit embedding inside other apps. To apply safely:
+                </p>
+                <ol className="text-[11.5px] text-[var(--color-text-secondary)] pl-4 m-0 space-y-1.5 leading-relaxed">
+                  <li>
+                    Tap <strong>Copy Application Link</strong> above, then paste into your mobile browser (Safari / Chrome).
+                  </li>
+                  <li>
+                    Submit your application on {directApplyModalJob.company}&apos;s official ATS portal.
+                  </li>
+                  <li>
+                    Return here and tap <strong>✓ I Applied (+1 Log)</strong> below to record your velocity and unlock referral points!
+                  </li>
+                </ol>
+              </div>
+
+              {/* Keywords Match Section */}
+              {Array.isArray((directApplyModalJob.job as any).keywords) && (directApplyModalJob.job as any).keywords.length > 0 && (
+                <div className="p-3.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border-light)] space-y-2">
+                  <span className="text-[11px] font-bold text-[var(--color-text-tertiary)] uppercase tracking-wider flex items-center gap-1">
+                    <span>🎯</span>
+                    <span>Keywords to Highlight on Your Resume</span>
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {((directApplyModalJob.job as any).keywords as string[]).slice(0, 8).map((kw, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded-md bg-[var(--color-surface-secondary)] text-[11px] font-medium text-[var(--color-text)] border border-[var(--color-border-light)]">
+                        {kw}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Pinned Sticky Bottom Actions Bar */}
+            <div className="p-3 sm:p-4 border-t border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shadow-lg">
+              <button
+                type="button"
+                onClick={handleCloseDirectApplyModal}
+                className="py-2.5 px-4 rounded-xl bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] text-xs font-bold cursor-pointer transition-colors text-center order-2 sm:order-1"
+              >
+                ← Back to Jobs
+              </button>
+
+              <div className="flex items-center gap-2 flex-1 justify-end order-1 sm:order-2">
+                {/* External Browser Link */}
+                <a
+                  href={directApplyModalJob.directUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => {
+                    setInviteToast("↗ Opening external career portal... Tap recent apps to return to ProxNet!");
+                    setTimeout(() => setInviteToast(null), 4000);
+                  }}
+                  className="btn btn-sm bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-primary border border-primary/30 text-xs font-bold py-2 px-3 rounded-xl flex-1 sm:flex-none flex items-center justify-center gap-1.5 shadow-2xs no-underline"
+                >
+                  <span>↗</span>
+                  <span>Open Career Site</span>
+                </a>
+
+                {/* Mark as Applied */}
                 <button
                   type="button"
-                  onClick={handleCloseDirectApplyModal}
-                  className="text-xs font-bold text-primary hover:underline cursor-pointer bg-transparent border-none p-0 shrink-0"
+                  onClick={() => {
+                    handleSaveJob(directApplyModalJob.job, directApplyModalJob.company);
+                    fetch("/api/jobs/sprint-mode", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "applied", delta: 1 }),
+                    }).catch(() => {});
+                    setInviteToast("🎉 Application logged to your Sprint velocity!");
+                    setTimeout(() => {
+                      setInviteToast(null);
+                      handleCloseDirectApplyModal();
+                    }, 1200);
+                  }}
+                  className="btn btn-sm bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3.5 rounded-xl flex-1 sm:flex-none flex items-center justify-center gap-1.5 shadow-xs border-0 cursor-pointer active:scale-95 transition-all"
                 >
-                  Return to ProxNet
+                  <span>✓</span>
+                  <span>I Applied (+1 Log)</span>
                 </button>
               </div>
             </div>
