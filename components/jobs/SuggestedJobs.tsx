@@ -16,6 +16,10 @@ import { cleanJobTitle, isSameCompany } from "@/lib/jobs/job-filters";
 import { ProximityCardModal } from "@/components/profile/ProximityCardModal";
 import { DeepFetchModal } from "./DeepFetchModal";
 import { QuestionForm } from "@/components/qa/QuestionForm";
+import { ColdOutreachModal } from "./ColdOutreachModal";
+import { ApplicationSprintMode } from "./ApplicationSprintMode";
+import { CompanyResearchModal } from "./CompanyResearchModal";
+import { BridgeRequestModal } from "./BridgeRequestModal";
 
 interface SuggestedJob {
   id: string;
@@ -146,6 +150,7 @@ export function SuggestedJobs() {
   const [currentUserCompany, setCurrentUserCompany] = useState<string | null>(() => initialCache?.currentUserCompany ?? null);
   const [userInviteCode, setUserInviteCode] = useState<string | null>(() => initialCache?.userInviteCode ?? null);
   const [inviteToast, setInviteToast] = useState<string | null>(null);
+  const [linkedInLaunchData, setLinkedInLaunchData] = useState<{ url: string; company: string; inviteUrl: string; title?: string } | null>(null);
   const [startingReferralJobId, setStartingReferralJobId] = useState<string | null>(null);
   const [isMatchingCompleted, setIsMatchingCompleted] = useState<boolean>(() => initialCache?.isMatchingCompleted ?? true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -167,6 +172,27 @@ export function SuggestedJobs() {
   const [copiedBlueprintIndex, setCopiedBlueprintIndex] = useState<number | null>(null);
   const [showDeepFetchModal, setShowDeepFetchModal] = useState(false);
   const [deepHunterMatches, setDeepHunterMatches] = useState<any[]>([]);
+
+  // Pioneer Strategy & Credit Economics State (Job Seeker Toolkit)
+  const [coldOutreachModalJob, setColdOutreachModalJob] = useState<{
+    job: {
+      id: string;
+      title: string;
+      url?: string;
+      description?: string;
+      keywords?: string[];
+      score?: number;
+      label?: string;
+      reason?: string;
+      location?: string;
+      posted_at?: string;
+      matchRate?: number;
+    };
+    company: string;
+  } | null>(null);
+  const [companyResearchData, setCompanyResearchData] = useState<{ company: string; jobTitle?: string } | null>(null);
+  const [bridgeRequestData, setBridgeRequestData] = useState<{ company: string; jobTitle?: string } | null>(null);
+  const [watchedPioneerCompanies, setWatchedPioneerCompanies] = useState<string[]>([]);
   // Save job feedback & state tracking
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [savedJobKeys, setSavedJobKeys] = useState<Set<string>>(new Set());
@@ -582,7 +608,13 @@ export function SuggestedJobs() {
         // Fallback to direct application if no referrer is available
         const cleanUrl = (job.url || "").replace(/&amp;/g, "&").trim();
         if (cleanUrl) {
-          window.open(cleanUrl, "_blank", "noopener,noreferrer");
+          const a = document.createElement("a");
+          a.href = cleanUrl;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
         }
         return;
       }
@@ -655,26 +687,51 @@ export function SuggestedJobs() {
     }
   };
 
-  const handlePioneerClick = (companyName: string) => {
+  const handlePioneerClick = (companyName: string, roleQuery?: string, title?: string) => {
     const cleanCompany = (companyName || "").trim();
-    if (cleanCompany) {
-      const linkedInUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(cleanCompany)}`;
-      try {
-        window.open(linkedInUrl, "_blank", "noopener,noreferrer");
-      } catch (e) {
-        console.warn("Could not open LinkedIn directly:", e);
-      }
-    }
+    if (!cleanCompany) return;
 
+    let query = cleanCompany;
+    if (roleQuery) {
+      query = `${cleanCompany} ${roleQuery}`;
+    }
+    const linkedInUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(query)}`;
     const code = userInviteCode || "";
     const inviteUrl = code ? `${window.location.origin}/join/${code}?company=${encodeURIComponent(companyName)}` : `${window.location.origin}/grow`;
+
+    // Copy invite link to clipboard proactively
     try {
       navigator.clipboard.writeText(inviteUrl);
-      setInviteToast(`🔗 Opening LinkedIn for ${companyName}! Copied your +10 pts invite link to clipboard.`);
-      setTimeout(() => setInviteToast(null), 5000);
-    } catch (err) {
-      setInviteToast(`Opening LinkedIn for ${companyName}...`);
-      setTimeout(() => setInviteToast(null), 4000);
+    } catch { /* clipboard access may fail silently */ }
+
+    // Show in-app interstitial instead of auto-opening (fixes PWA navigation loss)
+    setLinkedInLaunchData({
+      url: linkedInUrl,
+      company: cleanCompany,
+      inviteUrl,
+      title: title || `Search ${cleanCompany} on LinkedIn`,
+    });
+  };
+
+  const handleToggleWatch = async (companyName: string) => {
+    try {
+      const res = await fetch("/api/jobs/pioneer-watch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company: companyName }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWatchedPioneerCompanies(data.watchedCompanies || []);
+        setInviteToast(
+          data.isWatching
+            ? `🔔 Watching ${companyName}! You'll be alerted when an insider joins.`
+            : `Unwatched ${companyName}`
+        );
+        setTimeout(() => setInviteToast(null), 3500);
+      }
+    } catch (e) {
+      console.error("Toggle watch error:", e);
     }
   };
 
@@ -1059,6 +1116,34 @@ export function SuggestedJobs() {
     return result;
   }, [nearbyHelpers, companies, currentUserId]);
 
+  const topSprintJobs = useMemo(() => {
+    const list: Array<{ id: string; title: string; company: string; score?: number; url?: string }> = [];
+    const sourceList = companies.length > 0 ? companies : allCompanies;
+    for (const g of sourceList) {
+      for (const j of g.jobs) {
+        list.push({
+          id: j.id,
+          title: cleanJobTitle(j.title),
+          company: g.company,
+          score: j.score ?? j.matchRate,
+          url: j.url,
+        });
+      }
+    }
+    return list.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 6);
+  }, [companies, allCompanies]);
+
+  const similarCompaniesWithReferrers = useMemo(() => {
+    return companies
+      .filter((c) => c.contactsCount > 0)
+      .map((c) => ({
+        company: c.company,
+        contactsCount: c.contactsCount,
+        openingsCount: c.jobs.length,
+      }))
+      .slice(0, 6);
+  }, [companies]);
+
   if (loading) {
     return (
       <div className="space-y-4 max-w-3xl mx-auto pb-8">
@@ -1129,6 +1214,22 @@ export function SuggestedJobs() {
           hasResume={hasResume}
           resumeUrl={resumeUrl}
           onResumeUpdated={loadData}
+        />
+
+        {/* 🚀 Application Sprint Mode (Active Job Seeker Persona) */}
+        <ApplicationSprintMode
+          userWallet={userWallet}
+          onWalletUpdated={(newWallet) => {
+            setUserWallet(newWallet);
+            window.dispatchEvent(new CustomEvent("wallet-updated", { detail: newWallet }));
+          }}
+          topSprintJobs={topSprintJobs}
+          onFilterPioneerJobs={() => {
+            setJobsViewMode("all");
+            setHasReferrersOnly(false);
+            const el = document.getElementById("pioneer-roles-section");
+            if (el) el.scrollIntoView({ behavior: "smooth" });
+          }}
         />
 
         {/* 📊 Interactive Hiring Pulse */}
@@ -1592,15 +1693,54 @@ export function SuggestedJobs() {
                   {/* Footer Actions: Pioneer vs Referrer + Apply */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--color-border-light)]/40">
                     {m.isPioneer ? (
-                      <button
-                        type="button"
-                        onClick={() => handlePioneerClick(m.company)}
-                        className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-[11px] font-bold hover:bg-amber-500/25 transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
-                        title="Open LinkedIn with this company filter & invite a colleague to earn +10 credits!"
-                      >
-                        <span>🏆 Pioneer +10 pts</span>
-                        <span className="text-[10px] font-normal text-amber-600 dark:text-amber-400">• Open LinkedIn ↗</span>
-                      </button>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handlePioneerClick(m.company)}
+                          className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-[11px] font-bold hover:bg-amber-500/25 transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
+                          title="Open LinkedIn with this company filter & invite a colleague to earn +10 credits!"
+                        >
+                          <span>🏆 Pioneer +10 pts</span>
+                          <span className="text-[10px] font-normal text-amber-600 dark:text-amber-400">• Open LinkedIn ↗</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setColdOutreachModalJob({
+                              job: {
+                                id: m.id,
+                                title: m.title,
+                                url: m.url,
+                                description: m.description,
+                                keywords: m.keywords,
+                                score: m.score,
+                                reason: m.reason,
+                              },
+                              company: m.company,
+                            })
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-primary/15 border border-primary/30 text-primary text-[11px] font-bold hover:bg-primary/25 transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
+                          title="Draft AI cold outreach for recruiters or hiring managers (FREE • 0 Credits)"
+                        >
+                          <span>✉️</span>
+                          <span>Draft Outreach</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handlePioneerClick(
+                              m.company,
+                              `recruiter ${cleanJobTitle(m.title)}`,
+                              `Recruiters for ${cleanJobTitle(m.title)} at ${m.company}`
+                            )
+                          }
+                          className="px-2 py-1 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] text-[11px] font-semibold hover:border-primary/40 transition-colors flex items-center gap-1 cursor-pointer"
+                          title="Find recruiters on LinkedIn"
+                        >
+                          <span>🔍</span>
+                          <span>Recruiter</span>
+                        </button>
+                      </div>
                     ) : (
                       <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400 font-semibold">
                         <span>🤝</span>
@@ -2370,34 +2510,75 @@ export function SuggestedJobs() {
                 );
               }
               return (
-                <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-primary/10 to-amber-500/15 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
-                  <div className="flex items-start gap-2.5">
-                    <span className="text-xl">🏆</span>
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-[var(--color-text)]">Pioneer Bounty: +10 Credits</span>
-                        <span className="badge text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-bold rounded">Unclaimed</span>
+                <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/15 via-primary/10 to-amber-500/15 border border-amber-500/30 flex flex-col gap-3 animate-fadeIn">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-xl">🏆</span>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-bold text-[var(--color-text)]">Pioneer Opportunity: +10 Credits Bounty</span>
+                          <span className="badge text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-bold rounded">No Insiders Yet</span>
+                          {watchedPioneerCompanies.includes(activeCompanyModal.company) && (
+                            <span className="badge text-[10px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-bold rounded">🔔 Watching</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[var(--color-text-secondary)] m-0">
+                          No ProxNet insiders at {activeCompanyModal.company} yet. Draft AI cold outreach, find recruiters directly, or ask the community!
+                        </p>
                       </div>
-                      <p className="text-[11px] text-[var(--color-text-secondary)] m-0">
-                        No insiders from {activeCompanyModal.company} on ProxNet yet. Search colleagues on LinkedIn with this company filter and claim +10 credits when they join!
-                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handlePioneerClick(activeCompanyModal.company, "recruiter", `Recruiters at ${activeCompanyModal.company}`)}
+                        className="btn btn-sm bg-[#0077b5] hover:bg-[#005885] text-white font-bold text-xs px-3 py-1.5 rounded-lg border-0 cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-95"
+                        title="Search recruiters on LinkedIn"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+                        <span>Find Recruiters ↗</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInviteColleague(activeCompanyModal.company)}
+                        className="btn btn-sm bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg border-0 cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-95"
+                        title="Invite a colleague & earn +10 credits"
+                      >
+                        <span>🎯</span> Invite (+10 pts)
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+
+                  {/* Secondary Quick Action Tools Bar */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-amber-500/20 text-xs">
                     <button
                       type="button"
-                      onClick={() => handlePioneerClick(activeCompanyModal.company)}
-                      className="btn btn-sm bg-[#0077b5] hover:bg-[#005885] text-white font-bold text-xs px-3 py-1.5 rounded-lg border-0 cursor-pointer shadow-xs flex items-center gap-1.5"
-                      title="Open LinkedIn with company filter"
+                      onClick={() => setCompanyResearchData({ company: activeCompanyModal.company })}
+                      className="px-2.5 py-1 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] text-[var(--color-text)] font-semibold text-[11px] cursor-pointer flex items-center gap-1.5 transition-colors"
                     >
-                      <span>🔍</span> LinkedIn ↗
+                      <span>🏢</span>
+                      <span>Company Research Brief</span>
                     </button>
+
                     <button
                       type="button"
-                      onClick={() => handleInviteColleague(activeCompanyModal.company)}
-                      className="btn btn-sm bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg border-0 cursor-pointer shadow-xs flex items-center gap-1.5"
+                      onClick={() => setBridgeRequestData({ company: activeCompanyModal.company })}
+                      className="px-2.5 py-1 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] text-emerald-700 dark:text-emerald-300 font-semibold text-[11px] cursor-pointer flex items-center gap-1.5 transition-colors"
                     >
-                      <span>🎯</span> Invite Colleague
+                      <span>🌉</span>
+                      <span>Ask Network for Intro</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleWatch(activeCompanyModal.company)}
+                      className={`px-2.5 py-1 rounded-lg border font-semibold text-[11px] cursor-pointer flex items-center gap-1.5 transition-colors ml-auto ${
+                        watchedPioneerCompanies.includes(activeCompanyModal.company)
+                          ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                          : "bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border-[var(--color-border-light)] text-[var(--color-text-secondary)]"
+                      }`}
+                    >
+                      <span>🔔</span>
+                      <span>{watchedPioneerCompanies.includes(activeCompanyModal.company) ? "Watching for Insiders ✓" : "Watch for Insiders"}</span>
                     </button>
                   </div>
                 </div>
@@ -2640,18 +2821,105 @@ export function SuggestedJobs() {
                           );
                         }
 
-                        // When referrer is not available, keep the flow as-is
+                        // When referrer is not available: Pioneer Job Seeker Action Suite
+                        const idKey = job.id ? `id:${job.id}` : null;
+                        const textKey = `text:${activeCompanyModal.company.toLowerCase().trim()}:::${job.title.toLowerCase().trim()}`;
+                        const isSaved = (idKey && savedJobKeys.has(idKey)) || savedJobKeys.has(textKey);
+                        const isSaving = savingJobId === job.id;
+
                         return (
-                          cleanDirectUrl && (
-                            <a
-                              href={cleanDirectUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="btn btn-sm btn-primary mt-1 text-center text-xs block py-1.5 no-underline font-semibold"
+                          <div className="flex flex-col gap-2 pt-2 border-t border-[var(--color-border-light)]/40">
+                            {/* Primary Action: Draft AI Cold Outreach (FREE • 0 Credits) */}
+                            <button
+                              type="button"
+                              onClick={() => setColdOutreachModalJob({ job, company: activeCompanyModal.company })}
+                              className="btn btn-sm bg-gradient-to-r from-primary to-indigo-600 hover:from-primary/90 hover:to-indigo-500 text-white font-bold text-xs py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
                             >
-                              Apply on Career Website
-                            </a>
-                          )
+                              <span>✉️</span>
+                              <span>Draft AI Cold Outreach (FREE • 0 Credits)</span>
+                            </button>
+
+                            {/* Secondary Action Grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                              {/* Recruiter Finder Button */}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handlePioneerClick(
+                                    activeCompanyModal.company,
+                                    `recruiter ${cleanJobTitle(job.title)}`,
+                                    `Recruiters for ${cleanJobTitle(job.title)} at ${activeCompanyModal.company}`
+                                  )
+                                }
+                                className="btn btn-sm bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[#0077b5] dark:text-sky-400 border border-[var(--color-border)] text-xs font-semibold py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                                title="Find recruiters on LinkedIn"
+                              >
+                                <span>🔍</span>
+                                <span>Recruiter</span>
+                              </button>
+
+                              {/* Hiring Manager Finder Button */}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handlePioneerClick(
+                                    activeCompanyModal.company,
+                                    `engineering manager OR hiring manager ${cleanJobTitle(job.title)}`,
+                                    `Hiring Managers for ${cleanJobTitle(job.title)} at ${activeCompanyModal.company}`
+                                  )
+                                }
+                                className="btn btn-sm bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] text-xs font-semibold py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                                title="Find hiring managers on LinkedIn"
+                              >
+                                <span>🎯</span>
+                                <span>Hiring Mgr</span>
+                              </button>
+
+                              {/* Save to Pipeline Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleSaveJob(job, activeCompanyModal.company)}
+                                disabled={isSaving || isSaved}
+                                className={`btn btn-sm text-center text-xs font-semibold py-1.5 flex items-center justify-center gap-1 shadow-2xs transition-all ${
+                                  isSaved
+                                    ? "bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 cursor-default"
+                                    : isSaving
+                                    ? "bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] opacity-75 cursor-wait"
+                                    : "bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border)] cursor-pointer"
+                                }`}
+                                title={isSaved ? "Saved to your pipeline" : "Save to your pipeline"}
+                              >
+                                {isSaving ? (
+                                  <span>Saving...</span>
+                                ) : isSaved ? (
+                                  <>
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
+                                    <span className="text-emerald-700 dark:text-emerald-300 font-bold">Saved</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>🔖</span>
+                                    <span>Save</span>
+                                  </>
+                                )}
+                              </button>
+
+                              {/* Direct Career Site Apply Link */}
+                              {cleanDirectUrl ? (
+                                <a
+                                  href={cleanDirectUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-sm bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] text-center text-xs font-semibold py-1.5 no-underline flex items-center justify-center gap-1 shadow-2xs"
+                                >
+                                  <span>↗</span>
+                                  <span>Apply Direct</span>
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-center text-[var(--color-text-tertiary)] py-1.5">Direct N/A</span>
+                              )}
+                            </div>
+                          </div>
                         );
                       })()}
                     </div>
@@ -2680,7 +2948,13 @@ export function SuggestedJobs() {
             if (!targetContact) {
               const cleanUrl = (job.url || "").replace(/&amp;/g, "&").trim();
               if (cleanUrl) {
-                window.open(cleanUrl, "_blank", "noopener,noreferrer");
+                const a = document.createElement("a");
+                a.href = cleanUrl;
+                a.target = "_blank";
+                a.rel = "noopener noreferrer";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
               }
               return;
             }
@@ -2871,6 +3145,199 @@ export function SuggestedJobs() {
             </div>
           </div>
         </div>
+      )}
+
+
+      {/* ── LinkedIn Launch Interstitial (replaces auto window.open) ── */}
+      {linkedInLaunchData && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4"
+          onClick={() => setLinkedInLaunchData(null)}
+        >
+          <div
+            className="bg-[var(--color-surface)] w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] animate-slideUp sm:animate-scaleIn overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-[var(--color-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
+
+            {/* Header */}
+            <div className="flex justify-between items-center px-4 py-3 border-b border-[var(--color-border-light)] bg-gradient-to-r from-[#0077b5]/10 to-transparent">
+              <h3 className="text-sm font-bold text-[var(--color-text)] m-0 flex items-center gap-2">
+                <span className="text-lg">🔗</span>
+                <span>{linkedInLaunchData.title || `Open LinkedIn — ${linkedInLaunchData.company}`}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setLinkedInLaunchData(null)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors border-none bg-transparent cursor-pointer"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4">
+              {/* Pioneer Bounty Callout */}
+              <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25">
+                <span className="text-2xl shrink-0">🏆</span>
+                <div>
+                  <p className="text-xs font-bold text-[var(--color-text)] m-0">Pioneer Bounty: +10 Credits</p>
+                  <p className="text-[11px] text-[var(--color-text-secondary)] m-0 mt-1 leading-relaxed">
+                    Find a colleague at <strong>{linkedInLaunchData.company}</strong> on LinkedIn and invite them to ProxNet. When they join, you earn <strong>+10 credits</strong>!
+                  </p>
+                </div>
+              </div>
+
+              {/* Invite Link (already copied) */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] uppercase font-bold text-[var(--color-text-tertiary)] m-0 tracking-wider">Your Invite Link (copied to clipboard ✓)</p>
+                <div className="relative">
+                  <input
+                    type="text"
+                    readOnly
+                    value={linkedInLaunchData.inviteUrl}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-[11px] font-mono text-[var(--color-text-secondary)] pr-16"
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(linkedInLaunchData.inviteUrl);
+                      setInviteToast("✓ Invite link copied!");
+                      setTimeout(() => setInviteToast(null), 2500);
+                    }}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold border-none cursor-pointer hover:bg-primary/20 transition-colors"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-2.5 pt-1">
+                <a
+                  href={linkedInLaunchData.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => {
+                    setInviteToast(`🔗 Invite link for ${linkedInLaunchData.company} copied! Paste it in LinkedIn DMs.`);
+                    setTimeout(() => {
+                      setInviteToast(null);
+                      setLinkedInLaunchData(null);
+                    }, 4000);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#0077b5] hover:bg-[#005885] text-white font-bold text-sm shadow-lg transition-all active:scale-[0.98] no-underline"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+                  <span>{linkedInLaunchData.title ? `${linkedInLaunchData.title} ↗` : `Search ${linkedInLaunchData.company} on LinkedIn ↗`}</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setLinkedInLaunchData(null)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] font-semibold text-xs border border-[var(--color-border-light)] cursor-pointer transition-colors"
+                >
+                  Stay in ProxNet
+                </button>
+              </div>
+
+              {/* Return hint */}
+              <p className="text-[10px] text-center text-[var(--color-text-tertiary)] m-0 leading-relaxed">
+                💡 LinkedIn opens in a new tab. Swipe back or tap your browser&apos;s back button to return here.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cold Outreach Modal (Pioneer Jobs) ── */}
+      {coldOutreachModalJob && (
+        <ColdOutreachModal
+          isOpen={!!coldOutreachModalJob}
+          onClose={() => setColdOutreachModalJob(null)}
+          job={coldOutreachModalJob.job}
+          company={coldOutreachModalJob.company}
+          userInviteCode={userInviteCode}
+          onOpenLinkedIn={(searchUrl, label) => {
+            const inviteUrl = userInviteCode
+              ? `${window.location.origin}/join/${userInviteCode}?company=${encodeURIComponent(coldOutreachModalJob.company)}`
+              : `${window.location.origin}/grow`;
+            setLinkedInLaunchData({
+              url: searchUrl,
+              company: coldOutreachModalJob.company,
+              inviteUrl,
+              title: label,
+            });
+            setColdOutreachModalJob(null);
+          }}
+        />
+      )}
+
+      {/* ── Company Research Modal (Pioneer Companies) ── */}
+      {companyResearchData && (
+        <CompanyResearchModal
+          isOpen={!!companyResearchData}
+          onClose={() => setCompanyResearchData(null)}
+          company={companyResearchData.company}
+          jobTitle={companyResearchData.jobTitle}
+          similarCompaniesWithReferrers={similarCompaniesWithReferrers}
+          onSelectSimilarCompany={(comp) => {
+            const found = (companies.length > 0 ? companies : allCompanies).find(
+              (c) => c.company.toLowerCase() === comp.toLowerCase()
+            );
+            if (found) {
+              setActiveCompanyModal(found);
+            }
+          }}
+          onOpenColdOutreach={() => {
+            const foundJob =
+              activeCompanyModal?.jobs[0] || {
+                id: `research_${Date.now()}`,
+                title: companyResearchData.jobTitle || "Open Role",
+                location: "",
+                url: "",
+                description: "",
+                posted_at: "",
+                keywords: [],
+                matchRate: 0,
+              };
+            setColdOutreachModalJob({
+              job: foundJob,
+              company: companyResearchData.company,
+            });
+          }}
+          onOpenLinkedInSearch={(type) => {
+            const query =
+              type === "recruiter"
+                ? `recruiter ${companyResearchData.jobTitle ? cleanJobTitle(companyResearchData.jobTitle) : ""}`
+                : type === "hiring_manager"
+                ? `hiring manager ${companyResearchData.jobTitle ? cleanJobTitle(companyResearchData.jobTitle) : ""}`
+                : "";
+            handlePioneerClick(
+              companyResearchData.company,
+              query.trim(),
+              type === "recruiter"
+                ? `Recruiters at ${companyResearchData.company}`
+                : `Hiring Managers at ${companyResearchData.company}`
+            );
+          }}
+        />
+      )}
+
+      {/* ── Bridge Request Modal (Ask the Network) ── */}
+      {bridgeRequestData && (
+        <BridgeRequestModal
+          isOpen={!!bridgeRequestData}
+          onClose={() => setBridgeRequestData(null)}
+          company={bridgeRequestData.company}
+          jobTitle={bridgeRequestData.jobTitle}
+          userInviteCode={userInviteCode}
+          onSuccess={() => {
+            setInviteToast(`✓ Bridge request published for ${bridgeRequestData.company}!`);
+            setTimeout(() => setInviteToast(null), 4000);
+          }}
+        />
       )}
 
     </div>
