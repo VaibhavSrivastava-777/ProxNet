@@ -86,10 +86,12 @@ export function rankDiscoverProfiles({
       if (currentUserId && person.id === currentUserId) continue;
       if (person.is_me) continue;
 
-      // ── Cosine Similarity Matching Score ──
-      // Driven strictly by cosine similarity between profiles instead of business logic rule points
-      const { score: cosineScore, similarity } = calculateProfileMatchScore(profile, person);
-      const finalScore = typeof person.match_score === "number" ? person.match_score : cosineScore;
+      // ── Hybrid Match Scoring Engine ──
+      // Combines real-world structural affinities (Company, College, Society, Role, Skills, Proximity)
+      // with semantic vector similarity, instead of relying entirely on vector cosine similarity.
+      const { similarity } = calculateProfileMatchScore(profile, person);
+      
+      let hybridScore = 48; // Base confidence for verified network members
 
       const reasons: MatchReason[] = [];
 
@@ -101,8 +103,9 @@ export function rankDiscoverProfiles({
       const targetAskMeAbout = person.ask_me_about || [];
       const targetTinkering = person.tinkering_with || [];
 
-      // 1. Same Company badge
+      // 1. Same Company badge (+25%)
       if (myCompany && targetCompany && myCompany === targetCompany && myCompany.length > 1) {
+        hybridScore += 25;
         reasons.push({
           label: `Both of you work at ${person.company}`,
           icon: "🏢",
@@ -110,8 +113,9 @@ export function rankDiscoverProfiles({
         });
       }
 
-      // 2. Same Alumni Network badge
-      if (myInst && targetInst && myInst === targetInst) {
+      // 2. Same Alumni Network badge (+20%)
+      if (myInst && targetInst && myInst === targetInst && myInst.length > 2) {
+        hybridScore += 20;
         reasons.push({
           label: `Alumni of ${person.institute_name}`,
           icon: "🎓",
@@ -119,8 +123,9 @@ export function rankDiscoverProfiles({
         });
       }
 
-      // 3. Same Residential Society badge
-      if (mySoc && targetSoc && mySoc === targetSoc) {
+      // 3. Same Residential Society badge (+20%)
+      if (mySoc && targetSoc && mySoc === targetSoc && mySoc.length > 2) {
+        hybridScore += 20;
         reasons.push({
           label: `Neighbour in ${person.society_name}`,
           icon: "🏡",
@@ -128,8 +133,9 @@ export function rankDiscoverProfiles({
         });
       }
 
-      // 4. Role Match badge
+      // 4. Role Match badge (+15%)
       if (wordMatchOverlap(myRole, targetRole)) {
+        hybridScore += 15;
         reasons.push({
           label: `Both working in ${targetRole || "similar"} roles`,
           icon: "💼",
@@ -137,11 +143,12 @@ export function rankDiscoverProfiles({
         });
       }
 
-      // 5. Scrapbook Synergy badge
+      // 5. Scrapbook Synergy badge (+15%)
       const offersMatchNeeds = arrayOverlap(targetHelpOffers, [...myAskMeAbout, ...myTinkering]);
       const myOffersMatchNeeds = arrayOverlap(myHelpOffers, [...targetAskMeAbout, ...targetTinkering]);
 
       if (offersMatchNeeds || myOffersMatchNeeds) {
+        hybridScore += 15;
         const offerSample = targetHelpOffers[0] || myHelpOffers[0];
         reasons.push({
           label: offerSample ? `Synergy: Can help with ${offerSample}` : "Complementary skills in scrapbook",
@@ -150,7 +157,7 @@ export function rankDiscoverProfiles({
         });
       }
 
-      // 6. Job opportunities at company / competitors
+      // 6. Job opportunities at company / competitors (+10% / +5%)
       let jobsBundle: CompanyJobBundle | null = null;
       if (companyJobsMap && targetCompany) {
         jobsBundle = companyJobsMap[targetCompany] || null;
@@ -159,12 +166,14 @@ export function rankDiscoverProfiles({
           const compCount = jobsBundle.competitorJobs.length;
 
           if (exactCount > 0) {
+            hybridScore += 10;
             reasons.push({
               label: `${exactCount} open role${exactCount > 1 ? "s" : ""} at ${person.company}`,
               icon: "🔥",
               category: "jobs",
             });
           } else if (compCount > 0) {
+            hybridScore += 5;
             reasons.push({
               label: `${compCount} role${compCount > 1 ? "s" : ""} at competitor companies`,
               icon: "⚔️",
@@ -174,22 +183,34 @@ export function rankDiscoverProfiles({
         }
       }
 
-      // 7. Distance Proximity badge
+      // 7. Distance Proximity badge (+4% to +8%)
       if (person.distance != null) {
         if (person.distance <= 500) {
+          hybridScore += 8;
           reasons.push({
             label: `Super close: within ${Math.round(person.distance)}m`,
             icon: "📍",
             category: "proximity",
           });
         } else if (person.distance <= 1500) {
+          hybridScore += 5;
           reasons.push({
             label: `Nearby: ${(person.distance / 1000).toFixed(1)}km away`,
             icon: "📍",
             category: "proximity",
           });
+        } else if (person.distance <= 3000) {
+          hybridScore += 3;
         }
       }
+
+      // 8. Semantic vector similarity contribution (up to +18%)
+      if (similarity > 0.05) {
+        hybridScore += Math.round(similarity * 20);
+      }
+
+      // Calibrate final score to realistic 48% - 98%
+      const finalScore = Math.min(98, Math.max(48, hybridScore));
 
       // Choose most compelling primary reason
       let primaryReason = reasons[0]?.label || "Verified professional in your neighbourhood";

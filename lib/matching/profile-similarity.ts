@@ -123,6 +123,8 @@ export function computeProfileCosineSimilarity(profileA: any, profileB: any): nu
 
 /**
  * Returns calibrated match score (0-99%) and raw cosine similarity.
+ * Combines real-world structural affinities (Company, College, Society, Role)
+ * with semantic vector similarity for accurate and explainable matching.
  */
 export function calculateProfileMatchScore(
   profileA: any,
@@ -130,14 +132,44 @@ export function calculateProfileMatchScore(
 ): { score: number; similarity: number } {
   const similarity = computeProfileCosineSimilarity(profileA, profileB);
   
-  // Calibrate score for UI presentation:
-  // Cosine similarity in profile matching typically ranges from 0.0 to ~0.7.
-  // We calibrate non-zero similarity smoothly between 48% and 99%, with similarity >= 0.35 reaching >= 80%.
-  let score = 35;
-  if (similarity > 0.001) {
-    score = Math.round(45 + Math.min(1, similarity / 0.5) * 54);
+  // Structural affinities
+  let structuralBonus = 0;
+  if (profileA && profileB) {
+    const compA = (profileA.company || "").trim().toLowerCase();
+    const compB = (profileB.company || "").trim().toLowerCase();
+    if (compA && compB && compA === compB && compA.length > 1) {
+      structuralBonus += 25; // Same company
+    }
+
+    const instA = (profileA.institute_name || "").trim().toLowerCase();
+    const instB = (profileB.institute_name || "").trim().toLowerCase();
+    if (instA && instB && instA === instB && instA.length > 2) {
+      structuralBonus += 20; // Same institute / college
+    }
+
+    const socA = (profileA.society_name || "").trim().toLowerCase();
+    const socB = (profileB.society_name || "").trim().toLowerCase();
+    if (socA && socB && socA === socB && socA.length > 2) {
+      structuralBonus += 20; // Same residential society
+    }
+
+    const titleA = (profileA.job_title || "").trim().toLowerCase();
+    const titleB = (profileB.job_title || "").trim().toLowerCase();
+    if (titleA && titleB) {
+      const wordsA = titleA.split(/\s+/);
+      const wordsB = titleB.split(/\s+/);
+      const match = wordsA.some((w: string) => w.length > 3 && wordsB.includes(w));
+      if (match) structuralBonus += 15; // Similar functional title
+    }
   }
-  score = Math.min(99, Math.max(35, score));
+
+  // Baseline calibration:
+  // Zero similarity and zero structural affinity yields baseline 35%
+  let score = 35;
+  if (similarity > 0.001 || structuralBonus > 0) {
+    const vectorBonus = Math.min(25, Math.round(similarity * 35));
+    score = Math.min(98, Math.max(45, 45 + structuralBonus + vectorBonus));
+  }
 
   return { score, similarity };
 }

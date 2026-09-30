@@ -59,7 +59,7 @@ export function SwipeCardStack({
     transitionTimeoutRef.current = setTimeout(() => {
       setTransitioning(null);
       setCurrentIndex((prev) => (prev + 1) % total);
-    }, 200);
+    }, 260);
   }, [transitioning, total]);
 
   const advancePrev = useCallback(() => {
@@ -70,7 +70,7 @@ export function SwipeCardStack({
     transitionTimeoutRef.current = setTimeout(() => {
       setTransitioning(null);
       setCurrentIndex((prev) => (prev - 1 + total) % total);
-    }, 200);
+    }, 260);
   }, [transitioning, total]);
 
   const triggerCelebrate = useCallback(() => {
@@ -198,34 +198,34 @@ export function SwipeCardStack({
           let transition =
             isDragging && isTop
               ? "none"
-              : "transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease";
+              : "transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1), opacity 0.26s cubic-bezier(0.2, 0.8, 0.25, 1)";
 
           if (isTop) {
             if (transitioning === "prev") {
-              transform = "translate3d(-105%, 15px, 0) rotate(-15deg)";
+              transform = "translate3d(-105%, 0, 0)";
               opacity = 0;
             } else if (transitioning === "next") {
-              transform = "translate3d(105%, 15px, 0) rotate(15deg)";
+              transform = "translate3d(105%, 0, 0)";
               opacity = 0;
             } else if (isDragging) {
-              const rot = Math.max(-12, Math.min(12, dragOffset * 0.05));
-              transform = `translate3d(${dragOffset}px, ${Math.abs(dragOffset) * 0.03}px, 0) rotate(${rot}deg)`;
+              const rot = Math.max(-5, Math.min(5, dragOffset * 0.025));
+              transform = `translate3d(${dragOffset}px, 0, 0) rotate(${rot}deg)`;
             } else {
               transform = "translate3d(0, 0, 0) rotate(0deg)";
               opacity = 1;
             }
           } else if (isSecond) {
-            const progress = transitioning ? 1 : Math.min(1, Math.abs(dragOffset) / 120);
-            const scale = 0.95 + 0.05 * progress;
-            const translateY = 10 - 10 * progress;
+            const progress = transitioning ? 1 : Math.min(1, Math.abs(dragOffset) / 140);
+            const scale = 0.96 + 0.04 * progress;
+            const translateY = 8 - 8 * progress;
             transform = `scale(${scale}) translateY(${translateY}px)`;
-            opacity = 0.85 + 0.15 * progress;
+            opacity = 0.88 + 0.12 * progress;
           } else if (isThird) {
-            const progress = transitioning ? 1 : Math.min(1, Math.abs(dragOffset) / 120);
-            const scale = 0.9 + 0.05 * progress;
-            const translateY = 20 - 10 * progress;
+            const progress = transitioning ? 1 : Math.min(1, Math.abs(dragOffset) / 140);
+            const scale = 0.92 + 0.04 * progress;
+            const translateY = 16 - 8 * progress;
             transform = `scale(${scale}) translateY(${translateY}px)`;
-            opacity = 0.65 + 0.2 * progress;
+            opacity = 0.7 + 0.18 * progress;
           }
 
           const zIndex = 30 - position * 10;
@@ -252,6 +252,7 @@ export function SwipeCardStack({
                 profile={p}
                 onCelebrate={triggerCelebrate}
                 onNext={advanceNext}
+                onPrev={advancePrev}
                 onOpenDetails={() => onOpenDetails(p)}
                 onStartChat={onStartChat}
                 dragOffset={isTop ? dragOffset : 0}
@@ -267,28 +268,28 @@ export function SwipeCardStack({
         <button
           type="button"
           onClick={advancePrev}
-          className="flex items-center gap-1 font-semibold text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] bg-transparent border-0 cursor-pointer transition-colors p-1"
+          className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-primary)] active:scale-90 transition-all border border-[var(--color-border-light)] shadow-xs cursor-pointer"
           title="Previous Profile"
+          aria-label="Previous Profile"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
-          <span>Prev</span>
         </button>
 
-        <div className="flex items-center gap-1.5 font-bold text-[11px] bg-[var(--color-surface-secondary)] px-3 py-1 rounded-full border border-[var(--color-border-light)]">
+        <div className="flex items-center gap-1.5 font-bold text-[11px] bg-[var(--color-surface-secondary)] px-3.5 py-1.5 rounded-full border border-[var(--color-border-light)]">
           <span>Profile {(currentIndex % total) + 1} of {total}</span>
-          <span className="text-[var(--color-text-tertiary)]">• Best Matches First</span>
+          <span className="text-[var(--color-text-tertiary)]">• Proximity Cards</span>
         </div>
 
         <button
           type="button"
           onClick={advanceNext}
-          className="flex items-center gap-1 font-semibold text-[var(--color-primary)] hover:opacity-80 bg-transparent border-0 cursor-pointer transition-colors p-1"
+          className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-primary)] active:scale-90 transition-all border border-[var(--color-border-light)] shadow-xs cursor-pointer"
           title="Next Profile"
+          aria-label="Next Profile"
         >
-          <span>Next</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </button>

@@ -9,6 +9,7 @@ interface DiscoverCardProps {
   profile: RankedProfile;
   onCelebrate: () => void;
   onNext: () => void;
+  onPrev?: () => void;
   onOpenDetails: () => void;
   onStartChat: (person: any) => void;
   dragOffset?: number; // horizontal drag in px
@@ -42,6 +43,7 @@ export function DiscoverCard({
   profile,
   onCelebrate,
   onNext,
+  onPrev,
   onOpenDetails,
   onStartChat,
   dragOffset = 0,
@@ -106,28 +108,6 @@ export function DiscoverCard({
         boxShadow: "0 20px 40px -15px rgba(0,0,0,0.15), 0 0 1px 1px rgba(0,0,0,0.05)",
       }}
     >
-      {/* ── Visual Stamp Overlays on Swipe Drag (Navigation Only) ── */}
-      {prevOpacity > 0 && (
-        <div
-          className="absolute top-6 left-6 z-30 pointer-events-none transform -rotate-12 border-3 border-zinc-500 rounded-xl px-4 py-1.5 bg-zinc-500/20 backdrop-blur-xs shadow-lg transition-opacity"
-          style={{ opacity: prevOpacity }}
-        >
-          <span className="text-zinc-600 dark:text-zinc-300 font-black tracking-wider text-xl uppercase flex items-center gap-1.5">
-            ⬅ PREV
-          </span>
-        </div>
-      )}
-
-      {nextOpacity > 0 && (
-        <div
-          className="absolute top-6 right-6 z-30 pointer-events-none transform rotate-12 border-3 border-indigo-500 rounded-xl px-4 py-1.5 bg-indigo-500/20 backdrop-blur-xs shadow-lg transition-opacity"
-          style={{ opacity: nextOpacity }}
-        >
-          <span className="text-indigo-500 dark:text-indigo-400 font-black tracking-wider text-xl uppercase flex items-center gap-1.5">
-            NEXT ➔
-          </span>
-        </div>
-      )}
 
       {/* ── Top Bar: Distance & Pertinence Score ── */}
       <div className="flex items-center justify-between px-5 pt-4 pb-2 bg-gradient-to-b from-[var(--color-surface-secondary)]/80 to-transparent shrink-0">
@@ -213,55 +193,71 @@ export function DiscoverCard({
           )}
         </div>
 
-        {/* ── Action Buttons Row (Placed Above Why Connect) ── */}
+        {/* ── Action Buttons Row: [ < Prev Icon ] [ Say Hi ] [ Celebrate ] [ Next Icon > ] ── */}
         <div
           className="flex items-center justify-between gap-2 pt-1 pb-1 shrink-0"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Next Profile Button */}
+          {/* Simple Previous Icon Button */}
+          <button
+            type="button"
+            onClick={onPrev}
+            className="w-10 h-10 rounded-full flex items-center justify-center bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-primary)] active:scale-90 transition-all border border-[var(--color-border-light)] shadow-xs cursor-pointer shrink-0"
+            title="Previous Profile"
+            aria-label="Previous Profile"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+
+          {/* Center Buttons: Say Hi & Celebrate */}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {/* Say Hi Button */}
+            <button
+              type="button"
+              onClick={() => onStartChat(person)}
+              className="flex-1 py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 bg-[var(--color-surface-secondary)] text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 active:scale-95 transition-all border border-[var(--color-primary)]/25 shadow-xs font-bold text-xs sm:text-sm cursor-pointer truncate"
+              title="Direct Message"
+              aria-label="Say Hi"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              <span>Say Hi</span>
+            </button>
+
+            {/* Celebrate Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCelebrate();
+              }}
+              className={`flex-1 py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold text-xs sm:text-sm shadow-md transition-all cursor-pointer border-0 truncate ${
+                isCelebrated
+                  ? "bg-amber-500 text-white shadow-amber-500/25"
+                  : "bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 text-white hover:opacity-95 active:scale-95 shadow-rose-500/25"
+              }`}
+              title="Celebrate Profile (Sends Graffiti Cheer)"
+              aria-label="Celebrate Profile"
+            >
+              <span className="shrink-0">🎉</span>
+              <span>{isCelebrated ? "Celebrated!" : "Celebrate"}</span>
+            </button>
+          </div>
+
+          {/* Simple Next Icon Button */}
           <button
             type="button"
             onClick={onNext}
-            className="flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] active:scale-95 transition-all border border-[var(--color-border-light)] shadow-xs font-bold text-xs cursor-pointer"
+            className="w-10 h-10 rounded-full flex items-center justify-center bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-primary)] active:scale-90 transition-all border border-[var(--color-border-light)] shadow-xs cursor-pointer shrink-0"
             title="Next Profile"
             aria-label="Next Profile"
           >
-            <span>Next</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
-          </button>
-
-          {/* Say Hi / Direct Chat Button */}
-          <button
-            type="button"
-            onClick={() => onStartChat(person)}
-            className="flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 bg-[var(--color-surface-secondary)] text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 active:scale-95 transition-all border border-[var(--color-primary)]/20 shadow-xs font-bold text-xs cursor-pointer"
-            title="Direct Message"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            <span>Say Hi</span>
-          </button>
-
-          {/* Celebrate Button (Graffiti & Notification Trigger - Explicit Click Only) */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onCelebrate();
-            }}
-            className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 font-bold text-xs shadow-md transition-all cursor-pointer border-0 ${
-              isCelebrated
-                ? "bg-amber-500 text-white shadow-amber-500/25"
-                : "bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 text-white hover:opacity-95 active:scale-95 shadow-rose-500/25"
-            }`}
-            title="Celebrate Profile (Sends Graffiti Cheer)"
-            aria-label="Celebrate Profile"
-          >
-            <span>🎉</span>
-            <span>{isCelebrated ? "Celebrated!" : "Celebrate"}</span>
           </button>
         </div>
 
