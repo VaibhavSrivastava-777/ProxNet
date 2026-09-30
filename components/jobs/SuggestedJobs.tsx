@@ -15,6 +15,7 @@ import { playNotificationSound } from "@/lib/sound";
 import { cleanJobTitle, isSameCompany } from "@/lib/jobs/job-filters";
 import { ProximityCardModal } from "@/components/profile/ProximityCardModal";
 import { DeepFetchModal } from "./DeepFetchModal";
+import { QuestionForm } from "@/components/qa/QuestionForm";
 
 interface SuggestedJob {
   id: string;
@@ -173,7 +174,22 @@ export function SuggestedJobs() {
   // Option 5: Proximity Colleagues & Helpers State
   const [nearbyHelpers, setNearbyHelpers] = useState<NearbyHelper[]>(() => initialCache?.nearbyHelpers || []);
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
+  const [chatTarget, setChatTarget] = useState<any | null>(null);
   const router = useRouter();
+
+  const handleOpenProximityProfile = useCallback((person: any) => {
+    setSelectedPerson(person);
+    if (!person?.id) return;
+    fetch(`/api/proximity/people?targetId=${encodeURIComponent(person.id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const fullPerson = data?.person || (data?.people && data.people.find((x: any) => x.id === person.id)) || data?.people?.[0];
+        if (fullPerson) {
+          setSelectedPerson((prev: any) => (prev?.id === person.id ? { ...prev, ...fullPerson } : prev));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleBlueprintsFetched = (blueprints: ConversionBlueprint[], newWallet: number) => {
     setDeepConversionBlueprints(blueprints);
@@ -1095,356 +1111,132 @@ export function SuggestedJobs() {
         </div>
       )}
 
-      {/* 🤝 Active Referral Conversations (Only displays if active threads exist) */}
-      <JobInbox />
-
-      {/* ── 1. HERO OPPORTUNITY CARD (Option 5: Make job discovery the hero) ── */}
-      {heroJobItem && (
-        <div className="p-4 sm:p-5 rounded-2xl border-2 border-primary/25 bg-gradient-to-b from-primary/5 via-[var(--color-surface)] to-[var(--color-surface)] shadow-md space-y-4 hover:border-primary/45 transition-all animate-fadeIn">
-          {/* Top row: Logo + Title + Match Pill */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3 min-w-0">
-              <CompanyLogo company={heroJobItem.group.company} size={46} />
-              <div className="min-w-0">
-                <h2 className="text-base sm:text-lg font-bold text-[var(--color-text)] leading-snug m-0">
-                  {cleanJobTitle(heroJobItem.job.title)}
-                </h2>
-                <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)] font-medium mt-1">
-                  <span className="font-semibold text-[var(--color-text)]">{heroJobItem.group.company}</span>
-                  <span>•</span>
-                  <span>{heroJobItem.job.location || "Bengaluru"}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="shrink-0 flex flex-col items-end gap-1">
-              <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-1 shadow-2xs">
-                <span>🎯</span>
-                <span>{heroJobItem.job.score || heroJobItem.job.matchRate || 87}% match</span>
-              </span>
-            </div>
-          </div>
-
-          {/* Sub-details: Referral hook + Freshness */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-            {heroJobItem.group.contactsCount > 0 ? (
-              <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-semibold">
-                <span>👥</span>
-                <span>
-                  {heroJobItem.group.contactsCount} ProxNet connection{heroJobItem.group.contactsCount > 1 ? "s" : ""} can refer you
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-semibold">
-                <span>🏆</span>
-                <span>Pioneer company • Invite a colleague for +10 credits</span>
-              </div>
-            )}
-
-            <div className="flex items-center gap-1 text-[11px] text-[var(--color-text-tertiary)]">
-              <span>🕒</span>
-              <span>
-                {heroJobItem.job.posted_at
-                  ? `Posted ${daysSince(heroJobItem.job.posted_at)}d ago`
-                  : "Recently posted"}
-              </span>
-            </div>
-          </div>
-
-          {/* AI Fit Reason */}
-          {heroJobItem.job.reason && (
-            <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-[var(--color-text)] leading-relaxed">
-              <span className="font-bold text-emerald-700 dark:text-emerald-300 mr-1.5">💡 Why it fits:</span>
-              <span>{heroJobItem.job.reason}</span>
-            </div>
-          )}
-
-          {/* Hero Action Buttons: [ View Job ] & [ Ask Referral ] */}
-          <div className="grid grid-cols-2 gap-2.5 pt-1">
-            <button
-              type="button"
-              onClick={() => setActiveCompanyModal(heroJobItem.group)}
-              className="py-2.5 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs sm:text-sm text-center transition-all shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1.5"
-            >
-              <span>View Job</span>
-            </button>
-
-            {heroJobItem.group.contactsCount > 0 ? (
-              <button
-                type="button"
-                disabled={startingReferralJobId === heroJobItem.job.id}
-                onClick={() => {
-                  const isOwn =
-                    currentUserCompany &&
-                    heroJobItem.group.company &&
-                    currentUserCompany.trim().toLowerCase() === heroJobItem.group.company.trim().toLowerCase();
-                  if (isOwn) {
-                    handleAskReferral(heroJobItem.job, heroJobItem.group);
-                  } else {
-                    setPitchModalJob({ job: heroJobItem.job, group: heroJobItem.group });
-                  }
-                }}
-                className="py-2.5 px-4 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border-2 border-primary text-primary font-bold text-xs sm:text-sm text-center transition-all shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1.5"
-              >
-                {startingReferralJobId === heroJobItem.job.id ? (
-                  <>
-                    <svg className="animate-spin h-3.5 w-3.5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                    </svg>
-                    <span>Opening...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>🤝</span>
-                    <span>Ask Referral</span>
-                  </>
-                )}
-              </button>
-            ) : heroJobItem.job.url ? (
-              <a
-                href={heroJobItem.job.url.replace(/&amp;/g, "&").trim()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="py-2.5 px-4 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text)] font-bold text-xs sm:text-sm text-center transition-all shadow-xs no-underline flex items-center justify-center gap-1"
-              >
-                <span>Apply on Career Website</span>
-                <span>↗</span>
-              </a>
-            ) : (
-              <button
-                type="button"
-                onClick={() => handlePioneerClick(heroJobItem.group.company)}
-                className="py-2.5 px-4 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold text-xs sm:text-sm text-center transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1"
-                title={`Open LinkedIn with ${heroJobItem.group.company} & invite a colleague for +10 credits`}
-              >
-                <span>🏆 Pioneer +10 pts</span>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── 2. PEOPLE AROUND YOU WHO CAN HELP (Option 5) ── */}
-      <div className="space-y-3 pt-1">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-base">🤝</span>
-            <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0">
-              People around you who can help
-            </h3>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              router.push("/qa?tab=network&view=list");
-              window.dispatchEvent(new CustomEvent("tabchange", { detail: "/network" }));
-            }}
-            className="text-xs font-semibold text-primary hover:underline cursor-pointer bg-transparent border-0 flex items-center gap-0.5"
-          >
-            <span>See all</span>
-            <span>&gt;</span>
-          </button>
-        </div>
-
-        {relevantHelpers.length === 0 ? (
-          <div className="p-4 rounded-xl border border-dashed border-[var(--color-border-light)] text-center text-xs text-[var(--color-text-secondary)]">
-            Explore your network map to discover colleagues in your neighbourhood.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {relevantHelpers.map((person) => (
-              <div
-                key={person.id}
-                onClick={() => {
-                  setSelectedPerson(person);
-                }}
-                className="p-3 sm:p-3.5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-primary/40 hover:bg-[var(--color-surface-hover)] transition-all flex items-center justify-between gap-3 cursor-pointer group shadow-2xs"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {person.profile_photo_url ? (
-                    <img
-                      src={person.profile_photo_url}
-                      alt={person.full_name || person.anonymous_name}
-                      className="w-10 h-10 rounded-full object-cover border border-[var(--color-border-light)] shrink-0"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/15 to-blue-500/15 text-primary font-bold text-sm flex items-center justify-center border border-primary/20 shrink-0">
-                      {(person.full_name || person.anonymous_name || "P")[0].toUpperCase()}
-                    </div>
-                  )}
-                  <div className="min-w-0 flex flex-col">
-                    <span className="text-xs sm:text-sm font-bold text-[var(--color-text)] truncate group-hover:text-primary transition-colors">
-                      {person.full_name || person.anonymous_name}
-                    </span>
-                    <span className="text-[11px] sm:text-xs text-[var(--color-text-secondary)] truncate mt-0.5">
-                      {person.job_title} • <strong className="font-semibold text-[var(--color-text)]">{person.company}</strong>
-                    </span>
-                    <div className="flex items-center gap-1 text-[10px] text-[var(--color-text-tertiary)] mt-0.5">
-                      <span>📍</span>
-                      <span>
-                        {person.distance != null && person.distance !== Infinity
-                          ? `${(person.distance / 1000).toFixed(1)} km • Mutual connections nearby`
-                          : "Nearby in your network"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="shrink-0 flex items-center gap-1.5">
-                  <span className="hidden sm:inline-block text-[11px] font-semibold text-primary group-hover:underline">
-                    Connect
-                  </span>
-                  <span className="text-[var(--color-text-tertiary)] group-hover:text-primary transition-transform group-hover:translate-x-0.5">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="9 18 15 12 9 6"></polyline>
-                    </svg>
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Option 5 Community Trust Badge */}
-        <div className="p-3.5 rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/20 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center text-base shrink-0">
-            👥
-          </div>
-          <div>
-            <div className="text-xs font-bold text-[var(--color-text)]">
-              Real people. Real referrals.
-            </div>
-            <div className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
-              Your neighbourhood network works for you.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── 3. MORE SIMILAR JOBS (Option 5: High match alternatives) ── */}
-      {similarJobs.length > 0 && (
-        <div className="space-y-3 pt-1">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-base">💼</span>
-              <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0">
-                More Similar Jobs
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const el = document.getElementById("jobs-company-list");
-                if (el) el.scrollIntoView({ behavior: "smooth" });
-              }}
-              className="text-xs font-semibold text-primary hover:underline cursor-pointer bg-transparent border-0 flex items-center gap-0.5"
-            >
-              <span>See all ({totalMatchedJobs || totalAllJobs})</span>
-              <span>&gt;</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {similarJobs.map(({ job, group }) => {
-              const score = job.score ?? job.matchRate ?? 75;
-              const availableReferrers = (group.referralContacts || []).filter(
-                (c) => !currentUserId || c.id !== currentUserId
-              );
-              const hasReferrer = availableReferrers.length > 0;
-
-              return (
-                <div
-                  key={job.id}
-                  className="p-3.5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-primary/40 transition-all flex flex-col justify-between gap-3 shadow-2xs"
-                >
-                  <div className="flex items-start justify-between gap-2.5">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <CompanyLogo company={group.company} size={36} />
-                      <div className="min-w-0">
-                        <h4 className="text-xs sm:text-sm font-bold text-[var(--color-text)] leading-snug truncate m-0">
-                          {cleanJobTitle(job.title)}
-                        </h4>
-                        <div className="text-[11px] text-[var(--color-text-secondary)] truncate mt-0.5">
-                          {group.company} • {job.location || "Bengaluru"}
-                        </div>
-                      </div>
-                    </div>
-
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] shrink-0">
-                      {score}% match
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-[var(--color-border-light)]/40">
-                    <div className="text-[10px] text-[var(--color-text-tertiary)] truncate">
-                      {hasReferrer ? (
-                        <span className="text-blue-600 dark:text-blue-400 font-medium">
-                          👥 {availableReferrers.length} referrer{availableReferrers.length > 1 ? "s" : ""} nearby
-                        </span>
-                      ) : (
-                        <span>🕒 {job.posted_at ? `${daysSince(job.posted_at)}d ago` : "Recent"}</span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setActiveCompanyModal(group)}
-                        className="px-2.5 py-1 rounded-lg bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] text-[11px] font-semibold text-[var(--color-text)] transition-colors cursor-pointer"
-                      >
-                        View Job
-                      </button>
-                      {hasReferrer ? (
-                        <button
-                          type="button"
-                          disabled={startingReferralJobId === job.id}
-                          onClick={() => {
-                            const isOwn =
-                              currentUserCompany &&
-                              group.company &&
-                              currentUserCompany.trim().toLowerCase() === group.company.trim().toLowerCase();
-                            if (isOwn) {
-                              handleAskReferral(job, group);
-                            } else {
-                              setPitchModalJob({ job, group });
-                            }
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary-hover text-white text-[11px] font-semibold transition-colors cursor-pointer"
-                        >
-                          Ask Referral
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handlePioneerClick(group.company)}
-                          className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-[10px] font-bold hover:bg-amber-500/25 transition-colors cursor-pointer"
-                          title="Open LinkedIn with this company filter & invite a colleague to earn +10 credits!"
-                        >
-                          Pioneer +10 pts
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── 4. CAREER EXPLORER & ADVANCED UTILITIES (Progressive Disclosure) ── */}
-      <div className="pt-6 border-t border-[var(--color-border-light)] space-y-4">
+      {/* ── 1. CAREER EXPLORER & TOOLS (Top Section) ── */}
+      <div className="space-y-4 pt-1">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-xs sm:text-sm font-bold text-[var(--color-text)] uppercase tracking-wider m-0">
               Career Explorer & Tools
             </h3>
             <p className="text-[11px] text-[var(--color-text-secondary)] m-0">
-              Hiring pulse, ATS match hunter, resume alerts & full company directory
+              Active resume, hiring pulse, ATS match hunter & career utilities
             </p>
           </div>
         </div>
+
+        {/* Active Resume Management */}
+        <ResumeCard
+          hasResume={hasResume}
+          resumeUrl={resumeUrl}
+          onResumeUpdated={loadData}
+        />
+
+        {/* 📊 Interactive Hiring Pulse */}
+        {(totalMatchedJobs > 0 || totalAllJobs > 0) && (
+          <div className="p-3 sm:p-3.5 rounded-xl border border-[var(--color-border-light)] bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] shadow-2xs">
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">📊</span>
+                <span className="text-xs font-bold text-[var(--color-text)] uppercase tracking-wider">Hiring Pulse</span>
+              </div>
+              <span className="text-[10px] text-[var(--color-text-tertiary)] font-medium">Click to filter</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {/* Card 1: Active Roles */}
+              <button
+                id="pulse-active-roles"
+                type="button"
+                onClick={() => {
+                  setJobsViewMode("all");
+                  setHasReferrersOnly(false);
+                  setMinScoreFilter(0);
+                  setSearchQuery("");
+                }}
+                className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95 ${
+                  jobsViewMode === "all" && !hasReferrersOnly && minScoreFilter === 0
+                    ? "bg-primary/10 border-primary text-primary shadow-xs ring-1 ring-primary/30"
+                    : "bg-[var(--color-surface)] border-[var(--color-border-light)] hover:border-primary/50 text-[var(--color-text)]"
+                }`}
+                title="Click to view all active scraped openings"
+              >
+                <span className="text-base sm:text-lg font-bold text-[var(--color-primary)]">{totalAllJobs}</span>
+                <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Active Roles</span>
+                <span className="text-[9px] text-[var(--color-text-tertiary)]">
+                  {jobsViewMode === "all" && !hasReferrersOnly && minScoreFilter === 0 ? "Viewing All ✓" : "View all →"}
+                </span>
+              </button>
+
+              {/* Card 2: Strong Matches */}
+              <button
+                id="pulse-strong-matches"
+                type="button"
+                onClick={() => {
+                  setJobsViewMode("matched");
+                  setMinScoreFilter((prev) => (prev >= 70 ? 0 : 70));
+                }}
+                className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95 ${
+                  jobsViewMode === "matched" && minScoreFilter >= 70
+                    ? "bg-emerald-500/15 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-xs ring-1 ring-emerald-500/30"
+                    : "bg-[var(--color-surface)] border-[var(--color-border-light)] hover:border-emerald-500/50 text-[var(--color-text)]"
+                }`}
+                title="Click to filter by high-confidence matches (70%+ fit)"
+              >
+                <span className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                  {strongMatchCount || totalMatchedJobs}
+                </span>
+                <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Strong Matches</span>
+                <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">
+                  {minScoreFilter >= 70 ? "70%+ Active ✓" : "Filter 70%+ →"}
+                </span>
+              </button>
+
+              {/* Card 3: Insider Referrers */}
+              <button
+                id="pulse-insider-referrers"
+                type="button"
+                onClick={() => {
+                  setHasReferrersOnly((prev) => !prev);
+                }}
+                className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95 ${
+                  hasReferrersOnly
+                    ? "bg-blue-500/15 border-blue-500 text-blue-700 dark:text-blue-300 shadow-xs ring-1 ring-blue-500/30"
+                    : "bg-[var(--color-surface)] border-[var(--color-border-light)] hover:border-blue-500/50 text-[var(--color-text)]"
+                }`}
+                title="Click to filter companies with active insider referrers"
+              >
+                <span className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400">{totalReferrers}</span>
+                <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Insider Referrers</span>
+                <span className="text-[9px] text-blue-600 dark:text-blue-400 font-medium">
+                  {hasReferrersOnly ? "Referrers Active ✓" : `${companiesWithReferrers} Cos • Filter →`}
+                </span>
+              </button>
+
+              {/* Card 4: Companies */}
+              <button
+                id="pulse-companies"
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setHasReferrersOnly(false);
+                  setMinScoreFilter(0);
+                  const el = document.getElementById("jobs-company-list");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="p-2.5 rounded-lg border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-purple-500/50 text-[var(--color-text)] text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95"
+                title="Click to browse all companies"
+              >
+                <span className="text-base sm:text-lg font-bold text-[var(--color-text)]">
+                  {jobsViewMode === "matched" ? companies.length : allCompanies.length}
+                </span>
+                <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Companies</span>
+                <span className="text-[9px] text-[var(--color-text-tertiary)]">
+                  Browse list ↓
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 🎯 Deep ATS Match Hunter Action Banner */}
         <div className="p-3.5 sm:p-4 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 via-[var(--color-surface)] to-emerald-500/10 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1483,7 +1275,6 @@ export function SuggestedJobs() {
             </button>
           </div>
         </div>
-
 
         {/* 🎯 Deep Career Conversion Dossier (Rendered when conversion blueprints available) */}
         {deepConversionBlueprints.length > 0 && (
@@ -1735,7 +1526,6 @@ export function SuggestedJobs() {
 
         {/* 🎯 Deep Hunter Matches Section (Rendered when live matches fetched) */}
         {deepHunterMatches.length > 0 && (
-
           <div id="deep-hunter-results" className="p-4 rounded-xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/5 to-transparent space-y-3 animate-fadeIn">
             <div className="flex items-center justify-between pb-2 border-b border-emerald-500/20">
               <div className="flex items-center gap-2">
@@ -1834,120 +1624,407 @@ export function SuggestedJobs() {
             </div>
           </div>
         )}
+      </div>
 
-        {/* Resume Management & Automated Job Alerts Card */}
-        <ResumeCard
-          hasResume={hasResume}
-          resumeUrl={resumeUrl}
-          onResumeUpdated={loadData}
-        />
+      {/* ── 2. MY REFERRAL CONVERSATIONS (Collapsed by default) ── */}
+      <JobInbox />
 
-        {/* 📊 Interactive Hiring Pulse */}
-        {(totalMatchedJobs > 0 || totalAllJobs > 0) && (
-          <div className="p-3 sm:p-3.5 rounded-xl border border-[var(--color-border-light)] bg-gradient-to-br from-[var(--color-surface)] to-[var(--color-surface-secondary)] shadow-2xs">
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm">📊</span>
-                <span className="text-xs font-bold text-[var(--color-text)] uppercase tracking-wider">Hiring Pulse</span>
+      {/* ── 1. HERO OPPORTUNITY CARD (Option 5: Make job discovery the hero) ── */}
+      {heroJobItem && (
+        <div className="p-4 sm:p-5 rounded-2xl border-2 border-primary/25 bg-gradient-to-b from-primary/5 via-[var(--color-surface)] to-[var(--color-surface)] shadow-md space-y-4 hover:border-primary/45 transition-all animate-fadeIn">
+          {/* Top row: Logo + Title + Match Pill */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <CompanyLogo company={heroJobItem.group.company} size={46} />
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-[var(--color-text)] leading-snug m-0">
+                  {cleanJobTitle(heroJobItem.job.title)}
+                </h2>
+                <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)] font-medium mt-1">
+                  <span className="font-semibold text-[var(--color-text)]">{heroJobItem.group.company}</span>
+                  <span>•</span>
+                  <span>{heroJobItem.job.location || "Bengaluru"}</span>
+                </div>
               </div>
-              <span className="text-[10px] text-[var(--color-text-tertiary)] font-medium">Click to filter</span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {/* Card 1: Active Roles */}
-              <button
-                id="pulse-active-roles"
-                type="button"
-                onClick={() => {
-                  setJobsViewMode("all");
-                  setHasReferrersOnly(false);
-                  setMinScoreFilter(0);
-                  setSearchQuery("");
-                }}
-                className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95 ${
-                  jobsViewMode === "all" && !hasReferrersOnly && minScoreFilter === 0
-                    ? "bg-primary/10 border-primary text-primary shadow-xs ring-1 ring-primary/30"
-                    : "bg-[var(--color-surface)] border-[var(--color-border-light)] hover:border-primary/50 text-[var(--color-text)]"
-                }`}
-                title="Click to view all active scraped openings"
-              >
-                <span className="text-base sm:text-lg font-bold text-[var(--color-primary)]">{totalAllJobs}</span>
-                <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Active Roles</span>
-                <span className="text-[9px] text-[var(--color-text-tertiary)]">
-                  {jobsViewMode === "all" && !hasReferrersOnly && minScoreFilter === 0 ? "Viewing All ✓" : "View all →"}
-                </span>
-              </button>
-
-              {/* Card 2: Strong Matches */}
-              <button
-                id="pulse-strong-matches"
-                type="button"
-                onClick={() => {
-                  setJobsViewMode("matched");
-                  setMinScoreFilter((prev) => (prev >= 70 ? 0 : 70));
-                }}
-                className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95 ${
-                  jobsViewMode === "matched" && minScoreFilter >= 70
-                    ? "bg-emerald-500/15 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-xs ring-1 ring-emerald-500/30"
-                    : "bg-[var(--color-surface)] border-[var(--color-border-light)] hover:border-emerald-500/50 text-[var(--color-text)]"
-                }`}
-                title="Click to filter by high-confidence matches (70%+ fit)"
-              >
-                <span className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                  {strongMatchCount || totalMatchedJobs}
-                </span>
-                <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Strong Matches</span>
-                <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">
-                  {minScoreFilter >= 70 ? "70%+ Active ✓" : "Filter 70%+ →"}
-                </span>
-              </button>
-
-              {/* Card 3: Insider Referrers */}
-              <button
-                id="pulse-insider-referrers"
-                type="button"
-                onClick={() => {
-                  setHasReferrersOnly((prev) => !prev);
-                }}
-                className={`p-2.5 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95 ${
-                  hasReferrersOnly
-                    ? "bg-blue-500/15 border-blue-500 text-blue-700 dark:text-blue-300 shadow-xs ring-1 ring-blue-500/30"
-                    : "bg-[var(--color-surface)] border-[var(--color-border-light)] hover:border-blue-500/50 text-[var(--color-text)]"
-                }`}
-                title="Click to filter companies with active insider referrers"
-              >
-                <span className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400">{totalReferrers}</span>
-                <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Insider Referrers</span>
-                <span className="text-[9px] text-blue-600 dark:text-blue-400 font-medium">
-                  {hasReferrersOnly ? "Referrers Active ✓" : `${companiesWithReferrers} Cos • Filter →`}
-                </span>
-              </button>
-
-              {/* Card 4: Companies */}
-              <button
-                id="pulse-companies"
-                type="button"
-                onClick={() => {
-                  setSearchQuery("");
-                  setHasReferrersOnly(false);
-                  setMinScoreFilter(0);
-                  const el = document.getElementById("jobs-company-list");
-                  if (el) el.scrollIntoView({ behavior: "smooth" });
-                }}
-                className="p-2.5 rounded-lg border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-purple-500/50 text-[var(--color-text)] text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95"
-                title="Click to browse all companies"
-              >
-                <span className="text-base sm:text-lg font-bold text-[var(--color-text)]">
-                  {jobsViewMode === "matched" ? companies.length : allCompanies.length}
-                </span>
-                <span className="text-[10px] font-semibold text-[var(--color-text-secondary)]">Companies</span>
-                <span className="text-[9px] text-[var(--color-text-tertiary)]">
-                  Browse list ↓
-                </span>
-              </button>
+            <div className="shrink-0 flex flex-col items-end gap-1">
+              <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-1 shadow-2xs">
+                <span>🎯</span>
+                <span>{heroJobItem.job.score || heroJobItem.job.matchRate || 87}% match</span>
+              </span>
             </div>
           </div>
+
+          {/* Sub-details: Referral hook + Freshness */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+            {heroJobItem.group.contactsCount > 0 ? (
+              <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-semibold">
+                <span>👥</span>
+                {(() => {
+                  const firstRef = (heroJobItem.group.referralContacts || []).find((c) => !currentUserId || c.id !== currentUserId);
+                  if (firstRef) {
+                    const alias = firstRef.alias || "Insider";
+                    const title = alias.includes("@") ? alias.split("@")[0].trim() : "Colleague";
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleOpenProximityProfile({
+                            id: firstRef.id,
+                            full_name: alias.includes("@") ? alias.split("@")[0].trim() : alias,
+                            anonymous_name: alias,
+                            job_title: title,
+                            company: heroJobItem.group.company,
+                            is_followed: firstRef.is_followed,
+                          });
+                        }}
+                        className="hover:underline cursor-pointer bg-transparent border-0 p-0 text-inherit font-semibold text-xs flex items-center gap-1"
+                        title="Click to view referrer's Proximity Profile"
+                      >
+                        <span>{heroJobItem.group.contactsCount} ProxNet connection{heroJobItem.group.contactsCount > 1 ? "s" : ""} can refer you</span>
+                        <span className="text-[10px] opacity-75">({alias}) ↗</span>
+                      </button>
+                    );
+                  }
+                  return (
+                    <span>
+                      {heroJobItem.group.contactsCount} ProxNet connection{heroJobItem.group.contactsCount > 1 ? "s" : ""} can refer you
+                    </span>
+                  );
+                })()}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-semibold">
+                <span>🏆</span>
+                <span>Pioneer company • Invite a colleague for +10 credits</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1 text-[11px] text-[var(--color-text-tertiary)]">
+              <span>🕒</span>
+              <span>
+                {heroJobItem.job.posted_at
+                  ? `Posted ${daysSince(heroJobItem.job.posted_at)}d ago`
+                  : "Recently posted"}
+              </span>
+            </div>
+          </div>
+
+          {/* AI Fit Reason */}
+          {heroJobItem.job.reason && (
+            <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-[var(--color-text)] leading-relaxed">
+              <span className="font-bold text-emerald-700 dark:text-emerald-300 mr-1.5">💡 Why it fits:</span>
+              <span>{heroJobItem.job.reason}</span>
+            </div>
+          )}
+
+          {/* Hero Action Buttons: [ View Job ] & [ Ask Referral ] */}
+          <div className="grid grid-cols-2 gap-2.5 pt-1">
+            <button
+              type="button"
+              onClick={() => setActiveCompanyModal(heroJobItem.group)}
+              className="py-2.5 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs sm:text-sm text-center transition-all shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1.5"
+            >
+              <span>View Job</span>
+            </button>
+
+            {heroJobItem.group.contactsCount > 0 ? (
+              <button
+                type="button"
+                disabled={startingReferralJobId === heroJobItem.job.id}
+                onClick={() => {
+                  const isOwn =
+                    currentUserCompany &&
+                    heroJobItem.group.company &&
+                    currentUserCompany.trim().toLowerCase() === heroJobItem.group.company.trim().toLowerCase();
+                  if (isOwn) {
+                    handleAskReferral(heroJobItem.job, heroJobItem.group);
+                  } else {
+                    setPitchModalJob({ job: heroJobItem.job, group: heroJobItem.group });
+                  }
+                }}
+                className="py-2.5 px-4 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border-2 border-primary text-primary font-bold text-xs sm:text-sm text-center transition-all shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                {startingReferralJobId === heroJobItem.job.id ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span>Opening...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🤝</span>
+                    <span>Ask Referral</span>
+                  </>
+                )}
+              </button>
+            ) : heroJobItem.job.url ? (
+              <a
+                href={heroJobItem.job.url.replace(/&amp;/g, "&").trim()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-2.5 px-4 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text)] font-bold text-xs sm:text-sm text-center transition-all shadow-xs no-underline flex items-center justify-center gap-1"
+              >
+                <span>Apply on Career Website</span>
+                <span>↗</span>
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handlePioneerClick(heroJobItem.group.company)}
+                className="py-2.5 px-4 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold text-xs sm:text-sm text-center transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1"
+                title={`Open LinkedIn with ${heroJobItem.group.company} & invite a colleague for +10 credits`}
+              >
+                <span>🏆 Pioneer +10 pts</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 2. PEOPLE AROUND YOU WHO CAN HELP (Option 5) ── */}
+      <div className="space-y-3 pt-1">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base">🤝</span>
+            <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0">
+              People around you who can help
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              router.push("/qa?tab=network&view=list");
+              window.dispatchEvent(new CustomEvent("tabchange", { detail: "/network" }));
+            }}
+            className="text-xs font-semibold text-primary hover:underline cursor-pointer bg-transparent border-0 flex items-center gap-0.5"
+          >
+            <span>See all</span>
+            <span>&gt;</span>
+          </button>
+        </div>
+
+        {relevantHelpers.length === 0 ? (
+          <div className="p-4 rounded-xl border border-dashed border-[var(--color-border-light)] text-center text-xs text-[var(--color-text-secondary)]">
+            Explore your network map to discover colleagues in your neighbourhood.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {relevantHelpers.map((person) => (
+              <div
+                key={person.id}
+                onClick={() => {
+                  setSelectedPerson(person);
+                  handleOpenProximityProfile(person);
+                }}
+                className="p-3 sm:p-3.5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-primary/40 hover:bg-[var(--color-surface-hover)] transition-all flex items-center justify-between gap-3 cursor-pointer group shadow-2xs"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {person.profile_photo_url ? (
+                    <img
+                      src={person.profile_photo_url}
+                      alt={person.full_name || person.anonymous_name}
+                      className="w-10 h-10 rounded-full object-cover border border-[var(--color-border-light)] shrink-0"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/15 to-blue-500/15 text-primary font-bold text-sm flex items-center justify-center border border-primary/20 shrink-0">
+                      {(person.full_name || person.anonymous_name || "P")[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex flex-col">
+                    <span className="text-xs sm:text-sm font-bold text-[var(--color-text)] truncate group-hover:text-primary transition-colors">
+                      {person.full_name || person.anonymous_name}
+                    </span>
+                    <span className="text-[11px] sm:text-xs text-[var(--color-text-secondary)] truncate mt-0.5">
+                      {person.job_title} • <strong className="font-semibold text-[var(--color-text)]">{person.company}</strong>
+                    </span>
+                    <div className="flex items-center gap-1 text-[10px] text-[var(--color-text-tertiary)] mt-0.5">
+                      <span>📍</span>
+                      <span>
+                        {person.distance != null && person.distance !== Infinity
+                          ? `${(person.distance / 1000).toFixed(1)} km • Mutual connections nearby`
+                          : "Nearby in your network"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="shrink-0 flex items-center gap-1.5">
+                  <span className="hidden sm:inline-block text-[11px] font-semibold text-primary group-hover:underline">
+                    Connect
+                  </span>
+                  <span className="text-[var(--color-text-tertiary)] group-hover:text-primary transition-transform group-hover:translate-x-0.5">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
+
+        {/* Option 5 Community Trust Badge */}
+        <div className="p-3.5 rounded-xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/20 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center text-base shrink-0">
+            👥
+          </div>
+          <div>
+            <div className="text-xs font-bold text-[var(--color-text)]">
+              Real people. Real referrals.
+            </div>
+            <div className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+              Your neighbourhood network works for you.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3. MORE SIMILAR JOBS (Option 5: High match alternatives) ── */}
+      {similarJobs.length > 0 && (
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">💼</span>
+              <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0">
+                More Similar Jobs
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById("jobs-company-list");
+                if (el) el.scrollIntoView({ behavior: "smooth" });
+              }}
+              className="text-xs font-semibold text-primary hover:underline cursor-pointer bg-transparent border-0 flex items-center gap-0.5"
+            >
+              <span>See all ({totalMatchedJobs || totalAllJobs})</span>
+              <span>&gt;</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {similarJobs.map(({ job, group }) => {
+              const score = job.score ?? job.matchRate ?? 75;
+              const availableReferrers = (group.referralContacts || []).filter(
+                (c) => !currentUserId || c.id !== currentUserId
+              );
+              const hasReferrer = availableReferrers.length > 0;
+
+              return (
+                <div
+                  key={job.id}
+                  className="p-3.5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-primary/40 transition-all flex flex-col justify-between gap-3 shadow-2xs"
+                >
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <CompanyLogo company={group.company} size={36} />
+                      <div className="min-w-0">
+                        <h4 className="text-xs sm:text-sm font-bold text-[var(--color-text)] leading-snug truncate m-0">
+                          {cleanJobTitle(job.title)}
+                        </h4>
+                        <div className="text-[11px] text-[var(--color-text-secondary)] truncate mt-0.5">
+                          {group.company} • {job.location || "Bengaluru"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] shrink-0">
+                      {score}% match
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-[var(--color-border-light)]/40">
+                    <div className="text-[10px] text-[var(--color-text-tertiary)] truncate">
+                      {hasReferrer ? (
+                        (() => {
+                          const firstRef = availableReferrers[0];
+                          if (firstRef) {
+                            const alias = firstRef.alias || "Insider";
+                            const title = alias.includes("@") ? alias.split("@")[0].trim() : "Colleague";
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleOpenProximityProfile({
+                                    id: firstRef.id,
+                                    full_name: alias.includes("@") ? alias.split("@")[0].trim() : alias,
+                                    anonymous_name: alias,
+                                    job_title: title,
+                                    company: group.company,
+                                    is_followed: firstRef.is_followed,
+                                  });
+                                }}
+                                className="text-blue-600 dark:text-blue-400 font-medium hover:underline cursor-pointer bg-transparent border-0 p-0 text-[10px] flex items-center gap-1"
+                                title="Click to view referrer's Proximity Profile"
+                              >
+                                <span>👥 {availableReferrers.length} referrer{availableReferrers.length > 1 ? "s" : ""} nearby</span>
+                                <span className="opacity-75">({alias}) ↗</span>
+                              </button>
+                            );
+                          }
+                          return (
+                            <span className="text-blue-600 dark:text-blue-400 font-medium">
+                              👥 {availableReferrers.length} referrer{availableReferrers.length > 1 ? "s" : ""} nearby
+                            </span>
+                          );
+                        })()
+                      ) : (
+                        <span>🕒 {job.posted_at ? `${daysSince(job.posted_at)}d ago` : "Recent"}</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setActiveCompanyModal(group)}
+                        className="px-2.5 py-1 rounded-lg bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] text-[11px] font-semibold text-[var(--color-text)] transition-colors cursor-pointer"
+                      >
+                        View Job
+                      </button>
+                      {hasReferrer ? (
+                        <button
+                          type="button"
+                          disabled={startingReferralJobId === job.id}
+                          onClick={() => {
+                            const isOwn =
+                              currentUserCompany &&
+                              group.company &&
+                              currentUserCompany.trim().toLowerCase() === group.company.trim().toLowerCase();
+                            if (isOwn) {
+                              handleAskReferral(job, group);
+                            } else {
+                              setPitchModalJob({ job, group });
+                            }
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary-hover text-white text-[11px] font-semibold transition-colors cursor-pointer"
+                        >
+                          Ask Referral
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handlePioneerClick(group.company)}
+                          className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-[10px] font-bold hover:bg-amber-500/25 transition-colors cursor-pointer"
+                          title="Open LinkedIn with this company filter & invite a colleague to earn +10 credits!"
+                        >
+                          Pioneer +10 pts
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── 4. EXPLORE ALL COMPANIES & DIRECTORY ── */}
+      <div className="pt-6 border-t border-[var(--color-border-light)] space-y-4">
 
         {/* 📋 Application Pipeline Tracker */}
         <ApplicationPipeline />
@@ -2254,16 +2331,41 @@ export function SuggestedJobs() {
 
             {(() => {
               const count = (activeCompanyModal.referralContacts || []).filter(c => !currentUserId || c.id !== currentUserId).length;
+              const availableRefs = (activeCompanyModal.referralContacts || []).filter(c => !currentUserId || c.id !== currentUserId);
               if (count > 0) {
                 return (
-                  <div className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+                  <div className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-700 dark:text-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <span className="flex items-center gap-1.5 font-medium">
                       <span>🤝</span>
                       <span><strong>{count} Referrer{count > 1 ? "s" : ""}</strong> available at {activeCompanyModal.company}</span>
                     </span>
-                    <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full">
-                      Referral Chat Ready
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {availableRefs.slice(0, 3).map((ref) => {
+                        const alias = ref.alias || "Insider";
+                        const title = alias.includes("@") ? alias.split("@")[0].trim() : "Colleague";
+                        return (
+                          <button
+                            key={ref.id}
+                            type="button"
+                            onClick={() => {
+                              handleOpenProximityProfile({
+                                id: ref.id,
+                                full_name: alias.includes("@") ? alias.split("@")[0].trim() : alias,
+                                anonymous_name: alias,
+                                job_title: title,
+                                company: activeCompanyModal.company,
+                                is_followed: ref.is_followed,
+                              });
+                            }}
+                            className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 px-2 py-0.5 rounded-full border border-emerald-500/30 cursor-pointer flex items-center gap-1 transition-all"
+                            title={`View ${alias}'s Proximity Profile`}
+                          >
+                            <span>👤</span>
+                            <span>{alias.length > 18 ? alias.slice(0, 16) + "…" : alias}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               }
@@ -2708,16 +2810,9 @@ export function SuggestedJobs() {
           }}
           onClose={() => setSelectedPerson(null)}
           onStartChat={(p) => {
+            const target = p || selectedPerson;
             setSelectedPerson(null);
-            const matchingComp = companies.find(
-              (c) => c.company.toLowerCase().trim() === (p.company || "").toLowerCase().trim()
-            );
-            if (matchingComp && matchingComp.jobs.length > 0) {
-              handleAskReferral(matchingComp.jobs[0], matchingComp);
-            } else {
-              router.push(`/qa?tab=network&userId=${encodeURIComponent(p.id)}`);
-              window.dispatchEvent(new CustomEvent("tabchange", { detail: "/network" }));
-            }
+            setChatTarget(target);
           }}
           onFollowToggle={(e, p) => {
             setSelectedPerson((prev: any) => prev ? { ...prev, is_followed: !prev.is_followed } : null);
@@ -2728,6 +2823,54 @@ export function SuggestedJobs() {
             }).catch(() => {});
           }}
         />
+      )}
+
+      {/* Direct Message Dialog from Jobs tab */}
+      {chatTarget && (
+        <div
+          className="fixed inset-0 z-[1100] flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 pb-safe backdrop-blur-sm animate-fadeIn"
+          onClick={() => setChatTarget(null)}
+        >
+          <div
+            className="bg-[var(--color-surface)] w-full sm:max-w-xl rounded-t-3xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] flex flex-col max-h-[92dvh] overflow-hidden animate-slideUp sm:animate-scaleIn pb-2 sm:pb-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-[var(--color-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
+            <div className="flex justify-between items-center px-4 py-3 sm:px-5 sm:py-3.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50 shrink-0">
+              <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0 flex items-center gap-2">
+                <span>💬</span>
+                <span>Direct Message</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setChatTarget(null)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors border-none bg-transparent cursor-pointer"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <QuestionForm
+                targetUser={{
+                  id: chatTarget.id,
+                  job_title: chatTarget.job_title || "Professional",
+                  company: chatTarget.company || "Nearby Company",
+                }}
+                initialMsg={
+                  currentUserCompany &&
+                  chatTarget?.company &&
+                  currentUserCompany.trim().toLowerCase() === chatTarget.company.trim().toLowerCase()
+                    ? `Hi! I noticed we both work at ${chatTarget.company} and are nearby in the area. Would love to connect and chat!`
+                    : `Hi! I noticed we're professional neighbors in the area and you work as a ${chatTarget.job_title || "professional"} at ${chatTarget.company || "a nearby company"}. Would love to connect and chat!`
+                }
+                onPosted={() => {
+                  setTimeout(() => setChatTarget(null), 1500);
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

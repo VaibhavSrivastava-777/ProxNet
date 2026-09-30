@@ -7,12 +7,16 @@ import { CompanyLogo } from "@/components/qa/QuestionList";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export function JobInbox() {
+interface JobInboxProps {
+  defaultExpanded?: boolean;
+}
+
+export function JobInbox({ defaultExpanded = false }: JobInboxProps = {}) {
   const { data, isLoading } = useSWR<{ threads: any[] }>("/api/jobs/inbox", fetcher, {
     refreshInterval: 10000,
     revalidateOnFocus: true,
   });
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   const threads = data?.threads || [];
 
