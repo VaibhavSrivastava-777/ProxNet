@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 export interface SprintStats {
   appliedCount: number;
@@ -45,8 +46,10 @@ export function ApplicationSprintMode({
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [newGoal, setNewGoal] = useState("15");
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     fetchSprintStatus();
   }, []);
 
@@ -441,7 +444,7 @@ export function ApplicationSprintMode({
       )}
 
       {/* Sprint Playbook & Action Guide Modal */}
-      {showGuideModal && (
+      {showGuideModal && mounted && typeof document !== "undefined" && createPortal(
         <div
           className="fixed inset-0 z-[100000] flex flex-col items-center justify-end sm:justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 overflow-hidden pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),0.75rem)] animate-fadeIn"
           onClick={() => setShowGuideModal(false)}
@@ -593,7 +596,8 @@ export function ApplicationSprintMode({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { CompanyLogo } from "@/components/qa/QuestionList";
@@ -146,6 +147,7 @@ export function SuggestedJobs() {
   });
 
   const [activeCompanyModal, setActiveCompanyModal] = useState<CompanyGroup | null>(null);
+  const [mounted, setMounted] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => initialCache?.currentUserId ?? null);
   const [currentUserCompany, setCurrentUserCompany] = useState<string | null>(() => initialCache?.currentUserCompany ?? null);
   const [userInviteCode, setUserInviteCode] = useState<string | null>(() => initialCache?.userInviteCode ?? null);
@@ -400,6 +402,7 @@ export function SuggestedJobs() {
   }, []);
 
   useEffect(() => {
+    setMounted(true);
     fetchSavedApplications();
     const onUpdated = () => fetchSavedApplications();
     window.addEventListener("job_application_updated", onUpdated);
@@ -2554,7 +2557,7 @@ export function SuggestedJobs() {
       )}
 
       {/* Openings Detail Modal */}
-      {activeCompanyModal && (
+      {activeCompanyModal && mounted && typeof document !== "undefined" && createPortal(
         <div 
           className="fixed inset-0 z-[100000] flex flex-col items-center justify-end sm:justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 overflow-hidden pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),0.75rem)]"
           onClick={handleCloseCompanyModal}
@@ -3080,7 +3083,8 @@ export function SuggestedJobs() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Referral Pitch Modal */}

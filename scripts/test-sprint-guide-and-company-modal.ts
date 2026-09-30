@@ -56,7 +56,14 @@ function runTest() {
     "Modal must include a pinned footer with 'Back to Jobs' button"
   );
 
-  console.log("✓ SuggestedJobs.tsx has fixed non-truncated modal, in-app Back button, and popstate navigation support.");
+  // Check createPortal mounting for SuggestedJobs
+  assert(
+    suggestedContent.includes("createPortal") &&
+    suggestedContent.includes("document.body"),
+    "SuggestedJobs must render activeCompanyModal using createPortal to document.body to avoid CSS transform trapping"
+  );
+
+  console.log("✓ SuggestedJobs.tsx has fixed non-truncated modal, in-app Back button, popstate navigation support, and body portal.");
 
   // 2. Verify ApplicationSprintMode.tsx
   console.log("\n2. Verifying ApplicationSprintMode.tsx (Sprint Playbook & Action Guide)...");
@@ -78,6 +85,13 @@ function runTest() {
     sprintContent.includes("Sprint Playbook") &&
     sprintContent.includes("onClick={() => setShowGuideModal(true)}"),
     "Active sprint header must include 'Sprint Playbook' info button"
+  );
+
+  // Check createPortal mounting
+  assert(
+    sprintContent.includes("createPortal") &&
+    sprintContent.includes("document.body"),
+    "ApplicationSprintMode must render showGuideModal using createPortal to document.body so it appears immediately without scrolling down"
   );
 
   // Check guide modal contents
@@ -108,7 +122,7 @@ function runTest() {
     "Guide modal close button must set showGuideModal to false"
   );
 
-  console.log("✓ ApplicationSprintMode.tsx successfully displays and allows closing the sprint action guide.");
+  console.log("✓ ApplicationSprintMode.tsx successfully displays immediately in viewport via portal and allows closing.");
 
   console.log("\nALL SPRINT & MODAL VALIDATION TESTS PASSED! 🎉");
 }
