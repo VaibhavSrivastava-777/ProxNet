@@ -577,7 +577,7 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
             const isDelivered = !isPending;
 
             return (
-              <div key={m.id} className="contents">
+              <div key={m.id} className="w-full flex flex-col">
                 {showDaySeparator && (
                   <div className="w-full flex justify-center my-4">
                     <span className="text-[11px] font-semibold px-3 py-1 bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] rounded-full shadow-sm border border-[var(--color-border-light)]">
@@ -586,23 +586,28 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
                   </div>
                 )}
                 <div
-                  className={`flex flex-col w-full max-w-[85%] ${isNew ? "animate-fadeInUp" : ""} ${
-                    m.isOwn ? "ml-auto items-end" : "mr-auto items-start"
-                  } ${isFirstFromSender ? "mt-3" : "mt-[2px]"} group`}
+                  className={`w-full flex ${m.isOwn ? "justify-end" : "justify-start"} ${
+                    isFirstFromSender ? "mt-2.5" : "mt-0.5"
+                  }`}
                 >
-                  {!m.isOwn && isFirstFromSender && (
-                    <span className="text-[11px] font-semibold text-[var(--color-primary)] ml-2 mb-0.5">
-                      {m.alias}
-                    </span>
-                  )}
+                  <div
+                    className={`flex flex-col max-w-[85%] sm:max-w-[75%] ${isNew ? "animate-fadeInUp" : ""} ${
+                      m.isOwn ? "items-end" : "items-start"
+                    } group`}
+                  >
+                    {!m.isOwn && isFirstFromSender && (
+                      <span className="text-[11px] font-semibold text-[var(--color-primary)] ml-2 mb-0.5">
+                        {m.alias}
+                      </span>
+                    )}
 
-                  <div className="flex items-center gap-2 w-full max-w-full">
-                    <div
-                      className={`px-3 py-1.5 text-[15px] relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-full ${
-                        m.isOwn
-                          ? "bg-[var(--whatsapp-bubble-sent)] text-[var(--whatsapp-text)]"
-                          : "bg-[var(--whatsapp-bubble-received)] text-[var(--whatsapp-text)]"
-                      }`}
+                    <div className={`flex items-center gap-1.5 max-w-full ${m.isOwn ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`px-3 py-1.5 text-[15px] relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-full ${
+                          m.isOwn
+                            ? "bg-[var(--whatsapp-bubble-sent)] text-[var(--whatsapp-text)]"
+                            : "bg-[var(--whatsapp-bubble-received)] text-[var(--whatsapp-text)]"
+                        }`}
                       style={{
                         borderRadius,
                         cursor: "pointer",
@@ -733,8 +738,9 @@ export function ChatRoom({ sessionId }: { sessionId: string }) {
                   </div>
                 </div>
               </div>
-            );
-          })
+            </div>
+          );
+        })
         )}
 
         {/* Typing indicator */}

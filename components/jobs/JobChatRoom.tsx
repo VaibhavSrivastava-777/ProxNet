@@ -131,7 +131,11 @@ export function JobChatRoom({ threadId, userId }: Props) {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "job_messages", filter: `thread_id=eq.${threadId}` },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new]);
+          const newMsg = {
+            ...payload.new,
+            isOwn: payload.new?.sender_id === userId,
+          };
+          setMessages((prev) => [...prev, newMsg]);
           if (payload?.new && payload.new.sender_id !== userId) {
             try {
               playNotificationSound("message");
@@ -208,6 +212,7 @@ export function JobChatRoom({ threadId, userId }: Props) {
       sender_id: userId,
       body: textToSend,
       created_at: new Date().toISOString(),
+      isOwn: true,
     };
     setMessages((prev) => [...prev, tempMsg]);
 
@@ -402,12 +407,12 @@ export function JobChatRoom({ threadId, userId }: Props) {
           </div>
         ) : (
           messages.map((m, idx) => {
-            const isMe = m.sender_id === userId;
+            const isMe = m.isOwn ?? (m.sender_id === userId);
             const isSystem = m.sender_id === "00000000-0000-0000-0000-000000000000";
 
             if (isSystem) {
               return (
-                <div key={m.id || idx} className="flex justify-center my-2">
+                <div key={m.id || idx} className="w-full flex justify-center my-2">
                   <div className="bg-[var(--color-surface-secondary)] px-3 py-1 rounded-full border border-[var(--color-border-light)] text-center shadow-2xs">
                     <p className="text-[10px] text-[var(--color-text-tertiary)] font-medium m-0">{m.body}</p>
                   </div>
@@ -415,44 +420,70 @@ export function JobChatRoom({ threadId, userId }: Props) {
               );
             }
 
-            const borderRadius = isMe ? "14px 14px 2px 14px" : "14px 14px 14px 2px";
+            const prevMsg = idx > 0 ? messages[idx - 1] : null;
+            const prevIsMe = prevMsg ? (prevMsg.isOwn ?? (prevMsg.sender_id === userId)) : null;
+            const isFirstFromSender = !prevMsg || prevIsMe !== isMe;
+
+            const borderRadius = isMe ? "8px 8px 0px 8px" : "8px 8px 8px 0px";
             const isPending = String(m.id).startsWith("temp-");
 
             return (
-              <div key={m.id || idx} className={`flex flex-col ${isMe ? "items-end ml-auto" : "items-start mr-auto"} max-w-[85%]`}>
+              <div
+                key={m.id || idx}
+                className={`w-full flex ${isMe ? "justify-end" : "justify-start"} ${
+                  isFirstFromSender ? "mt-2.5" : "mt-0.5"
+                }`}
+              >
                 <div
-                  className={`px-3.5 py-2 text-sm relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] ${
-                    isMe
-                      ? "bg-[var(--whatsapp-bubble-sent)] text-[var(--whatsapp-text)]"
-                      : "bg-[var(--whatsapp-bubble-received)] text-[var(--whatsapp-text)]"
+                  className={`flex flex-col max-w-[85%] sm:max-w-[75%] ${
+                    isMe ? "items-end" : "items-start"
                   }`}
-                  style={{
-                    borderRadius,
-                    paddingRight: isMe ? "56px" : "46px",
-                    paddingBottom: "8px",
-                  }}
                 >
-                  <p className="whitespace-pre-wrap break-words m-0 leading-relaxed text-[13.5px]">{m.body}</p>
-                  
-                  {/* Timestamp & checkmarks */}
-                  <div className="absolute bottom-[3px] right-[8px] flex items-center gap-1 text-[9.5px] text-gray-500/80 dark:text-gray-400/60 select-none">
-                    <span>{m.created_at ? formatAbsoluteTime(m.created_at) : ""}</span>
-                    {isMe && (
-                      <span className="flex items-center ml-0.5">
-                        {isPending ? (
-                          <span className="opacity-50">🕒</span>
-                        ) : (
-                          <div className="relative w-3.5 h-3 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-0 top-0.5 w-3 h-3 text-[#53bdeb]">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                            </svg>
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-[3px] top-0.5 w-3 h-3 text-[#53bdeb]">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                            </svg>
-                          </div>
+                  {!isMe && isFirstFromSender && otherAlias && (
+                    <span className="text-[11px] font-semibold text-[var(--color-primary)] ml-2 mb-0.5">
+                      {otherAlias}
+                    </span>
+                  )}
+                  <div
+                    className={`flex items-center gap-1.5 max-w-full ${isMe ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`px-3 py-1.5 text-[15px] relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-full ${
+                        isMe
+                          ? "bg-[var(--whatsapp-bubble-sent)] text-[var(--whatsapp-text)]"
+                          : "bg-[var(--whatsapp-bubble-received)] text-[var(--whatsapp-text)]"
+                      }`}
+                      style={{
+                        borderRadius,
+                        paddingRight: isMe ? "60px" : "48px",
+                        paddingBottom: "8px",
+                      }}
+                    >
+                      <p className="whitespace-pre-wrap break-words m-0 leading-normal text-[14.5px]">{m.body}</p>
+                      
+                      {/* Timestamp & checkmarks */}
+                      <div className="absolute bottom-[3px] right-[7px] flex items-center gap-0.5 text-[9.5px] text-gray-500/80 dark:text-gray-400/60 select-none">
+                        <span>{m.created_at ? formatAbsoluteTime(m.created_at) : ""}</span>
+                        {isMe && (
+                          <span className="flex items-center ml-0.5">
+                            {isPending ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3 text-gray-400 opacity-60">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                              </svg>
+                            ) : (
+                              <div className="relative w-3.5 h-3 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-0 top-0.5 w-3 h-3 text-[#53bdeb]">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-[3px] top-0.5 w-3 h-3 text-[#53bdeb]">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                </svg>
+                              </div>
+                            )}
+                          </span>
                         )}
-                      </span>
-                    )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

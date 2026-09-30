@@ -379,11 +379,14 @@ function AIChatInner() {
               const borderRadius = isOwn ? "8px 8px 0px 8px" : "8px 8px 8px 0px";
 
               return (
-                <div key={m.id || i} className="contents">
+                <div
+                  key={m.id || i}
+                  className={`w-full flex ${isOwn ? "justify-end" : "justify-start"} mt-2 group animate-fadeInUp`}
+                >
                   <div
-                    className={`flex flex-col w-full max-w-[85%] ${
-                      isOwn ? "ml-auto items-end" : "mr-auto items-start"
-                    } mt-2 group animate-fadeInUp`}
+                    className={`flex flex-col max-w-[85%] sm:max-w-[75%] ${
+                      isOwn ? "items-end" : "items-start"
+                    }`}
                   >
                     {!isOwn && (
                       <span className="text-[11px] font-semibold text-[var(--color-primary)] ml-2 mb-0.5">
@@ -391,7 +394,7 @@ function AIChatInner() {
                       </span>
                     )}
 
-                    <div className="flex items-center gap-2 w-full max-w-full">
+                    <div className={`flex items-center gap-1.5 max-w-full ${isOwn ? "justify-end" : "justify-start"}`}>
                       <div
                         className={`px-3.5 py-2 text-[15px] relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-full ${
                           isOwn

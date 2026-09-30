@@ -53,11 +53,16 @@ export async function GET(
   }
 
   // Get messages
-  const { data: messages } = await supabase
+  const { data: rawMessages } = await supabase
     .from("job_messages")
     .select("*")
     .eq("thread_id", threadId)
     .order("created_at", { ascending: true });
+
+  const messages = (rawMessages || []).map((m: any) => ({
+    ...m,
+    isOwn: m.sender_id === user.id,
+  }));
 
   const myRevealAgreed = thread.job_participants.find((p: any) => p.user_id === user.id)?.reveal_agreed;
   const otherRevealAgreed = otherParticipant?.reveal_agreed;

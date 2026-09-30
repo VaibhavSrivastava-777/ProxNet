@@ -175,45 +175,53 @@ export function CarpoolChatRoom({ threadId }: { threadId: string }) {
             return (
               <div
                 key={m.id}
-                className={`flex flex-col w-full max-w-[85%] animate-fadeInUp ${
-                  m.isOwn ? "ml-auto items-end" : "mr-auto items-start"
-                } ${isFirstFromSender ? "mt-2" : ""}`}
+                className={`w-full flex ${m.isOwn ? "justify-end" : "justify-start"} ${
+                  isFirstFromSender ? "mt-2.5" : "mt-0.5"
+                }`}
               >
-                {!m.isOwn && isFirstFromSender && (
-                  <span className="text-[11px] font-semibold text-[var(--color-primary)] ml-2 mb-0.5">
-                    {m.alias}
-                  </span>
-                )}
                 <div
-                  className={`px-3 py-1.5 text-[15px] relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] ${
-                    m.isOwn
-                      ? "bg-[var(--whatsapp-bubble-sent)] text-[var(--whatsapp-text)]"
-                      : "bg-[var(--whatsapp-bubble-received)] text-[var(--whatsapp-text)]"
-                  }`}
-                  style={{
-                    borderRadius,
-                    paddingRight: m.isOwn ? "62px" : "48px",
-                    paddingBottom: "8px",
-                  }}
+                  className={`flex flex-col max-w-[85%] sm:max-w-[75%] ${
+                    m.isOwn ? "items-end" : "items-start"
+                  } animate-fadeInUp`}
                 >
-                  <p className="whitespace-pre-wrap break-words m-0 leading-normal">{m.body}</p>
-                  
-                  {/* WhatsApp-like Inline Timestamp */}
-                  <div className="absolute bottom-[3px] right-[7px] flex items-center gap-0.5 text-[9px] text-gray-500/80 dark:text-gray-400/60 select-none">
-                    <span>{formatAbsoluteTime(m.created_at)}</span>
-                    {m.isOwn && (
-                      <span className="flex items-center ml-0.5">
-                        {/* Double Blue Ticks */}
-                        <div className="relative w-4 h-3 flex items-center justify-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-0 top-0.5 w-3 h-3 text-[#53bdeb]">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                          </svg>
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-[3px] top-0.5 w-3 h-3 text-[#53bdeb]">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                          </svg>
-                        </div>
-                      </span>
-                    )}
+                  {!m.isOwn && isFirstFromSender && (
+                    <span className="text-[11px] font-semibold text-[var(--color-primary)] ml-2 mb-0.5">
+                      {m.alias}
+                    </span>
+                  )}
+                  <div className={`flex items-center gap-1.5 max-w-full ${m.isOwn ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className={`px-3 py-1.5 text-[15px] relative select-none shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] max-w-full ${
+                        m.isOwn
+                          ? "bg-[var(--whatsapp-bubble-sent)] text-[var(--whatsapp-text)]"
+                          : "bg-[var(--whatsapp-bubble-received)] text-[var(--whatsapp-text)]"
+                      }`}
+                      style={{
+                        borderRadius,
+                        paddingRight: m.isOwn ? "62px" : "48px",
+                        paddingBottom: "8px",
+                      }}
+                    >
+                      <p className="whitespace-pre-wrap break-words m-0 leading-normal">{m.body}</p>
+                      
+                      {/* WhatsApp-like Inline Timestamp */}
+                      <div className="absolute bottom-[3px] right-[7px] flex items-center gap-0.5 text-[9px] text-gray-500/80 dark:text-gray-400/60 select-none">
+                        <span>{formatAbsoluteTime(m.created_at)}</span>
+                        {m.isOwn && (
+                          <span className="flex items-center ml-0.5">
+                            {/* Double Blue Ticks */}
+                            <div className="relative w-4 h-3 flex items-center justify-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-0 top-0.5 w-3 h-3 text-[#53bdeb]">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                              </svg>
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="absolute left-[3px] top-0.5 w-3 h-3 text-[#53bdeb]">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                              </svg>
+                            </div>
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
