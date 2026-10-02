@@ -41,15 +41,27 @@ export async function GET(request: Request) {
     .eq("id", user.id)
     .maybeSingle();
 
+  const rawInst = (currentUserData as any)?.institute_name;
+  let currentInstituteName: string | null = null;
+  if (typeof rawInst === "string") {
+    currentInstituteName = rawInst;
+  } else if (Array.isArray(rawInst) && rawInst.length > 0) {
+    currentInstituteName = rawInst[0]?.institute?.short_code || rawInst[0]?.institute?.name || null;
+  } else if (rawInst && typeof rawInst === "object") {
+    currentInstituteName = (rawInst as any).institute?.short_code || (rawInst as any).institute?.name || null;
+  }
+
   const currentProfile = {
     ...user,
     ...(currentUserData || {}),
+    institute_name: currentInstituteName,
   };
 
   // Fetch all active users with profile fields and embeddings for cosine similarity
+  // Note: scrapbook attributes (ask_me_about, help_offers, etc.) live inside profile_digest
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("id, full_name, company, job_title, about, professional_bio, tags, profile_digest, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility, embedding, ask_me_about, help_offers, tinkering_with, quick_chat_preference, society_name")
+    .select("id, full_name, company, job_title, about, professional_bio, tags, profile_digest, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility, embedding")
     .eq("is_active", true)
     .neq("id", user.id);
 
@@ -120,7 +132,24 @@ export async function GET(request: Request) {
 
     if (effectiveUnfiltered || minDistance <= radius || (targetId && u.id === targetId)) {
       const digest = (u as any).profile_digest || {};
-      const { score: matchScore, similarity } = calculateProfileMatchScore(currentProfile, u);
+      const personInst = affiliationMap.get(u.id) ?? null;
+      const personHelpOffers = (Array.isArray(u.help_offers) && u.help_offers.length > 0) ? u.help_offers : (digest.help_offers || []);
+      const personTinkeringWith = (Array.isArray(u.tinkering_with) && u.tinkering_with.length > 0) ? u.tinkering_with : (digest.tinkering_with || []);
+      const personAskMeAbout = (Array.isArray(u.ask_me_about) && u.ask_me_about.length > 0) ? u.ask_me_about : (digest.ask_me_about || []);
+      const personQuickChat = u.quick_chat_preference || digest.quick_chat_preference || null;
+      const personSocietyName = u.society_name || digest.society_name || null;
+
+      const personForMatching = {
+        ...u,
+        institute_name: personInst,
+        help_offers: personHelpOffers,
+        tinkering_with: personTinkeringWith,
+        ask_me_about: personAskMeAbout,
+        quick_chat_preference: personQuickChat,
+        society_name: personSocietyName,
+      };
+
+      const { score: matchScore, similarity } = calculateProfileMatchScore(currentProfile, personForMatching);
 
       nearbyPeople.push({
         id: u.id,
@@ -134,13 +163,13 @@ export async function GET(request: Request) {
         help_offers: (Array.isArray(u.help_offers) && u.help_offers.length > 0) ? u.help_offers : (digest.help_offers || []),
         tinkering_with: (Array.isArray(u.tinkering_with) && u.tinkering_with.length > 0) ? u.tinkering_with : (digest.tinkering_with || []),
         ask_me_about: (Array.isArray(u.ask_me_about) && u.ask_me_about.length > 0) ? u.ask_me_about : (digest.ask_me_about || []),
-        quick_chat_preference: u.quick_chat_preference || digest.quick_chat_preference || null,
-        society_name: u.society_name || digest.society_name || null,
+        quick_chat_preference: personQuickChat,
+        society_name: personSocietyName,
         visibility: u.visibility,
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
         distance: minDistance === Infinity ? null : minDistance,
         is_followed: followingIds.has(u.id),
-        institute_name: affiliationMap.get(u.id) ?? null,
+        institute_name: personInst,
         similarity: Number(similarity.toFixed(4)),
         match_score: matchScore,
       });
@@ -173,7 +202,26 @@ export async function GET(request: Request) {
       }
 
       const digest = (u as any).profile_digest || {};
-      const { score: matchScore, similarity } = calculateProfileMatchScore(currentProfile, u);
+      const personInst = affiliationMap.get(u.id) ?? null;
+      const personHelpOffers = (Array.isArray(u.help_offers) && u.help_offers.length > 0) ? u.help_offers : (digest.help_offers || []);
+      const personTinkeringWith = (Array.isArray(u.tinkering_with) && u.tinkering_with.length > 0) ? u.tinkering_with : (digest.tinkering_with || []);
+      const personAskMeAbout = (Array.isArray(u.ask_me_about) && u.ask_me_about.length > 0) ? u.ask_me_about : (digest.ask_me_about || []);
+      const personQuickChat = u.quick_chat_preference || digest.quick_chat_preference || null;
+      const personSocietyName = u.society_name || digest.society_name || null;
+
+      const personForMatching = {
+        ...u,
+        job_title: title && title !== "null" ? title : "Professional",
+        company: comp && comp !== "null" ? comp : "Nearby Company",
+        institute_name: personInst,
+        help_offers: personHelpOffers,
+        tinkering_with: personTinkeringWith,
+        ask_me_about: personAskMeAbout,
+        quick_chat_preference: personQuickChat,
+        society_name: personSocietyName,
+      };
+
+      const { score: matchScore, similarity } = calculateProfileMatchScore(currentProfile, personForMatching);
 
       nearbyPeople.push({
         id: u.id,
@@ -187,13 +235,13 @@ export async function GET(request: Request) {
         help_offers: (Array.isArray(u.help_offers) && u.help_offers.length > 0) ? u.help_offers : (digest.help_offers || []),
         tinkering_with: (Array.isArray(u.tinkering_with) && u.tinkering_with.length > 0) ? u.tinkering_with : (digest.tinkering_with || []),
         ask_me_about: (Array.isArray(u.ask_me_about) && u.ask_me_about.length > 0) ? u.ask_me_about : (digest.ask_me_about || []),
-        quick_chat_preference: u.quick_chat_preference || digest.quick_chat_preference || null,
-        society_name: u.society_name || digest.society_name || null,
+        quick_chat_preference: personQuickChat,
+        society_name: personSocietyName,
         visibility: u.visibility,
         profile_photo_url: u.visibility?.showPhoto ? u.profile_photo_url : null,
         distance: minDistance === Infinity ? null : minDistance,
         is_followed: followingIds.has(u.id),
-        institute_name: affiliationMap.get(u.id) ?? null,
+        institute_name: personInst,
         similarity: Number(similarity.toFixed(4)),
         match_score: matchScore,
       });

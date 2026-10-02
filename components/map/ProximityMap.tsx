@@ -41,7 +41,9 @@ function getReasonToEngage(myProfile: any, targetPerson: any): { reason: string;
   }
 
   // 1.5 Shared Institute / Alumni Network
-  if (myProfile?.institute_name && targetPerson?.institute_name && myProfile.institute_name.toLowerCase() === targetPerson.institute_name.toLowerCase()) {
+  const myInst = typeof myProfile?.institute_name === "string" ? myProfile.institute_name.trim().toLowerCase() : "";
+  const targetInst = typeof targetPerson?.institute_name === "string" ? targetPerson.institute_name.trim().toLowerCase() : "";
+  if (myInst && targetInst && myInst === targetInst) {
     return {
       reason: `Both of you are alumni of ${targetPerson.institute_name}`,
       category: "education"
@@ -305,8 +307,8 @@ export function ProximityMap() {
     aggregateApiUrl, 
     fetcher, 
     { 
-      fallbackData: cachedNetwork?.clusterData,
-      revalidateOnFocus: false, 
+      fallbackData: (cachedNetwork?.clusterData?.clusters?.length ?? 0) > 0 ? cachedNetwork?.clusterData : undefined,
+      revalidateOnFocus: true, 
       keepPreviousData: true 
     }
   );
@@ -314,8 +316,8 @@ export function ProximityMap() {
     peopleApiUrl, 
     fetcher, 
     { 
-      fallbackData: cachedNetwork?.peopleData,
-      revalidateOnFocus: false, 
+      fallbackData: (cachedNetwork?.peopleData?.people?.length ?? 0) > 0 ? cachedNetwork?.peopleData : undefined,
+      revalidateOnFocus: true, 
       keepPreviousData: true 
     }
   );
@@ -329,12 +331,12 @@ export function ProximityMap() {
     }
   );
 
-  // Sync fresh network data to persistent cache
+  // Sync fresh network data to persistent cache (only if data contains valid records)
   useEffect(() => {
     if (clusterData || peopleData || eventsData || profile || center) {
       saveNetworkCache({
-        ...(clusterData ? { clusterData } : {}),
-        ...(peopleData ? { peopleData } : {}),
+        ...(clusterData?.clusters?.length ? { clusterData } : {}),
+        ...(peopleData?.people?.length ? { peopleData } : {}),
         ...(eventsData ? { eventsData } : {}),
         ...(profile ? { profile } : {}),
         ...(center ? { center } : {}),

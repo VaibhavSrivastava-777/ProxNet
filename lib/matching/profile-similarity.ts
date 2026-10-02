@@ -121,6 +121,30 @@ export function computeProfileCosineSimilarity(profileA: any, profileB: any): nu
   return Math.max(0, Math.min(1, textSim));
 }
 
+function safeString(val: any): string {
+  if (!val) return "";
+  if (typeof val === "string") return val.trim().toLowerCase();
+  if (Array.isArray(val) && val.length > 0) {
+    const first = val[0];
+    if (typeof first === "string") return first.trim().toLowerCase();
+    if (first?.short_code) return String(first.short_code).trim().toLowerCase();
+    if (first?.name) return String(first.name).trim().toLowerCase();
+    if (first?.institute?.short_code) return String(first.institute.short_code).trim().toLowerCase();
+    if (first?.institute?.name) return String(first.institute.name).trim().toLowerCase();
+  }
+  if (typeof val === "object") {
+    if (val.short_code) return String(val.short_code).trim().toLowerCase();
+    if (val.name) return String(val.name).trim().toLowerCase();
+    if (val.institute?.short_code) return String(val.institute.short_code).trim().toLowerCase();
+    if (val.institute?.name) return String(val.institute.name).trim().toLowerCase();
+  }
+  try {
+    return String(val).trim().toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Returns calibrated match score (0-99%) and raw cosine similarity.
  * Combines real-world structural affinities (Company, College, Society, Role)
@@ -135,26 +159,26 @@ export function calculateProfileMatchScore(
   // Structural affinities
   let structuralBonus = 0;
   if (profileA && profileB) {
-    const compA = (profileA.company || "").trim().toLowerCase();
-    const compB = (profileB.company || "").trim().toLowerCase();
+    const compA = safeString(profileA.company);
+    const compB = safeString(profileB.company);
     if (compA && compB && compA === compB && compA.length > 1) {
       structuralBonus += 25; // Same company
     }
 
-    const instA = (profileA.institute_name || "").trim().toLowerCase();
-    const instB = (profileB.institute_name || "").trim().toLowerCase();
+    const instA = safeString(profileA.institute_name);
+    const instB = safeString(profileB.institute_name);
     if (instA && instB && instA === instB && instA.length > 2) {
       structuralBonus += 20; // Same institute / college
     }
 
-    const socA = (profileA.society_name || "").trim().toLowerCase();
-    const socB = (profileB.society_name || "").trim().toLowerCase();
+    const socA = safeString(profileA.society_name);
+    const socB = safeString(profileB.society_name);
     if (socA && socB && socA === socB && socA.length > 2) {
       structuralBonus += 20; // Same residential society
     }
 
-    const titleA = (profileA.job_title || "").trim().toLowerCase();
-    const titleB = (profileB.job_title || "").trim().toLowerCase();
+    const titleA = safeString(profileA.job_title);
+    const titleB = safeString(profileB.job_title);
     if (titleA && titleB) {
       const wordsA = titleA.split(/\s+/);
       const wordsB = titleB.split(/\s+/);

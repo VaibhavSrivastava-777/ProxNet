@@ -23,8 +23,24 @@ const HIGH_SIGNAL_ROLE_KEYWORDS = [
   "recruiter", "sales", "ai", "ml", "data", "lead"
 ];
 
-function normalize(str?: string | null): string {
-  return (str || "").trim().toLowerCase();
+function normalize(str?: any): string {
+  if (!str) return "";
+  if (typeof str === "string") return str.trim().toLowerCase();
+  if (Array.isArray(str) && str.length > 0) {
+    const first = str[0];
+    if (typeof first === "string") return first.trim().toLowerCase();
+    if (first?.short_code) return String(first.short_code).trim().toLowerCase();
+    if (first?.name) return String(first.name).trim().toLowerCase();
+  }
+  if (typeof str === "object") {
+    if (str.short_code) return String(str.short_code).trim().toLowerCase();
+    if (str.name) return String(str.name).trim().toLowerCase();
+  }
+  try {
+    return String(str).trim().toLowerCase();
+  } catch {
+    return "";
+  }
 }
 
 function wordMatchOverlap(titleA?: string | null, titleB?: string | null): boolean {
