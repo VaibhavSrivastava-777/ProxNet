@@ -44,7 +44,7 @@ async function handleScrape(request: Request) {
   const openaiKey = process.env.OPENAI_API_KEY;
 
   const runDiscovery = url.searchParams.get("discover") === "true";
-  const limitParam = parseInt(url.searchParams.get("limit") || "6", 10);
+  const limitParam = parseInt(url.searchParams.get("limit") || "15", 10);
   const companyFilter = url.searchParams.get("company");
 
   // Step 1: Optional on-the-fly competitor discovery & ATS validation pass
@@ -230,6 +230,7 @@ async function handleScrape(request: Request) {
     const seenUrls = new Set<string>();
     const toInsert: typeof jobs = [];
 
+    // Enforce maximum representation cap: at most 20 new jobs inserted per run
     for (const job of eligibleJobs) {
       const normUrl = normalizeJobUrl(job.url || "");
       const normTitle = normalizeJobTitle(job.title || "");
@@ -241,75 +242,59 @@ async function handleScrape(request: Request) {
       }
       if (normUrl) seenUrls.add(normUrl);
       toInsert.push(job);
-      if (toInsert.length >= 20) break; // Limit per company per batch
+      if (toInsert.length >= 20) break; // Strict per-company batch limit
     }
 
     let companySaved = 0;
 
-    for (const job of toInsert) {
-      let embedding: number[] | null = null;
-      let keywords: string[] = [];
-
-      if (openaiKey) {
-        try {
-          const textToEmbed = `Title: ${job.title}\nCompany: ${target.company_name}\nDescription: ${job.description || job.title}`.slice(0, 8000);
-
-          // Keywords
-          const kwRes = await fetch("https://api.openai.com/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${openaiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "gpt-4o-mini",
-              messages: [
-                {
-                  role: "user",
-                  content: `Extract 3 to 5 technical skills or buzzwords from the job. Return a JSON object with key 'keywords' containing an array of strings.\n\nJob:\n${textToEmbed}`,
-                },
-              ],
-              response_format: { type: "json_object" },
-            }),
-            signal: AbortSignal.timeout(12000),
-          });
-
-          if (kwRes.ok) {
-            const kwData = await kwRes.json();
-            try {
-              const parsed = JSON.parse(kwData.choices[0].message.content);
-              keywords = Array.isArray(parsed.keywords)
-                ? parsed.keywords
-                : Array.isArray(parsed)
-                ? parsed
-                : [];
-            } catch {}
+    // Batch Embeddings: Generate embeddings in a single API call for all eligible jobs
+    const embeddingsMap = new Map<number, number[]>();
+    if (openaiKey && toInsert.length > 0) {
+      try {
+        const textsToEmbed = toInsert.map((j) =>
+          `Title: ${j.title}\nCompany: ${target.company_name}\nDescription: ${j.description || j.title}`.slice(0, 4000)
+        );
+        const embRes = await fetch("https://api.openai.com/v1/embeddings", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${openaiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            input: textsToEmbed,
+            model: "text-embedding-3-small",
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (embRes.ok) {
+          const embData = await embRes.json();
+          if (Array.isArray(embData.data)) {
+            embData.data.forEach((item: any) => {
+              embeddingsMap.set(item.index, item.embedding);
+            });
           }
+        }
+      } catch (embErr: any) {
+        console.warn(`[scrape] Batch embedding notice for ${target.company_name}:`, embErr.message);
+      }
+    }
 
-          // Embedding
-          const embRes = await fetch("https://api.openai.com/v1/embeddings", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${openaiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              input: textToEmbed,
-              model: "text-embedding-3-small",
-            }),
-            signal: AbortSignal.timeout(12000),
-          });
+    const techKeywords = [
+      "python", "react", "node", "typescript", "javascript", "golang", "java", "c++",
+      "aws", "azure", "gcp", "docker", "kubernetes", "sql", "nosql", "graphql", "next.js",
+      "tailwind", "ai", "ml", "product", "sales", "marketing", "leadership", "finance",
+      "devops", "cloud", "security", "data engineering", "system design"
+    ];
 
-          if (embRes.ok) {
-            const embData = await embRes.json();
-            if (embData.data?.[0]?.embedding) {
-              embedding = embData.data[0].embedding;
-            }
-          }
-        } catch {}
+    const recordsToUpsert = toInsert.map((job, idx) => {
+      const combinedText = `${job.title} ${job.description || ""}`.toLowerCase();
+      const matchedKw: string[] = [];
+      for (const kw of techKeywords) {
+        if (combinedText.includes(kw)) matchedKw.push(kw);
+        if (matchedKw.length >= 5) break;
       }
 
-      const jobRecord: any = {
+      return {
         company: target.company_name,
         title: job.title,
         location: job.location || "India",
@@ -318,28 +303,41 @@ async function handleScrape(request: Request) {
         ats_source: job.source,
         posted_at: job.posted_at || new Date().toISOString(),
         created_at: new Date().toISOString(),
-        embedding,
-        keywords: keywords.slice(0, 5),
+        embedding: embeddingsMap.get(idx) || null,
+        keywords: matchedKw,
       };
+    });
 
-      const { error: insertErr } = await supabase.from("scraped_jobs").upsert(jobRecord, {
+    if (recordsToUpsert.length > 0) {
+      const { error: upsertErr } = await supabase.from("scraped_jobs").upsert(recordsToUpsert, {
         onConflict: "url",
       });
-
-      if (!insertErr) {
-        companySaved++;
+      if (!upsertErr) {
+        companySaved = recordsToUpsert.length;
       }
+    }
+
+    // Enforce Representation Cap: ensure company never exceeds 50 active jobs in database
+    const { data: allCompJobs } = await supabase
+      .from("scraped_jobs")
+      .select("id, posted_at")
+      .ilike("company", target.company_name)
+      .order("posted_at", { ascending: false });
+
+    if (allCompJobs && allCompJobs.length > 50) {
+      const excessIds = allCompJobs.slice(50).map((r) => r.id);
+      await supabase.from("scraped_jobs").delete().in("id", excessIds);
     }
 
     totalSaved += companySaved;
 
-    // Update company_ats_config status
+    // Update company_ats_config status immediately (pushes to back of round-robin line)
     await supabase
       .from("company_ats_config")
       .update({
         last_scraped_at: new Date().toISOString(),
         total_jobs_found: jobs.length,
-        scrape_notes: `Scraped ${jobs.length} jobs, saved ${companySaved} new eligible jobs.`,
+        scrape_notes: `Scraped ${jobs.length} jobs, saved ${companySaved} new eligible jobs. Representation capped at 50 max.`,
       })
       .eq("id", target.id);
 

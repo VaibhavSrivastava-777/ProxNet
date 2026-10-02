@@ -183,6 +183,8 @@ export async function GET(request: Request) {
 
     const seenBatchUrls = new Set<string>();
     const toProcess: typeof jobs = [];
+
+    // Cap per run to 20 jobs
     for (const job of eligibleJobs) {
       const normUrl = normalizeJobUrl(job.url || "");
       const normTitle = normalizeJobTitle(job.title || "");
@@ -194,47 +196,18 @@ export async function GET(request: Request) {
       }
       if (normUrl) seenBatchUrls.add(normUrl);
       toProcess.push(job);
-      if (toProcess.length >= 25) break;
+      if (toProcess.length >= 20) break;
     }
 
     let companySaved = 0;
 
-    for (const job of toProcess) {
-      // Generate embedding + keywords only for new unique eligible jobs
-      let embedding = null;
-      let keywords: string[] = [];
-
+    // Batch Embeddings: Generate in single API call
+    const embeddingsMap = new Map<number, number[]>();
+    if (openaiKey && toProcess.length > 0) {
       try {
-        const textToEmbed = `Title: ${job.title}\nCompany: ${target.company_name}\nDescription: ${job.description || job.title}`.slice(0, 8000);
-
-        // Keywords
-        const kwRes = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${openaiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            messages: [{
-              role: "user",
-              content: `Extract 3 to 5 technical skills or buzzwords from the job. Return a JSON object with key 'keywords' containing an array of strings.\n\nJob:\n${textToEmbed}`,
-            }],
-            response_format: { type: "json_object" },
-          }),
-          signal: AbortSignal.timeout(15000),
-        });
-
-        if (kwRes.ok) {
-          const kwData = await kwRes.json();
-          try {
-            const parsed = JSON.parse(kwData.choices[0].message.content);
-            keywords = Array.isArray(parsed) ? parsed : (Object.values(parsed)[0] as string[]);
-            if (!Array.isArray(keywords)) keywords = [];
-          } catch (e) {}
-        }
-
-        // Embedding
+        const textsToEmbed = toProcess.map((j) =>
+          `Title: ${j.title}\nCompany: ${target.company_name}\nDescription: ${j.description || j.title}`.slice(0, 4000)
+        );
         const embRes = await fetch("https://api.openai.com/v1/embeddings", {
           method: "POST",
           headers: {
@@ -242,22 +215,40 @@ export async function GET(request: Request) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            input: textToEmbed,
+            input: textsToEmbed,
             model: "text-embedding-3-small",
           }),
           signal: AbortSignal.timeout(15000),
         });
-
         if (embRes.ok) {
           const embData = await embRes.json();
-          if (embData.data?.[0]?.embedding) {
-            embedding = embData.data[0].embedding;
+          if (Array.isArray(embData.data)) {
+            embData.data.forEach((item: any) => {
+              embeddingsMap.set(item.index, item.embedding);
+            });
           }
         }
-      } catch (e) {}
+      } catch (embErr: any) {
+        console.warn(`[scrape-user-targets] Batch embedding notice for ${target.company_name}:`, embErr.message);
+      }
+    }
 
-      // Upsert
-      const jobData: any = {
+    const techKeywords = [
+      "python", "react", "node", "typescript", "javascript", "golang", "java", "c++",
+      "aws", "azure", "gcp", "docker", "kubernetes", "sql", "nosql", "graphql", "next.js",
+      "tailwind", "ai", "ml", "product", "sales", "marketing", "leadership", "finance",
+      "devops", "cloud", "security", "data engineering", "system design"
+    ];
+
+    const recordsToUpsert = toProcess.map((job, idx) => {
+      const combinedText = `${job.title} ${job.description || ""}`.toLowerCase();
+      const matchedKw: string[] = [];
+      for (const kw of techKeywords) {
+        if (combinedText.includes(kw)) matchedKw.push(kw);
+        if (matchedKw.length >= 5) break;
+      }
+
+      return {
         company: target.company_name,
         title: job.title,
         location: job.location || "India",
@@ -265,27 +256,35 @@ export async function GET(request: Request) {
         description: (job.description || "").substring(0, 5000),
         ats_source: job.source,
         posted_at: job.posted_at || new Date().toISOString(),
-        embedding,
         created_at: new Date().toISOString(),
+        embedding: embeddingsMap.get(idx) || null,
+        keywords: matchedKw,
       };
+    });
 
-      let { error: insertError } = await supabase.from("scraped_jobs").upsert({
-        ...jobData,
-        keywords: keywords.slice(0, 5),
-      }, { onConflict: "url" });
-
-      if (insertError) {
-        const { error: retryError } = await supabase.from("scraped_jobs").upsert(jobData, { onConflict: "url" });
-        insertError = retryError;
-      }
-
-      if (!insertError) {
-        companySaved++;
-        totalSaved++;
+    if (recordsToUpsert.length > 0) {
+      const { error: upsertErr } = await supabase.from("scraped_jobs").upsert(recordsToUpsert, {
+        onConflict: "url",
+      });
+      if (!upsertErr) {
+        companySaved = recordsToUpsert.length;
+        totalSaved += companySaved;
       }
     }
 
-    let scrapeNotes = `Cron: Scraped ${jobs.length} raw, ${eligibleJobs.length} India, saved ${companySaved}.`;
+    // Enforce Representation Cap: ensure company never exceeds 50 active jobs in database
+    const { data: allCompJobs } = await supabase
+      .from("scraped_jobs")
+      .select("id, posted_at")
+      .ilike("company", target.company_name)
+      .order("posted_at", { ascending: false });
+
+    if (allCompJobs && allCompJobs.length > 50) {
+      const excessIds = allCompJobs.slice(50).map((r) => r.id);
+      await supabase.from("scraped_jobs").delete().in("id", excessIds);
+    }
+
+    let scrapeNotes = `Cron: Scraped ${jobs.length} raw, ${eligibleJobs.length} India, saved ${companySaved}. Representation capped at 50 max.`;
     if (jobs.length > 0 && eligibleJobs.length === 0) {
       scrapeNotes = `Cron: 0 India listings found out of ${jobs.length} global postings (< 30d).`;
     } else if (eligibleJobs.length > 0 && companySaved === 0) {
