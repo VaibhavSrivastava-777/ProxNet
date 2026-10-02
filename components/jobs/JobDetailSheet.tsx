@@ -40,6 +40,7 @@ export interface PreparationData {
     linkedinSearchUrl: string;
     customPitch: string;
   };
+  jobDescription?: string;
   preparedAt: string;
 }
 
@@ -200,6 +201,7 @@ interface JobDetailSheetProps {
   userWallet: number;
   onWalletUpdated?: (newBalance: number) => void;
   cachedPreparation?: PreparationData | null;
+  initialTab?: "overview" | "prepare";
 }
 
 export function JobDetailSheet({
@@ -209,27 +211,31 @@ export function JobDetailSheet({
   userWallet,
   onWalletUpdated,
   cachedPreparation,
+  initialTab,
 }: JobDetailSheetProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "prepare">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "prepare">(initialTab || (cachedPreparation ? "prepare" : "overview"));
   const [preparing, setPreparing] = useState(false);
   const [preparation, setPreparation] = useState<PreparationData | null>(cachedPreparation || null);
   const [prepareError, setPrepareError] = useState<string | null>(null);
   const [copiedPitch, setCopiedPitch] = useState(false);
   const [directApplied, setDirectApplied] = useState(false);
   const [creditDeductionInfo, setCreditDeductionInfo] = useState<{ prev: number; current: number } | null>(null);
+  const [linkNotice, setLinkNotice] = useState<{ message: string; url?: string } | null>(null);
+  const [checkingLink, setCheckingLink] = useState(false);
 
   useEffect(() => {
     if (cachedPreparation) {
       setPreparation(cachedPreparation);
-      setActiveTab("prepare");
+      setActiveTab(initialTab || "prepare");
     } else {
       setPreparation(null);
-      setActiveTab("overview");
+      setActiveTab(initialTab || "overview");
     }
     setPrepareError(null);
     setDirectApplied(false);
     setCreditDeductionInfo(null);
-  }, [job, cachedPreparation]);
+    setLinkNotice(null);
+  }, [job, cachedPreparation, initialTab]);
 
   if (!isOpen || !job) return null;
 
@@ -295,14 +301,38 @@ export function JobDetailSheet({
   };
 
   const handleApplyDirectly = async () => {
-    // 1. Open official job opportunity in a new tab/browser
-    if (job.url) {
-      window.open(job.url, "_blank", "noopener,noreferrer");
+    if (!job.url) return;
+
+    setCheckingLink(true);
+    setLinkNotice(null);
+
+    let finalUrlToOpen = job.url;
+    try {
+      const checkRes = await fetch(
+        `/api/jobs/check-link?url=${encodeURIComponent(job.url)}&company=${encodeURIComponent(job.company)}&title=${encodeURIComponent(job.title)}&jobId=${encodeURIComponent(job.id)}`
+      );
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (checkData.isExpired) {
+          finalUrlToOpen = checkData.fallbackUrl || job.url;
+          setLinkNotice({
+            message: `Notice: This requisition has closed or returned 404 on the ATS portal (${checkData.reason}). We've opened the active search fallback for '${job.title}' at ${job.company}.`,
+            url: checkData.fallbackUrl,
+          });
+        }
+      }
+    } catch {}
+
+    setCheckingLink(false);
+
+    // 1. Open official job opportunity (or smart search fallback) in a new tab/browser
+    if (typeof window !== "undefined") {
+      window.open(finalUrlToOpen, "_blank", "noopener,noreferrer");
     }
 
     setDirectApplied(true);
 
-    // 2. Persist to job_applications pipeline as "applied"
+    // 2. Persist to job_applications pipeline preserving any existing preparation notes
     try {
       await fetch("/api/jobs/applications", {
         method: "POST",
@@ -315,9 +345,11 @@ export function JobDetailSheet({
           stage: "applied",
           matchScore: job.matchRate,
           notes: JSON.stringify({
+            ...(preparation || cachedPreparation || {}),
             appliedDirectlyAt: new Date().toISOString(),
             sourceUrl: job.url,
             location: job.location,
+            isPrepared: Boolean(preparation || cachedPreparation),
           }),
         }),
       });
@@ -399,6 +431,11 @@ export function JobDetailSheet({
                 📍 {job.location}
               </span>
             )}
+            {preparation && (
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                ⚡ Prepared Playbook Unlocked
+              </span>
+            )}
           </div>
 
           {/* Action Callout Bar */}
@@ -441,15 +478,46 @@ export function JobDetailSheet({
               <button
                 type="button"
                 onClick={handleApplyDirectly}
-                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-xs bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] active:scale-95 transition-all shadow-sm cursor-pointer border-none"
+                disabled={checkingLink}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-xs bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] active:scale-95 transition-all shadow-sm cursor-pointer border-none disabled:opacity-75"
               >
-                <span>Apply Directly</span>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
+                {checkingLink ? (
+                  <>
+                    <span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
+                    <span>Verifying Link...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Apply Directly</span>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </>
+                )}
               </button>
             </div>
           </div>
+
+          {linkNotice && (
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs flex flex-col gap-1.5 animate-fadeIn">
+              <div className="flex items-start gap-2">
+                <span className="text-sm shrink-0">⚠️</span>
+                <span className="font-semibold leading-relaxed">{linkNotice.message}</span>
+              </div>
+              {linkNotice.url && (
+                <div className="pl-6 pt-0.5">
+                  <a
+                    href={linkNotice.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold underline text-amber-700 dark:text-amber-300 hover:opacity-80"
+                  >
+                    Open Live Requisitions on Google Search &rarr;
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
 
           {creditDeductionInfo && (
             <CreditDeductionBanner
@@ -465,33 +533,41 @@ export function JobDetailSheet({
             </div>
           )}
 
-          {/* Sub Tabs: Overview vs Prepare Me Playbook */}
-          {preparation && (
-            <div className="flex border-b border-[var(--color-border-light)] gap-4">
-              <button
-                type="button"
-                onClick={() => setActiveTab("overview")}
-                className={`pb-2.5 text-xs font-bold border-b-2 transition-colors cursor-pointer bg-transparent border-none ${
-                  activeTab === "overview"
-                    ? "border-[var(--color-primary)] text-[var(--color-primary)]"
-                    : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-                }`}
-              >
-                Job Description
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("prepare")}
-                className={`pb-2.5 text-xs font-bold border-b-2 transition-colors cursor-pointer bg-transparent border-none flex items-center gap-1.5 ${
-                  activeTab === "prepare"
-                    ? "border-amber-500 text-amber-600 dark:text-amber-400"
-                    : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-                }`}
-              >
-                <span>⚡</span> AI Preparation Playbook
-              </button>
-            </div>
-          )}
+          {/* Sub Tabs: Overview vs Prepare Me Playbook (Always visible) */}
+          <div className="flex border-b border-[var(--color-border-light)] gap-2 sm:gap-4">
+            <button
+              type="button"
+              onClick={() => setActiveTab("overview")}
+              className={`pb-2.5 text-xs font-bold border-b-2 transition-colors cursor-pointer bg-transparent border-none ${
+                activeTab === "overview"
+                  ? "border-[var(--color-primary)] text-[var(--color-primary)]"
+                  : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+              }`}
+            >
+              📋 Job Description
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("prepare")}
+              className={`pb-2.5 text-xs font-bold border-b-2 transition-colors cursor-pointer bg-transparent border-none flex items-center gap-1.5 ${
+                activeTab === "prepare"
+                  ? "border-amber-500 text-amber-600 dark:text-amber-400"
+                  : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+              }`}
+            >
+              <span>⚡</span>
+              <span>Prepared Playbook</span>
+              {preparation ? (
+                <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                  Ready
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium text-[var(--color-text-tertiary)]">
+                  (1 ⚡)
+                </span>
+              )}
+            </button>
+          </div>
 
           {/* Tab 1: Overview */}
           {activeTab === "overview" && (
@@ -525,7 +601,26 @@ export function JobDetailSheet({
             </div>
           )}
 
-          {/* Tab 2: Prepare Me Playbook */}
+          {/* Tab 2: Prepare Me Playbook - Unprepared State */}
+          {activeTab === "prepare" && !preparation && (
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-amber-500/10 via-[var(--color-surface-secondary)] to-orange-500/5 border border-amber-500/30 text-center flex flex-col items-center gap-3 animate-fadeIn">
+              <span className="text-3xl">⚡</span>
+              <h3 className="text-base font-bold text-[var(--color-text)] m-0">Generate Your Prepared Playbook</h3>
+              <p className="text-xs text-[var(--color-text-secondary)] max-w-md m-0 leading-relaxed">
+                Unlock custom interview strengths, role expectations, and company insider networking paths specifically crafted for <strong>{job.title}</strong> at <strong>{job.company}</strong>.
+              </p>
+              <button
+                type="button"
+                onClick={handlePrepareMe}
+                disabled={preparing}
+                className="mt-2 px-5 py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:brightness-105 transition-all shadow-md cursor-pointer border-none disabled:opacity-50"
+              >
+                {preparing ? "Generating Playbook..." : "⚡ Prepare Me (1 ⚡)"}
+              </button>
+            </div>
+          )}
+
+          {/* Tab 2: Prepare Me Playbook - Unlocked State */}
           {activeTab === "prepare" && preparation && (
             <div className="flex flex-col gap-6 animate-fadeIn">
               {/* 1. Strengths */}

@@ -11,7 +11,8 @@ interface ApplicationRecord {
   company: string;
   job_title: string;
   job_url?: string | null;
-  stage: "saved" | "applied" | "prepared" | "interview" | "offer" | "rejected" | "withdrawn";
+  stage: "applied" | "interview" | "pipe" | "offer" | "rejected";
+  is_prepared?: boolean;
   match_score?: number | null;
   applied_at?: string | null;
   notes?: string | null;
@@ -22,12 +23,17 @@ interface ApplicationRecord {
 export function AppliedJobsTab() {
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "prepared" | "applied" | "active">("all");
+  const [filter, setFilter] = useState<"all" | "prepared" | "applied" | "interview" | "pipe" | "offer" | "rejected">("all");
   
-  // Drawer state for viewing saved preparation
+  // Drawer state for viewing opportunity details & saved playbook
   const [selectedJob, setSelectedJob] = useState<JobItem | null>(null);
   const [selectedPreparation, setSelectedPreparation] = useState<PreparationData | null>(null);
+  const [initialDrawerTab, setInitialDrawerTab] = useState<"overview" | "prepare">("overview");
   const [userWallet, setUserWallet] = useState(0);
+
+  // Link checking state & toast
+  const [checkingLinkId, setCheckingLinkId] = useState<string | null>(null);
+  const [linkNoticeToast, setLinkNoticeToast] = useState<{ message: string; fallbackUrl?: string } | null>(null);
 
   const fetchApplications = useCallback(async () => {
     try {
@@ -88,8 +94,8 @@ export function AppliedJobsTab() {
     }
   };
 
-  // Open saved preparation in JobDetailSheet
-  const openSavedPlaybook = (app: ApplicationRecord) => {
+  // Open details anytime with option to anchor directly to Playbook or Overview
+  const openOpportunityDetails = (app: ApplicationRecord, tab: "overview" | "prepare" = "overview") => {
     let prepData: PreparationData | null = null;
     if (app.notes) {
       try {
@@ -104,30 +110,58 @@ export function AppliedJobsTab() {
       company: app.company,
       location: prepData?.location || "India",
       url: app.job_url || "",
-      description: "Saved preparation playbook from your tracker.",
+      description: prepData?.jobDescription || "Opportunity details from your tracker. View role requirements, ATS links, or review preparation playbook.",
       matchRate: app.match_score || 85,
     };
 
     setSelectedJob(jobItem);
     setSelectedPreparation(prepData);
+    setInitialDrawerTab(tab);
+  };
+
+  // Smart link handler that verifies health and catches 404 / closed redirects
+  const handleOpenLink = async (app: ApplicationRecord) => {
+    if (!app.job_url) return;
+
+    setCheckingLinkId(app.id);
+    setLinkNoticeToast(null);
+
+    let urlToOpen = app.job_url;
+    try {
+      const res = await fetch(
+        `/api/jobs/check-link?url=${encodeURIComponent(app.job_url)}&company=${encodeURIComponent(app.company)}&title=${encodeURIComponent(app.job_title)}&jobId=${encodeURIComponent(app.job_id || "")}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.isExpired) {
+          urlToOpen = data.fallbackUrl || app.job_url;
+          setLinkNoticeToast({
+            message: `Notice: This specific requisition has closed on the ATS portal (${data.reason}). Opened active search fallback for '${app.job_title}' at ${app.company}.`,
+            fallbackUrl: data.fallbackUrl,
+          });
+        }
+      }
+    } catch {}
+
+    setCheckingLinkId(null);
+    window.open(urlToOpen, "_blank", "noopener,noreferrer");
   };
 
   // Filter items
   const filteredApps = applications.filter((app) => {
     if (filter === "prepared") {
-      return app.stage === "prepared" || (app.notes && app.notes.includes("strengths"));
+      return Boolean(app.is_prepared || (app.notes && app.notes.includes("strengths")));
     }
-    if (filter === "applied") {
-      return app.stage === "applied";
-    }
-    if (filter === "active") {
-      return ["applied", "prepared", "interview", "offer"].includes(app.stage);
-    }
-    return true;
+    if (filter === "all") return true;
+    return app.stage === filter;
   });
 
-  const preparedCount = applications.filter((a) => a.stage === "prepared" || (a.notes && a.notes.includes("strengths"))).length;
+  const preparedCount = applications.filter((a) => a.is_prepared || (a.notes && a.notes.includes("strengths"))).length;
   const appliedCount = applications.filter((a) => a.stage === "applied").length;
+  const interviewCount = applications.filter((a) => a.stage === "interview").length;
+  const pipeCount = applications.filter((a) => a.stage === "pipe").length;
+  const offerCount = applications.filter((a) => a.stage === "offer").length;
+  const rejectedCount = applications.filter((a) => a.stage === "rejected").length;
 
   return (
     <div className="flex flex-col gap-4 animate-fadeIn">
@@ -146,11 +180,15 @@ export function AppliedJobsTab() {
         </div>
 
         {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1">
           {[
             { id: "all", label: `All (${applications.length})` },
             { id: "prepared", label: `⚡ Prepared (${preparedCount})` },
             { id: "applied", label: `🚀 Applied (${appliedCount})` },
+            { id: "interview", label: `🎯 Interview (${interviewCount})` },
+            { id: "pipe", label: `⏳ Pipe (${pipeCount})` },
+            { id: "offer", label: `🎉 Offer (${offerCount})` },
+            { id: "rejected", label: `❌ Rejected (${rejectedCount})` },
           ].map((f) => (
             <button
               key={f.id}
@@ -166,6 +204,23 @@ export function AppliedJobsTab() {
           ))}
         </div>
       </div>
+
+      {/* 404 / Expired Link Notification Toast */}
+      {linkNoticeToast && (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs flex items-center justify-between gap-3 animate-fadeIn shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">⚠️</span>
+            <span className="font-semibold">{linkNoticeToast.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLinkNoticeToast(null)}
+            className="w-6 h-6 rounded-full flex items-center justify-center bg-black/5 hover:bg-black/10 text-inherit border-none cursor-pointer shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (
@@ -205,7 +260,8 @@ export function AppliedJobsTab() {
       {!loading && filteredApps.length > 0 && (
         <div className="flex flex-col gap-3">
           {filteredApps.map((app) => {
-            const hasPlaybook = app.notes && app.notes.includes("strengths");
+            const hasPlaybook = Boolean(app.is_prepared || (app.notes && app.notes.includes("strengths")));
+            const isChecking = checkingLinkId === app.id;
 
             return (
               <div
@@ -213,34 +269,57 @@ export function AppliedJobsTab() {
                 className="p-4 rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-border)] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
               >
                 {/* Left: Company & Details */}
-                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div
+                  className="flex items-center gap-3.5 min-w-0 flex-1 cursor-pointer"
+                  onClick={() => openOpportunityDetails(app, hasPlaybook ? "prepare" : "overview")}
+                  title="Click to view details & preparation playbook"
+                >
                   <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-[var(--color-border-light)] bg-white flex items-center justify-center shadow-xs">
                     <CompanyLogo company={app.company} className="w-9 h-9 object-contain" />
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-bold text-[var(--color-text-secondary)] truncate">
                         {app.company}
                       </span>
+
+                      {/* Independent Prepared Status Badge */}
                       {hasPlaybook && (
                         <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30">
                           ⚡ Prepared
                         </span>
                       )}
-                      {app.stage === "prepared" && !hasPlaybook && (
-                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30">
-                          ⚡ Prepared
-                        </span>
-                      )}
+
+                      {/* Pipeline Stage Badge */}
                       {app.stage === "applied" && (
                         <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                          ✓ Applied Directly
+                          🚀 Applied
+                        </span>
+                      )}
+                      {app.stage === "interview" && (
+                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/30">
+                          🎯 Interview
+                        </span>
+                      )}
+                      {app.stage === "pipe" && (
+                        <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/30">
+                          ⏳ In Pipe
+                        </span>
+                      )}
+                      {app.stage === "offer" && (
+                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/40">
+                          🎉 Offer
+                        </span>
+                      )}
+                      {app.stage === "rejected" && (
+                        <span className="text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/30">
+                          ❌ Rejected
                         </span>
                       )}
                     </div>
 
-                    <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] truncate m-0 mt-0.5">
+                    <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] truncate m-0 mt-0.5 hover:text-[var(--color-primary)] transition-colors">
                       {app.job_title}
                     </h3>
 
@@ -252,49 +331,75 @@ export function AppliedJobsTab() {
                           <span className="font-semibold text-emerald-600 dark:text-emerald-400">{app.match_score}% Match</span>
                         </>
                       )}
+                      <span>&bull;</span>
+                      <span className="text-[var(--color-primary)] hover:underline font-semibold">
+                        View Details &rarr;
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Right: Actions */}
-                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
                   {/* View saved preparation playbook */}
                   {hasPlaybook && (
                     <button
                       type="button"
-                      onClick={() => openSavedPlaybook(app)}
+                      onClick={() => openOpportunityDetails(app, "prepare")}
                       className="px-3 py-1.5 rounded-xl font-bold text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-all border border-amber-500/30 cursor-pointer flex items-center gap-1"
+                      title="Check prepared playbook anytime"
                     >
                       <span>⚡ View Playbook</span>
                     </button>
                   )}
 
-                  {/* Open official URL */}
+                  {/* General Details button */}
+                  <button
+                    type="button"
+                    onClick={() => openOpportunityDetails(app, "overview")}
+                    className="px-3 py-1.5 rounded-xl font-semibold text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-all border border-[var(--color-border-light)] cursor-pointer"
+                    title="View full opportunity details"
+                  >
+                    Details
+                  </button>
+
+                  {/* Smart Open Link with 404 / closed ATS detection */}
                   {app.job_url && (
-                    <a
-                      href={app.job_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 rounded-xl font-bold text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-all border border-[var(--color-border-light)] no-underline flex items-center gap-1"
+                    <button
+                      type="button"
+                      onClick={() => handleOpenLink(app)}
+                      disabled={isChecking}
+                      className="px-3 py-1.5 rounded-xl font-bold text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-all border border-[var(--color-border-light)] cursor-pointer flex items-center gap-1 disabled:opacity-60"
+                      title="Open verified job opening"
                     >
-                      <span>Open Link</span>
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </a>
+                      {isChecking ? (
+                        <>
+                          <span className="animate-spin inline-block w-2.5 h-2.5 border-2 border-[var(--color-text)] border-t-transparent rounded-full" />
+                          <span>Checking...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Open Link</span>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </>
+                      )}
+                    </button>
                   )}
 
-                  {/* Stage Dropdown */}
+                  {/* Pipeline Stage Dropdown: Strictly Applied, Interview, Pipe, Offer, Rejected */}
                   <select
-                    value={app.stage === "saved" && hasPlaybook ? "prepared" : app.stage}
+                    value={app.stage || "pipe"}
                     onChange={(e) => updateStage(app.id, e.target.value as any)}
                     className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] cursor-pointer focus:outline-none"
+                    title="Update pipeline stage"
                   >
-                    <option value="prepared">⚡ Prepared</option>
                     <option value="applied">🚀 Applied</option>
                     <option value="interview">🎯 Interview</option>
+                    <option value="pipe">⏳ Pipe</option>
                     <option value="offer">🎉 Offer</option>
-                    <option value="rejected">Rejected</option>
+                    <option value="rejected">❌ Rejected</option>
                   </select>
 
                   {/* Delete / Archive */}
@@ -315,7 +420,7 @@ export function AppliedJobsTab() {
         </div>
       )}
 
-      {/* Slide-over Opportunity Detail Drawer for saved playbooks */}
+      {/* Slide-over Opportunity Detail Drawer with direct playbook access */}
       <JobDetailSheet
         job={selectedJob}
         isOpen={Boolean(selectedJob)}
@@ -325,6 +430,7 @@ export function AppliedJobsTab() {
         }}
         userWallet={userWallet}
         cachedPreparation={selectedPreparation}
+        initialTab={initialDrawerTab}
       />
     </div>
   );

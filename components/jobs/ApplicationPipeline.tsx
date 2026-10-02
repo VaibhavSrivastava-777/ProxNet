@@ -9,7 +9,8 @@ export interface JobApplication {
   company: string;
   job_title: string;
   job_url?: string | null;
-  stage: "saved" | "applied" | "referral_sent" | "referral_responded" | "interview" | "offer" | "rejected" | "withdrawn";
+  stage: "saved" | "applied" | "pipe" | "referral_sent" | "referral_responded" | "interview" | "offer" | "rejected" | "withdrawn";
+  is_prepared?: boolean;
   referral_thread_id?: string | null;
   notes?: string | null;
   match_score?: number | null;
@@ -19,12 +20,11 @@ export interface JobApplication {
 }
 
 const STAGES: Array<{ id: JobApplication["stage"]; label: string; icon: string; color: string }> = [
-  { id: "saved", label: "Saved", icon: "🔖", color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" },
-  { id: "referral_sent", label: "Referral Asked", icon: "🤝", color: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30" },
-  { id: "referral_responded", label: "Referrer Replied", icon: "💬", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" },
-  { id: "applied", label: "Applied", icon: "📤", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
+  { id: "pipe", label: "Pipe", icon: "⏳", color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" },
+  { id: "applied", label: "Applied", icon: "🚀", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
   { id: "interview", label: "Interview", icon: "🎯", color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30" },
   { id: "offer", label: "Offer", icon: "🏆", color: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40" },
+  { id: "rejected", label: "Rejected", icon: "❌", color: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30" },
 ];
 
 interface ApplicationPipelineProps {

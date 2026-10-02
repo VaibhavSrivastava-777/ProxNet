@@ -242,22 +242,23 @@ Provide a JSON object with:
         linkedinSearchUrl,
         customPitch,
       },
+      jobDescription: description || "",
       preparedAt: new Date().toISOString(),
     };
 
     // 3. Deduct 1 credit from wallet
     const deduction = await deductWalletCredits(user.id, "prepare_me", jobId || `job_${Date.now()}`, 1);
 
-    // 4. Persist to job_applications under stage: "prepared"
+    // 4. Persist to job_applications while keeping pipeline stage independent
     const payloadNotes = JSON.stringify({
       ...preparation,
-      stage: "prepared",
       isPrepared: true,
     });
 
     if (existingApp?.id) {
-      const targetStage = existingApp.stage === "applied" ? "applied" : "prepared";
-      const { error: updateErr } = await supabase
+      // Preserve existing pipeline stage!
+      const targetStage = existingApp.stage || "saved";
+      await supabase
         .from("job_applications")
         .update({
           stage: targetStage,
@@ -266,21 +267,9 @@ Provide a JSON object with:
           updated_at: new Date().toISOString(),
         })
         .eq("id", existingApp.id);
-
-      if (updateErr && (updateErr.code === "23514" || updateErr.message?.includes("stage_check"))) {
-        // Fallback to 'saved' stage if DB check constraint excludes 'prepared'
-        await supabase
-          .from("job_applications")
-          .update({
-            stage: existingApp.stage === "applied" ? "applied" : "saved",
-            match_score: matchScore || existingApp.match_score || 85,
-            notes: payloadNotes,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingApp.id);
-      }
     } else {
-      const { error: insertErr } = await supabase
+      // Default new prepared opportunity to 'saved' stage (representing 'pipe')
+      await supabase
         .from("job_applications")
         .insert({
           user_id: user.id,
@@ -288,31 +277,11 @@ Provide a JSON object with:
           company: company.trim(),
           job_title: title.trim(),
           job_url: url || null,
-          stage: "prepared",
+          stage: "saved",
           match_score: matchScore || 85,
           notes: payloadNotes,
           applied_at: null,
         });
-
-      if (insertErr && (insertErr.code === "23514" || insertErr.message?.includes("stage_check"))) {
-        // Fallback to 'saved' stage if DB check constraint excludes 'prepared'
-        const { error: fallbackErr } = await supabase
-          .from("job_applications")
-          .insert({
-            user_id: user.id,
-            job_id: validJobUuid,
-            company: company.trim(),
-            job_title: title.trim(),
-            job_url: url || null,
-            stage: "saved",
-            match_score: matchScore || 85,
-            notes: payloadNotes,
-            applied_at: null,
-          });
-        if (fallbackErr) {
-          console.error("Fallback insert failed:", fallbackErr);
-        }
-      }
     }
 
     return NextResponse.json({
