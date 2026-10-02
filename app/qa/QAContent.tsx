@@ -112,7 +112,7 @@ export function QAContent({ initialTab }: QAContentProps) {
         key={activeTab}
         activeTab={activeTab}
         isLoading={isTransitioning}
-        minDisplayDurationMs={3500}
+        minDisplayDurationMs={600}
         onTransitionComplete={() => setIsTransitioning(false)}
       />
 
@@ -202,7 +202,7 @@ export default function QAContentWrapper({ initialTab }: { initialTab?: string }
         <TabValueTransition
           activeTab={initialTab || "/jobs"}
           isLoading={true}
-          minDisplayDurationMs={3500}
+          minDisplayDurationMs={600}
         />
       }
     >

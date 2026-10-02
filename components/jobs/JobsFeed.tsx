@@ -58,11 +58,16 @@ function formatAge(postedAt: string | undefined): string {
   return "1mo ago";
 }
 
+// Client-side module memory cache for instant tab switching
+let memoryFeedCompanies: RawCompanyData[] = [];
+let memoryFeedWallet: number = 0;
+let memoryFeedLoaded = false;
+
 export function JobsFeed() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!memoryFeedLoaded);
   const [error, setError] = useState<string | null>(null);
-  const [allCompanies, setAllCompanies] = useState<RawCompanyData[]>([]);
-  const [userWallet, setUserWallet] = useState(0);
+  const [allCompanies, setAllCompanies] = useState<RawCompanyData[]>(memoryFeedCompanies);
+  const [userWallet, setUserWallet] = useState(memoryFeedWallet);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   
@@ -75,25 +80,38 @@ export function JobsFeed() {
   // Modal state for viewing other jobs of a company
   const [modalCompanyGroup, setModalCompanyGroup] = useState<CompanyJobGroup | null>(null);
 
-  // Load all ~7k scraped jobs grouped by company
-  const loadJobs = useCallback(async () => {
+  // Load all ~7k scraped jobs grouped by company with stale-while-revalidate
+  const loadJobs = useCallback(async (showLoadingSpinner = false) => {
     try {
-      setLoading(true);
+      if (showLoadingSpinner || !memoryFeedLoaded) {
+        setLoading(true);
+      }
       const res = await fetch("/api/jobs/all");
       if (!res.ok) throw new Error("Failed to load live jobs feed");
       const data = await res.json();
-      setAllCompanies(data.companies || []);
-      setUserWallet(data.wallet ?? 0);
+      const comps = data.companies || [];
+      const wallet = data.wallet ?? 0;
+
+      memoryFeedCompanies = comps;
+      memoryFeedWallet = wallet;
+      memoryFeedLoaded = true;
+
+      setAllCompanies(comps);
+      setUserWallet(wallet);
+      setError(null);
     } catch (err: any) {
       console.error("Error loading all jobs:", err);
-      setError(err.message || "Failed to load opportunities.");
+      if (!memoryFeedLoaded) {
+        setError(err.message || "Failed to load opportunities.");
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadJobs();
+    // If not loaded yet, fetch with loading indicator; otherwise revalidate quietly in background
+    loadJobs(!memoryFeedLoaded);
   }, [loadJobs]);
 
   // Sync wallet balance updates across tabs
@@ -316,7 +334,7 @@ export function JobsFeed() {
         <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-center justify-between">
           <span>⚠️ {error}</span>
           <button
-            onClick={loadJobs}
+            onClick={() => loadJobs(true)}
             className="px-3 py-1 rounded-lg bg-red-600 text-white font-bold text-xs border-none cursor-pointer"
           >
             Retry
