@@ -447,8 +447,23 @@ export function ProximityMap() {
 
     const combined = [...extraBroadcasters, ...filteredPeople];
 
-    // Filter out any active beacon that exceeds 2km
+    // Filter out ProxNet AI system bot and any active beacon that exceeds 2km
     const withinRadiusPeople = combined.filter((p: any) => {
+      const pFullName = (p.full_name || "").toLowerCase();
+      const pAnonName = (p.anonymous_name || "").toLowerCase();
+      const pComp = (p.company || "").toLowerCase();
+      const pTitle = (p.job_title || "").toLowerCase();
+      const pEmail = (p.email || "").toLowerCase();
+      if (
+        pFullName.includes("proxnet ai") ||
+        pAnonName.includes("proxnet ai") ||
+        pEmail === "ai@proxnet.in" ||
+        pEmail === "ai@proxnet.com" ||
+        (pComp === "proxnet" && pTitle.includes("network assistant"))
+      ) {
+        return false;
+      }
+
       if (p.is_me) return true;
       if (activeBeaconMap.has(p.id)) {
         const dist = typeof p.distance === "number" ? p.distance : null;

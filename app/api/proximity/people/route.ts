@@ -93,9 +93,29 @@ export async function GET(request: Request) {
     }
   }
 
+function isBotOrAiUser(u: any): boolean {
+  if (!u) return false;
+  const email = (u.email || "").toLowerCase();
+  const fullName = (u.full_name || "").toLowerCase();
+  const anonName = (u.anonymous_name || "").toLowerCase();
+  const comp = (u.company || "").toLowerCase();
+  const title = (u.job_title || "").toLowerCase();
+  return (
+    email === "ai@proxnet.in" ||
+    email === "ai@proxnet.com" ||
+    email.startsWith("ai@") ||
+    fullName.includes("proxnet ai") ||
+    anonName.includes("proxnet ai") ||
+    (comp === "proxnet" && title.includes("network assistant"))
+  );
+}
+
   const nearbyPeople: any[] = [];
 
   for (const u of (users ?? []) as any[]) {
+    // Exclude ProxNet AI / system bots from peer network directory
+    if (isBotOrAiUser(u)) continue;
+
     // If user has no job title or company, don't show in proximity list
     if (!u.job_title?.trim() || !u.company?.trim()) continue;
 
@@ -182,6 +202,9 @@ export async function GET(request: Request) {
   if (!effectiveUnfiltered && nearbyPeople.length === 0) {
     autoExpanded = true;
     for (const u of (users ?? []) as any[]) {
+      // Exclude ProxNet AI / system bots from peer network directory
+      if (isBotOrAiUser(u)) continue;
+
       const title = (u.job_title || "").trim();
       const comp = (u.company || "").trim();
       if ((!title || title === "null") && (!comp || comp === "null")) continue;

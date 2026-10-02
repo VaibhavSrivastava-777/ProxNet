@@ -102,6 +102,22 @@ export function rankDiscoverProfiles({
       if (currentUserId && person.id === currentUserId) continue;
       if (person.is_me) continue;
 
+      // Exclude ProxNet AI / system bots from discover cards
+      const pFullName = (person.full_name || "").toLowerCase();
+      const pAnonName = (person.anonymous_name || "").toLowerCase();
+      const pComp = (person.company || "").toLowerCase();
+      const pTitle = (person.job_title || "").toLowerCase();
+      const pEmail = (person.email || "").toLowerCase();
+      if (
+        pFullName.includes("proxnet ai") ||
+        pAnonName.includes("proxnet ai") ||
+        pEmail === "ai@proxnet.in" ||
+        pEmail === "ai@proxnet.com" ||
+        (pComp === "proxnet" && pTitle.includes("network assistant"))
+      ) {
+        continue;
+      }
+
       // ── Hybrid Match Scoring Engine ──
       // Combines real-world structural affinities (Company, College, Society, Role, Skills, Proximity)
       // with semantic vector similarity, instead of relying entirely on vector cosine similarity.

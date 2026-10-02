@@ -48,6 +48,14 @@ export async function GET(request: Request) {
   for (const u of (users ?? []) as User[]) {
     const visibility = u.visibility as UserVisibility;
     if (!visibility?.showCompany || !u.company?.trim()) continue;
+    if (
+      u.email === "ai@proxnet.in" ||
+      u.email === "ai@proxnet.com" ||
+      u.full_name?.toLowerCase().includes("proxnet ai") ||
+      (u.company?.toLowerCase() === "proxnet" && u.job_title?.toLowerCase().includes("network assistant"))
+    ) {
+      continue;
+    }
 
     // Filter by tag if requested
     if (tagFilter) {
