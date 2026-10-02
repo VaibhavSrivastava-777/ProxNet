@@ -7,7 +7,7 @@ import { useTheme } from "./ThemeProvider";
 import { signOutAction } from "@/app/actions";
 import { useEffect, useRef, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
-import { isProfileIncomplete } from "@/lib/profile-validation";
+import { isProfileIncomplete, calculateProfileCompleteness } from "@/lib/profile-validation";
 import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
 import { RechargeModal } from "@/components/RechargeModal";
 import { playNotificationSound, unlockAudioContext, getSoundTypeForNotification, SoundType } from "@/lib/sound";
@@ -85,13 +85,6 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     };
   }, []);
 
-  const navLinks = [
-    { href: "/jobs", label: "Jobs", icon: BriefcaseIcon, dataTour: "nav-jobs" },
-    { href: "/network", label: "Network", icon: MapPinIcon, dataTour: "nav-network" },
-    { href: "/qa", label: "Chats", icon: ChatIcon, dataTour: "nav-chats" },
-    { href: "/forum", label: "Forum", icon: ForumIcon, dataTour: "nav-forum" },
-  ];
-
   // Web Push & In-App Toast States
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   const [pushModalTrigger, setPushModalTrigger] = useState<"post-login" | "chat" | "first-post" | null>(null);
@@ -117,6 +110,21 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   const [profileUser, setProfileUser] = useState<any>(null);
   const [showProfileWizard, setShowProfileWizard] = useState(false);
   const [missingStepCount, setMissingStepCount] = useState(0);
+
+  const profileCompleteness = profileUser ? calculateProfileCompleteness(profileUser) : 0;
+
+  const navLinks = [
+    { href: "/jobs", label: "Jobs", icon: BriefcaseIcon, dataTour: "nav-jobs" },
+    { href: "/applied", label: "Applied", icon: ClipboardCheckIcon, dataTour: "nav-applied" },
+    { href: "/network", label: "Network", icon: NetworkIcon, dataTour: "nav-network" },
+    {
+      href: "/profile",
+      label: profileCompleteness === 100 ? "Profile" : `${profileCompleteness}% Profile`,
+      icon: UserIcon,
+      isProfile: true,
+      dataTour: "nav-profile",
+    },
+  ];
 
   // Login Modal State
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -734,10 +742,10 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
   };
 
   const handleTabClick = async (e: React.MouseEvent, tabHref: string) => {
-    const tabPaths = ["/jobs", "/network", "/qa", "/forum", "/", "/proximity"];
+    const tabPaths = ["/jobs", "/applied", "/network", "/profile", "/qa", "/forum", "/", "/proximity"];
     const isShellRoute = tabPaths.includes(pathname) || pathname === "";
 
-    if (isShellRoute && ["/jobs", "/network", "/qa", "/forum"].includes(tabHref)) {
+    if (isShellRoute && ["/jobs", "/applied", "/network", "/profile", "/qa", "/forum"].includes(tabHref)) {
       e.preventDefault();
       setCurrentTab(tabHref);
       window.dispatchEvent(new CustomEvent("tabchange", { detail: tabHref }));
@@ -991,27 +999,54 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                   const hasUnreadChats = inAppNotifications.some(
                     (n) => !n.is_read && (n.url?.includes("/chat") || n.url === "/qa" || n.url === "/proxnet-ai")
                   );
-                  const hasUnreadForum = inAppNotifications.some(
-                    (n) => !n.is_read && n.url?.includes("/forum")
-                  );
-                  const showBadge = l.href === "/qa" 
-                    ? (hasUnreadChats || hasIncomingOpen) && !active 
-                    : l.href === "/forum" 
-                      ? hasUnreadForum && !active 
-                      : false;
+                  const showBadge = (l.href === "/network" || l.href === "/qa") && (hasUnreadChats || hasIncomingOpen) && !active;
+
+                  const radius = 9;
+                  const circumference = 2 * Math.PI * radius; // ~56.55
+                  const strokeDashoffset = circumference - (profileCompleteness / 100) * circumference;
+                  const ringColor = profileCompleteness >= 80 ? "#10b981" : profileCompleteness >= 50 ? "#3b82f6" : "#f59e0b";
+
                   return (
                     <Link
                       key={l.href}
                       href={l.href}
                       data-tour={l.dataTour}
                       onClick={(e) => handleTabClick(e, l.href)}
-                      className="flex h-full items-center gap-2 px-4 text-sm font-medium transition-colors hover:bg-[var(--color-surface-hover)] relative"
+                      className="flex h-full items-center gap-2 px-4 text-sm font-medium transition-colors hover:bg-[var(--color-surface-hover)] relative no-underline"
                       style={{
                         color: active ? "var(--color-primary)" : "var(--color-text-secondary)",
                       }}
                     >
-                      <span className="relative">
-                        <l.icon className="h-4 w-4" />
+                      <span className="relative flex items-center justify-center">
+                        {l.isProfile ? (
+                          <div className="relative w-6 h-6 flex items-center justify-center">
+                            <svg className="w-6 h-6 -rotate-90 transform" viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r={radius} stroke="var(--color-border-light)" strokeWidth="2" fill="transparent" />
+                              <circle
+                                cx="12"
+                                cy="12"
+                                r={radius}
+                                stroke={ringColor}
+                                strokeWidth="2"
+                                fill="transparent"
+                                strokeDasharray={circumference}
+                                strokeDashoffset={strokeDashoffset}
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <div className="w-3.5 h-3.5 rounded-full overflow-hidden bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-[8px] flex items-center justify-center">
+                                {profileUser?.profile_photo_url ? (
+                                  <img src={profileUser.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  (userName || "U").charAt(0).toUpperCase()
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <l.icon className="h-4 w-4" />
+                        )}
                         {showBadge && (
                           <span
                             className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
@@ -1032,6 +1067,25 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             </nav>
 
             <div className="flex items-center gap-3">
+              {session && (
+                <Link
+                  href="/forum"
+                  data-tour="nav-forum"
+                  onClick={(e) => handleTabClick(e, "/forum")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all no-underline ${
+                    (currentTab || pathname) === "/forum"
+                      ? "bg-[var(--color-primary-subtle)] text-[var(--color-primary)] border-[var(--color-primary)]/30 shadow-xs"
+                      : "text-[var(--color-text-secondary)] border-[var(--color-border-light)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]"
+                  }`}
+                  title="Neighborhood Forum"
+                >
+                  <ForumIcon className="h-4 w-4" />
+                  <span>Forum</span>
+                  {inAppNotifications.some((n) => !n.is_read && n.url?.includes("/forum")) && (
+                    <span className="w-2 h-2 rounded-full bg-[var(--color-error)]" />
+                  )}
+                </Link>
+              )}
               <button
                 type="button"
                 data-tour="theme-toggle"
@@ -1203,6 +1257,25 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             </span>
           </Link>
           <div className="flex items-center gap-2">
+            {session && (
+              <Link
+                href="/forum"
+                data-tour="nav-forum"
+                onClick={(e) => handleTabClick(e, "/forum")}
+                className={`p-1.5 rounded-lg text-xs font-semibold relative flex items-center justify-center transition-colors no-underline ${
+                  (currentTab || pathname) === "/forum"
+                    ? "text-[var(--color-primary)] bg-[var(--color-primary-subtle)]"
+                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                }`}
+                aria-label="Neighborhood Forum"
+                title="Neighborhood Forum"
+              >
+                <ForumIcon className="h-5 w-5" />
+                {inAppNotifications.some((n) => !n.is_read && n.url?.includes("/forum")) && (
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[var(--color-error)] ring-2 ring-[var(--color-surface)]" />
+                )}
+              </Link>
+            )}
             <button
               type="button"
               data-tour="theme-toggle"
@@ -1475,21 +1548,20 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
             const hasUnreadChats = inAppNotifications.some(
               (n) => !n.is_read && (n.url?.includes("/chat") || n.url === "/qa" || n.url === "/proxnet-ai")
             );
-            const hasUnreadForum = inAppNotifications.some(
-              (n) => !n.is_read && n.url?.includes("/forum")
-            );
-            const showBadge = l.href === "/qa" 
-              ? (hasUnreadChats || hasIncomingOpen) && !active 
-              : l.href === "/forum" 
-                ? hasUnreadForum && !active 
-                : false;
+            const showBadge = (l.href === "/network" || l.href === "/qa") && (hasUnreadChats || hasIncomingOpen) && !active;
+
+            const radius = 10;
+            const circumference = 2 * Math.PI * radius; // ~62.83
+            const strokeDashoffset = circumference - (profileCompleteness / 100) * circumference;
+            const ringColor = profileCompleteness >= 80 ? "#10b981" : profileCompleteness >= 50 ? "#3b82f6" : "#f59e0b";
+
             return (
               <Link
                 key={l.href}
                 href={l.href}
                 data-tour={l.dataTour}
                 onClick={(e) => handleTabClick(e, l.href)}
-                className="flex flex-1 flex-col items-center justify-center gap-1 h-full transition-colors relative"
+                className="flex flex-1 flex-col items-center justify-center gap-1 h-full transition-colors relative no-underline"
                 style={{
                   color: active ? "var(--color-primary)" : "var(--color-text-tertiary)",
                 }}
@@ -1500,8 +1572,36 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                     style={{ backgroundColor: "var(--color-primary)" }}
                   />
                 )}
-                <span className="relative">
-                  <l.icon className="h-5 w-5" />
+                <span className="relative flex items-center justify-center">
+                  {l.isProfile ? (
+                    <div className="relative w-7 h-7 flex items-center justify-center">
+                      <svg className="w-7 h-7 -rotate-90 transform" viewBox="0 0 28 28">
+                        <circle cx="14" cy="14" r={radius} stroke="var(--color-border-light)" strokeWidth="2.5" fill="transparent" />
+                        <circle
+                          cx="14"
+                          cy="14"
+                          r={radius}
+                          stroke={ringColor}
+                          strokeWidth="2.5"
+                          fill="transparent"
+                          strokeDasharray={circumference}
+                          strokeDashoffset={strokeDashoffset}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-4 h-4 rounded-full overflow-hidden bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-[9px] flex items-center justify-center">
+                          {profileUser?.profile_photo_url ? (
+                            <img src={profileUser.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            (userName || "U").charAt(0).toUpperCase()
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <l.icon className="h-5 w-5" />
+                  )}
                   {showBadge && (
                     <span
                       className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
@@ -1779,6 +1879,22 @@ function GrowIcon(props: any) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235A8.987 8.987 0 0 1 9 18a8.987 8.987 0 0 1 6 1.235c0 .359-.142.7-.4.957a1.353 1.353 0 0 1-.957.4H4.357a1.353 1.353 0 0 1-.957-.4 1.353 1.353 0 0 1-.4-.957Z" />
+    </svg>
+  );
+}
+
+function ClipboardCheckIcon(props: any) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V19.5a2.25 2.25 0 0 0 2.25 2.25h.75m0-3 2.25 2.25 4.5-4.5" />
+    </svg>
+  );
+}
+
+function NetworkIcon(props: any) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94-3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
     </svg>
   );
 }

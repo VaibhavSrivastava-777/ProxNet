@@ -117,7 +117,7 @@ export function parseAlias(alias: string) {
   return { jobTitle: alias, company: "" };
 }
 
-export function CompanyLogo({ company, size = 48 }: { company?: string | null; size?: number }) {
+export function CompanyLogo({ company, size = 48, className }: { company?: string | null; size?: number; className?: string }) {
   const [imgError, setImgError] = useState(false);
 
   if (!company || company.trim() === "" || company.toLowerCase().includes("neighbor") || company.toLowerCase().includes("resident") || company.toLowerCase().includes("professional")) {

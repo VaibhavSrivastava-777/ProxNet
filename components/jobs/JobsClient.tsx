@@ -1,11 +1,11 @@
 "use client";
 
-import { SuggestedJobs } from "./SuggestedJobs";
+import { JobsFeed } from "./JobsFeed";
 
 export function JobsClient() {
   return (
     <div className="animate-fadeIn">
-      <SuggestedJobs />
+      <JobsFeed />
     </div>
   );
 }

@@ -26,13 +26,15 @@ export type DebitReason =
   | "referral_request_cost"
   | "referral_response_transfer"
   | "deep_ats_fetch"
-  | "deep_career_miner";
+  | "deep_career_miner"
+  | "prepare_me";
 
 export const CREDIT_COSTS: Record<DebitReason, { amount: number; label: string }> = {
   referral_request_cost: { amount: 1, label: "Initiating a Referral Request" },
   referral_response_transfer: { amount: 3, label: "Transfer for Referral Response" },
   deep_ats_fetch: { amount: 1, label: "Deep ATS Match Hunter" },
   deep_career_miner: { amount: 3, label: "Deep Career Conversion Miner" },
+  prepare_me: { amount: 1, label: "Job Preparation & Networking Playbook" },
 };
 
 
