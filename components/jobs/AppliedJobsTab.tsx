@@ -225,7 +225,12 @@ export function AppliedJobsTab() {
                       </span>
                       {hasPlaybook && (
                         <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30">
-                          ⚡ AI Playbook Saved
+                          ⚡ Prepared
+                        </span>
+                      )}
+                      {app.stage === "prepared" && !hasPlaybook && (
+                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30">
+                          ⚡ Prepared
                         </span>
                       )}
                       {app.stage === "applied" && (
@@ -281,14 +286,14 @@ export function AppliedJobsTab() {
 
                   {/* Stage Dropdown */}
                   <select
-                    value={app.stage}
+                    value={app.stage === "saved" && hasPlaybook ? "prepared" : app.stage}
                     onChange={(e) => updateStage(app.id, e.target.value as any)}
                     className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] cursor-pointer focus:outline-none"
                   >
-                    <option value="prepared">Prepared</option>
-                    <option value="applied">Applied</option>
-                    <option value="interview">Interview</option>
-                    <option value="offer">Offer</option>
+                    <option value="prepared">⚡ Prepared</option>
+                    <option value="applied">🚀 Applied</option>
+                    <option value="interview">🎯 Interview</option>
+                    <option value="offer">🎉 Offer</option>
                     <option value="rejected">Rejected</option>
                   </select>
 

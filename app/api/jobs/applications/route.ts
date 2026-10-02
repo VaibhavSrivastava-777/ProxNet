@@ -27,16 +27,33 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Normalize applications: map saved records that contain preparation to stage "prepared"
+  const normalizedApplications = (applications || []).map((app: any) => {
+    let stage = app.stage;
+    if (stage === "saved" && app.notes) {
+      try {
+        const parsed = JSON.parse(app.notes);
+        if (parsed.strengths || parsed.isPrepared || parsed.stage === "prepared") {
+          stage = "prepared";
+        }
+      } catch {}
+    }
+    return {
+      ...app,
+      stage,
+    };
+  });
+
   // Compute stage counts
   const stageCounts: Record<string, number> = {};
-  for (const app of applications || []) {
+  for (const app of normalizedApplications) {
     stageCounts[app.stage] = (stageCounts[app.stage] || 0) + 1;
   }
 
   return NextResponse.json({
-    applications: applications || [],
+    applications: normalizedApplications,
     stageCounts,
-    total: applications?.length || 0,
+    total: normalizedApplications.length,
   });
 }
 
@@ -52,14 +69,17 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
 
+  const isUuid = (str: any) => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  const validJobUuid = isUuid(jobId) ? jobId : null;
+
   // Check for existing application by job_id or company + jobTitle
   let existing: { id: string; stage: string } | null = null;
-  if (jobId) {
+  if (validJobUuid) {
     const { data } = await supabase
       .from("job_applications")
       .select("id, stage")
       .eq("user_id", user.id)
-      .eq("job_id", jobId)
+      .eq("job_id", validJobUuid)
       .maybeSingle();
     if (data) existing = data;
   }
@@ -74,59 +94,112 @@ export async function POST(request: Request) {
     if (data) existing = data;
   }
 
+  const targetStage = stage || "saved";
+
   if (existing) {
-    const { data: updated, error: updateErr } = await supabase
+    let { data: updated, error: updateErr } = await supabase
       .from("job_applications")
       .update({
         company: company.trim(),
         job_title: jobTitle.trim(),
         job_url: jobUrl || null,
-        stage: stage || existing.stage || "saved",
+        stage: targetStage,
         match_score: matchScore !== undefined ? matchScore : null,
         notes: notes !== undefined ? notes : null,
         referral_thread_id: referralThreadId || null,
-        applied_at: stage === "applied" ? new Date().toISOString() : null,
+        applied_at: targetStage === "applied" ? new Date().toISOString() : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", existing.id)
       .select()
       .single();
 
-    if (updateErr) {
+    if (updateErr && (updateErr.code === "23514" || updateErr.message?.includes("stage_check"))) {
+      // Fallback to 'saved' stage if DB constraint restricts 'prepared'
+      const { data: fallbackUpdated, error: fallbackErr } = await supabase
+        .from("job_applications")
+        .update({
+          company: company.trim(),
+          job_title: jobTitle.trim(),
+          job_url: jobUrl || null,
+          stage: "saved",
+          match_score: matchScore !== undefined ? matchScore : null,
+          notes: notes !== undefined ? notes : null,
+          referral_thread_id: referralThreadId || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id)
+        .select()
+        .single();
+      if (fallbackErr) return NextResponse.json({ error: fallbackErr.message }, { status: 500 });
+      updated = fallbackUpdated;
+    } else if (updateErr) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
-    return NextResponse.json({ success: true, application: updated, alreadySaved: true });
+
+    return NextResponse.json({
+      success: true,
+      application: { ...updated, stage: targetStage },
+      alreadySaved: true,
+    });
   }
 
-  const { data: inserted, error: insertErr } = await supabase
+  let { data: inserted, error: insertErr } = await supabase
     .from("job_applications")
     .insert({
       user_id: user.id,
-      job_id: jobId || null,
+      job_id: validJobUuid,
       company: company.trim(),
       job_title: jobTitle.trim(),
       job_url: jobUrl || null,
-      stage: stage || "saved",
+      stage: targetStage,
       match_score: matchScore || null,
       notes: notes || null,
       referral_thread_id: referralThreadId || null,
-      applied_at: stage === "applied" ? new Date().toISOString() : null,
+      applied_at: targetStage === "applied" ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     })
     .select()
     .single();
 
-  if (insertErr) {
+  if (insertErr && (insertErr.code === "23514" || insertErr.message?.includes("stage_check"))) {
+    // Fallback to 'saved' stage if DB constraint restricts 'prepared'
+    const { data: fallbackInserted, error: fallbackErr } = await supabase
+      .from("job_applications")
+      .insert({
+        user_id: user.id,
+        job_id: validJobUuid,
+        company: company.trim(),
+        job_title: jobTitle.trim(),
+        job_url: jobUrl || null,
+        stage: "saved",
+        match_score: matchScore || null,
+        notes: notes || null,
+        referral_thread_id: referralThreadId || null,
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (fallbackErr) {
+      return NextResponse.json({ error: fallbackErr.message }, { status: 500 });
+    }
+    inserted = fallbackInserted;
+  } else if (insertErr) {
     if (insertErr.code === "42P01" || insertErr.message?.includes("does not exist")) {
       return NextResponse.json(
-        { error: "Application tracking table not yet provisioned. Run migration 20260917_job_application_tracker.sql.", tableMissing: true },
+        { error: "Application tracking table not yet provisioned.", tableMissing: true },
         { status: 503 }
       );
     }
     return NextResponse.json({ error: insertErr.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, application: inserted, created: true });
+  return NextResponse.json({
+    success: true,
+    application: { ...inserted, stage: targetStage },
+    created: true,
+  });
 }
 
 // PATCH: Update an application's stage or notes
@@ -146,7 +219,7 @@ export async function PATCH(request: Request) {
   if (notes !== undefined) updates.notes = notes;
   if (stage === "applied") updates.applied_at = new Date().toISOString();
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("job_applications")
     .update(updates)
     .eq("id", applicationId)
@@ -154,11 +227,23 @@ export async function PATCH(request: Request) {
     .select()
     .single();
 
-  if (error) {
+  if (error && (error.code === "23514" || error.message?.includes("stage_check")) && stage === "prepared") {
+    // Fallback to 'saved' stage
+    updates.stage = "saved";
+    const { data: fallbackData, error: fallbackErr } = await supabase
+      .from("job_applications")
+      .update(updates)
+      .eq("id", applicationId)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+    if (fallbackErr) return NextResponse.json({ error: fallbackErr.message }, { status: 500 });
+    data = fallbackData;
+  } else if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, application: data });
+  return NextResponse.json({ success: true, application: { ...data, stage: stage || data?.stage } });
 }
 
 // DELETE: Remove a saved job

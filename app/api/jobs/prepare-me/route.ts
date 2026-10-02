@@ -33,13 +33,30 @@ export async function POST(request: Request) {
 
     const currentWallet = userData.wallet ?? 0;
 
+    const isUuid = (str: any) => typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+    const validJobUuid = isUuid(jobId) ? jobId : null;
+
     // Check if this job was already prepared for this user in job_applications
-    const { data: existingApp } = await supabase
-      .from("job_applications")
-      .select("*")
-      .eq("user_id", user.id)
-      .or(`job_id.eq.${jobId || "none"},and(company.ilike.${company.trim()},job_title.ilike.${title.trim()})`)
-      .maybeSingle();
+    let existingApp: any = null;
+    if (validJobUuid) {
+      const { data } = await supabase
+        .from("job_applications")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("job_id", validJobUuid)
+        .maybeSingle();
+      if (data) existingApp = data;
+    }
+    if (!existingApp && company && title) {
+      const { data } = await supabase
+        .from("job_applications")
+        .select("*")
+        .eq("user_id", user.id)
+        .ilike("company", company.trim())
+        .ilike("job_title", title.trim())
+        .maybeSingle();
+      if (data) existingApp = data;
+    }
 
     if (existingApp?.notes) {
       try {
@@ -232,30 +249,70 @@ Provide a JSON object with:
     const deduction = await deductWalletCredits(user.id, "prepare_me", jobId || `job_${Date.now()}`, 1);
 
     // 4. Persist to job_applications under stage: "prepared"
+    const payloadNotes = JSON.stringify({
+      ...preparation,
+      stage: "prepared",
+      isPrepared: true,
+    });
+
     if (existingApp?.id) {
-      await supabase
+      const targetStage = existingApp.stage === "applied" ? "applied" : "prepared";
+      const { error: updateErr } = await supabase
         .from("job_applications")
         .update({
-          stage: existingApp.stage === "applied" ? "applied" : "prepared",
+          stage: targetStage,
           match_score: matchScore || existingApp.match_score || 85,
-          notes: JSON.stringify(preparation),
+          notes: payloadNotes,
           updated_at: new Date().toISOString(),
         })
         .eq("id", existingApp.id);
+
+      if (updateErr && (updateErr.code === "23514" || updateErr.message?.includes("stage_check"))) {
+        // Fallback to 'saved' stage if DB check constraint excludes 'prepared'
+        await supabase
+          .from("job_applications")
+          .update({
+            stage: existingApp.stage === "applied" ? "applied" : "saved",
+            match_score: matchScore || existingApp.match_score || 85,
+            notes: payloadNotes,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingApp.id);
+      }
     } else {
-      await supabase
+      const { error: insertErr } = await supabase
         .from("job_applications")
         .insert({
           user_id: user.id,
-          job_id: jobId || null,
+          job_id: validJobUuid,
           company: company.trim(),
           job_title: title.trim(),
           job_url: url || null,
           stage: "prepared",
           match_score: matchScore || 85,
-          notes: JSON.stringify(preparation),
+          notes: payloadNotes,
           applied_at: null,
         });
+
+      if (insertErr && (insertErr.code === "23514" || insertErr.message?.includes("stage_check"))) {
+        // Fallback to 'saved' stage if DB check constraint excludes 'prepared'
+        const { error: fallbackErr } = await supabase
+          .from("job_applications")
+          .insert({
+            user_id: user.id,
+            job_id: validJobUuid,
+            company: company.trim(),
+            job_title: title.trim(),
+            job_url: url || null,
+            stage: "saved",
+            match_score: matchScore || 85,
+            notes: payloadNotes,
+            applied_at: null,
+          });
+        if (fallbackErr) {
+          console.error("Fallback insert failed:", fallbackErr);
+        }
+      }
     }
 
     return NextResponse.json({

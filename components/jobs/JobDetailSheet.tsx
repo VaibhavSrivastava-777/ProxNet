@@ -43,6 +43,156 @@ export interface PreparationData {
   preparedAt: string;
 }
 
+export function cleanJobDescription(raw: string): string {
+  if (!raw) return "No full job description provided by the ATS. Click 'Apply Directly' to view on official career site.";
+
+  let text = raw;
+  // Convert break and block tags to appropriate line breaks
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+  text = text.replace(/<\/(p|div|h[1-6]|tr)>/gi, "\n\n");
+  text = text.replace(/<li[^>]*>/gi, "• ");
+  text = text.replace(/<\/li>/gi, "\n");
+
+  // Strip all other HTML tags
+  text = text.replace(/<[^>]+>/g, "");
+
+  // Decode common HTML entities
+  text = text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&bull;/gi, "•")
+    .replace(/&middot;/gi, "·")
+    .replace(/&mdash;/gi, "—")
+    .replace(/&ndash;/gi, "–");
+
+  // Clean excessive spaces and multiple blank lines
+  text = text.replace(/[ \t]+/g, " ");
+  text = text.replace(/\n\s*\n\s*\n+/g, "\n\n");
+  return text.trim();
+}
+
+function CreditDeductionBanner({
+  prevBalance,
+  newBalance,
+  onClose,
+}: {
+  prevBalance: number;
+  newBalance: number;
+  onClose: () => void;
+}) {
+  const [animatedBalance, setAnimatedBalance] = useState(prevBalance);
+  const [isDeducted, setIsDeducted] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setAnimatedBalance(newBalance);
+      setIsDeducted(true);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [newBalance]);
+
+  useEffect(() => {
+    const autoCloseTimer = setTimeout(() => {
+      onClose();
+    }, 8500);
+    return () => clearTimeout(autoCloseTimer);
+  }, [onClose]);
+
+  return (
+    <div className="relative overflow-hidden p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-amber-500/5 border border-amber-500/30 shadow-md animate-fadeIn">
+      {/* Top row: Animation and dismiss cross button */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center text-xl shrink-0 font-bold shadow-inner">
+            ⚡
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                1 Credit Deducted
+              </span>
+              <span className="text-[11px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500 text-white animate-pulse">
+                -1 ⚡
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-sm font-semibold text-[var(--color-text-secondary)]">Wallet Balance:</span>
+              <div className="flex items-center gap-1 font-extrabold text-base text-[var(--color-text)]">
+                <span className={`transition-all duration-500 ${isDeducted ? "line-through text-red-500/70 scale-95" : "text-amber-500 font-bold"}`}>
+                  {prevBalance}
+                </span>
+                <span className="text-xs text-[var(--color-text-tertiary)]">➔</span>
+                <span className={`transition-all duration-500 ${isDeducted ? "text-emerald-500 scale-110 font-black" : "text-[var(--color-text)]"}`}>
+                  {animatedBalance} ⚡
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Cross button */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors flex items-center justify-center border-none cursor-pointer shrink-0"
+          aria-label="Close notification"
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Ways to earn more credits */}
+      <div className="mt-3 pt-3 border-t border-amber-500/20">
+        <div className="text-xs font-bold text-amber-700 dark:text-amber-300 mb-1.5 flex items-center gap-1.5">
+          <span>💡</span>
+          <span>Ways to increase your credit points:</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] text-[var(--color-text-secondary)]">
+          <div className="flex items-center gap-1.5 bg-amber-500/10 dark:bg-amber-500/15 px-2.5 py-1.5 rounded-lg border border-amber-500/20">
+            <span>👤</span>
+            <span>Complete profile sections <strong>(+5 ⚡)</strong></span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-amber-500/10 dark:bg-amber-500/15 px-2.5 py-1.5 rounded-lg border border-amber-500/20">
+            <span>🤝</span>
+            <span>Invite colleagues & neighbors <strong>(+10 ⚡)</strong></span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-amber-500/10 dark:bg-amber-500/15 px-2.5 py-1.5 rounded-lg border border-amber-500/20">
+            <span>💬</span>
+            <span>Answer questions in Forum <strong>(+2 ⚡)</strong></span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-amber-500/10 dark:bg-amber-500/15 px-2.5 py-1.5 rounded-lg border border-amber-500/20">
+            <span>🔥</span>
+            <span>Daily check-in streak <strong>(+1 ⚡)</strong></span>
+          </div>
+        </div>
+      </div>
+
+      {/* Auto-closing animated progress bar */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-amber-500/20 overflow-hidden">
+        <div 
+          className="h-full bg-amber-500" 
+          style={{ 
+            animation: "autoCloseCountdown 8.5s linear forwards",
+          }} 
+        />
+      </div>
+      <style jsx>{`
+        @keyframes autoCloseCountdown {
+          0% { width: 100%; }
+          100% { width: 0%; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 interface JobDetailSheetProps {
   job: JobItem | null;
   isOpen: boolean;
@@ -66,6 +216,7 @@ export function JobDetailSheet({
   const [prepareError, setPrepareError] = useState<string | null>(null);
   const [copiedPitch, setCopiedPitch] = useState(false);
   const [directApplied, setDirectApplied] = useState(false);
+  const [creditDeductionInfo, setCreditDeductionInfo] = useState<{ prev: number; current: number } | null>(null);
 
   useEffect(() => {
     if (cachedPreparation) {
@@ -77,6 +228,7 @@ export function JobDetailSheet({
     }
     setPrepareError(null);
     setDirectApplied(false);
+    setCreditDeductionInfo(null);
   }, [job, cachedPreparation]);
 
   if (!isOpen || !job) return null;
@@ -103,7 +255,7 @@ export function JobDetailSheet({
           jobId: job.id,
           company: job.company,
           title: job.title,
-          description: job.description,
+          description: cleanJobDescription(job.description),
           url: job.url,
           location: job.location,
           matchScore: job.matchRate,
@@ -123,6 +275,14 @@ export function JobDetailSheet({
         window.dispatchEvent(
           new CustomEvent("proxnet:wallet-updated", { detail: { newBalance: data.newWalletBalance } })
         );
+
+        if (!data.alreadyPrepared) {
+          const prevBal = typeof userWallet === "number" && userWallet > 0 ? userWallet : (data.newWalletBalance + 1);
+          setCreditDeductionInfo({
+            prev: prevBal,
+            current: data.newWalletBalance,
+          });
+        }
       }
 
       // Notify other tabs that an application was saved/prepared
@@ -291,6 +451,14 @@ export function JobDetailSheet({
             </div>
           </div>
 
+          {creditDeductionInfo && (
+            <CreditDeductionBanner
+              prevBalance={creditDeductionInfo.prev}
+              newBalance={creditDeductionInfo.current}
+              onClose={() => setCreditDeductionInfo(null)}
+            />
+          )}
+
           {prepareError && (
             <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs">
               ⚠️ {prepareError}
@@ -351,7 +519,7 @@ export function JobDetailSheet({
                   Role Description
                 </h4>
                 <div className="text-xs sm:text-sm text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-line bg-[var(--color-surface-secondary)]/30 p-4 rounded-xl border border-[var(--color-border-light)] font-sans">
-                  {job.description || "No full job description provided by the ATS. Click 'Apply Directly' to view on official career site."}
+                  {cleanJobDescription(job.description)}
                 </div>
               </div>
             </div>
