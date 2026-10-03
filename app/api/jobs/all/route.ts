@@ -6,8 +6,6 @@ import { isLikelyJobPostingUrl } from "@/lib/jobs/job-quality";
 import { detectCandidateDiscipline } from "@/lib/jobs/discipline";
 import { extractCandidateSkills } from "@/lib/jobs/skill-matching";
 
-export const dynamic = "force-dynamic";
-
 function cleanUrlAndTitle(rawTitle: string, rawUrl: string) {
   const cleanUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
   let title = (rawTitle || "").trim();
