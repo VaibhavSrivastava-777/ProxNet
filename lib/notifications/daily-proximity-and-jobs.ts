@@ -194,16 +194,16 @@ export async function sendDailyUserDigest(userId: string): Promise<DailyDigestRe
         if (!j.company) continue;
         if (!isIndiaLocation(j.location, j.description, j.title)) continue;
         if (userCompany && isSameCompany(j.company, userCompany)) continue;
-        const cKey = j.company.trim().toLowerCase();
-        if (!seenCompanies.has(cKey)) {
-          seenCompanies.add(cKey);
+        // Strictly ensure distinct companies across top 3 (including aliases & subsidiaries)
+        const isDuplicateCompany = topJobs.some((tj) => isSameCompany(tj.company, j.company));
+        if (!isDuplicateCompany) {
           const sim = Number(j.similarity) || 0.6;
           const score = Math.min(98, Math.max(76, Math.round(52 + sim * 50)));
 
           topJobs.push({
             id: j.id,
             title: j.title || "Job Opportunity",
-            company: j.company,
+            company: j.company.trim(),
             score,
           });
         }

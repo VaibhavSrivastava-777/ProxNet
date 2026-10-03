@@ -220,7 +220,17 @@ async function handleJobMatches(request: Request) {
       })
       .sort((a, b) => b.score - a.score);
 
-    const top3 = scoredJobs.slice(0, 3);
+    // Ensure top 3 strictly belong to distinct companies (deduplicating company aliases & subsidiaries)
+    const top3: typeof scoredJobs = [];
+    for (const job of scoredJobs) {
+      if (!job.company) continue;
+      if (userCompany && isSameCompany(job.company, userCompany)) continue;
+      const isDuplicateCompany = top3.some((t) => isSameCompany(t.company, job.company));
+      if (!isDuplicateCompany) {
+        top3.push(job);
+      }
+      if (top3.length >= 3) break;
+    }
     if (top3.length === 0) continue;
 
     // Dispatch Top 3 notification (with clubbed profile reminder if profile is incomplete)

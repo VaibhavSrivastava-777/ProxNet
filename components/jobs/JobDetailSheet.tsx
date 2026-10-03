@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { CompanyLogo } from "@/components/qa/QuestionList";
+import { openExternalUrl, handleExternalLinkClick } from "@/lib/external-links";
 
 export interface JobItem {
   id: string;
@@ -244,6 +245,17 @@ export function JobDetailSheet({
     setLinkNotice(null);
   }, [job, cachedPreparation, initialTab]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !job) return null;
 
   const handlePrepareMe = async () => {
@@ -341,10 +353,8 @@ export function JobDetailSheet({
 
     setCheckingLink(false);
 
-    // 1. Open official active job opportunity in a new tab/browser
-    if (typeof window !== "undefined") {
-      window.open(finalUrlToOpen, "_blank", "noopener,noreferrer");
-    }
+    // 1. Open official active job opportunity in external browser/new window
+    openExternalUrl(finalUrlToOpen);
 
     setDirectApplied(true);
 
@@ -399,12 +409,12 @@ export function JobDetailSheet({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="sticky top-0 z-20 bg-[var(--color-surface)]/95 backdrop-blur-md border-b border-[var(--color-border-light)] px-5 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="sticky top-0 z-20 bg-[var(--color-surface)]/95 backdrop-blur-md border-b border-[var(--color-border-light)] px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 border border-[var(--color-border-light)] bg-white flex items-center justify-center shadow-sm">
               <CompanyLogo company={job.company} className="w-8 h-8 object-contain" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h2 className="text-base sm:text-lg font-bold text-[var(--color-text)] truncate m-0">
                 {job.title}
               </h2>
@@ -414,13 +424,14 @@ export function JobDetailSheet({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors border-none bg-transparent cursor-pointer shrink-0 ml-2"
-            aria-label="Close"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] shadow-xs transition-all cursor-pointer shrink-0 hover:scale-105 active:scale-95"
+            aria-label="Close modal"
+            title="Close (Esc)"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
+              <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
         </div>
@@ -854,6 +865,7 @@ export function JobDetailSheet({
                     href={preparation.networkingPath.linkedinSearchUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={handleExternalLinkClick(preparation.networkingPath.linkedinSearchUrl)}
                     className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs bg-[#0A66C2] text-white hover:bg-[#004182] transition-all shadow-sm no-underline"
                   >
                     <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
@@ -887,6 +899,7 @@ export function JobDetailSheet({
                       href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(job.company + " " + job.title)}&network=%5B"S"%5D`}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={handleExternalLinkClick(`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(job.company + " " + job.title)}&network=%5B"S"%5D`)}
                       className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl font-bold text-xs bg-[#0A66C2] text-white hover:bg-[#004182] transition-all shadow-sm no-underline"
                     >
                       <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">

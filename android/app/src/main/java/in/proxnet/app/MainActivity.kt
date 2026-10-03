@@ -2,9 +2,11 @@ package `in`.proxnet.app
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
+import android.os.Message
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.SslErrorHandler
@@ -117,6 +119,9 @@ class MainActivity : AppCompatActivity() {
         settings.builtInZoomControls = false
         settings.displayZoomControls = false
 
+        // Enable multi-window support so target="_blank" and window.open can be routed to system browser
+        settings.setSupportMultipleWindows(true)
+
         // Override User-Agent to mock Mobile Chrome. 
         // This is critical for LinkedIn login to bypass Embedded WebView restrictions.
         val customUA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
@@ -188,7 +193,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Set WebChromeClient to output JavaScript logs to Android Logcat
+        // Set WebChromeClient to output JavaScript logs and route popup windows to external browser
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                 if (consoleMessage != null) {
@@ -197,6 +202,33 @@ class MainActivity : AppCompatActivity() {
                         "${consoleMessage.message()} -- From line ${consoleMessage.lineNumber()} of ${consoleMessage.sourceId()}"
                     )
                 }
+                return true
+            }
+
+            override fun onCreateWindow(
+                view: WebView?,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message?
+            ): Boolean {
+                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                val tempWebView = WebView(this@MainActivity)
+                tempWebView.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(v: WebView?, request: WebResourceRequest?): Boolean {
+                        val targetUrl = request?.url?.toString() ?: return false
+                        openExternalBrowser(targetUrl)
+                        return true
+                    }
+
+                    override fun shouldOverrideUrlLoading(v: WebView?, targetUrl: String?): Boolean {
+                        if (targetUrl != null) {
+                            openExternalBrowser(targetUrl)
+                        }
+                        return true
+                    }
+                }
+                transport.webView = tempWebView
+                resultMsg.sendToTarget()
                 return true
             }
         }
@@ -446,24 +478,68 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun handleExternalIntent(url: String): Boolean {
-        if (url.startsWith("http://") || url.startsWith("https://")) {
+    fun isExternalUrl(url: String): Boolean {
+        val uri = try { Uri.parse(url) } catch (e: Exception) { return false }
+        val host = uri.host?.lowercase() ?: return false
+
+        // Internal ProxNet domains that should load inside WebView
+        if (host == "proxnet.in" || host == "www.proxnet.in" || host == "localhost" || host == "127.0.0.1" || host == "10.0.2.2") {
             return false
         }
+
+        // Allow LinkedIn OAuth login to stay in WebView for authentication
+        if (host.contains("linkedin.com") && (uri.path?.contains("/oauth/") == true || uri.path?.contains("/uas/oauth2/") == true)) {
+            return false
+        }
+
+        // Google OAuth login flow (if handled via web)
+        if (host.contains("accounts.google.com") && uri.path?.contains("/o/oauth2/") == true) {
+            return false
+        }
+
+        // All other HTTP/HTTPS URLs (including LinkedIn profiles, searches, alumni, company job sites) are external
+        return true
+    }
+
+    fun openExternalBrowser(url: String) {
         try {
-            val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
-            if (intent.resolveActivity(packageManager) != null) {
-                startActivity(intent)
+            val uri = Uri.parse(url)
+            val intent = Intent(Intent.ACTION_VIEW, uri)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (e: Exception) {
+            android.util.Log.e("ProxNetAndroid", "Failed to launch external browser for $url: ${e.message}")
+        }
+    }
+
+    private fun handleExternalIntent(url: String): Boolean {
+        // 1. Non-HTTP schemes (tel:, mailto:, sms:, market:, intent:, etc.)
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            try {
+                val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+                if (intent.resolveActivity(packageManager) != null) {
+                    startActivity(intent)
+                    return true
+                }
+                val uri = Uri.parse(url)
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, uri)
+                startActivity(fallbackIntent)
+                return true
+            } catch (e: Exception) {
+                android.util.Log.e("ProxNetAndroid", "Failed to launch external non-http scheme: ${e.message}")
                 return true
             }
-            val uri = android.net.Uri.parse(url)
-            val fallbackIntent = Intent(Intent.ACTION_VIEW, uri)
-            startActivity(fallbackIntent)
-            return true
-        } catch (e: Exception) {
-            android.util.Log.e("ProxNetAndroid", "Failed to launch external application: ${e.message}")
+        }
+
+        // 2. HTTP/HTTPS URLs: Check if external domain (e.g. LinkedIn search, alumni, profiles, company career portals)
+        if (isExternalUrl(url)) {
+            android.util.Log.d("ProxNetAndroid", "Routing external URL to system browser/app: $url")
+            openExternalBrowser(url)
             return true
         }
+
+        // 3. Internal URL -> load within ProxNet WebView
+        return false
     }
 
     override fun onBackPressed() {
@@ -497,6 +573,13 @@ class MainActivity : AppCompatActivity() {
         fun startGoogleContactsImport() {
             activity.runOnUiThread {
                 activity.launchGoogleContactsSignIn()
+            }
+        }
+
+        @JavascriptInterface
+        fun openExternalUrl(url: String) {
+            activity.runOnUiThread {
+                activity.openExternalBrowser(url)
             }
         }
     }

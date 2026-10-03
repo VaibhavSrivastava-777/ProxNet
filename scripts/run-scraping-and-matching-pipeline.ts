@@ -4,7 +4,7 @@ dotenv.config({ path: ".env" });
 
 import { createAdminClient } from "../lib/supabase/admin";
 import { STRATEGIES } from "../lib/scrape-strategies";
-import { isJobEligible, normalizeJobUrl, normalizeJobTitle } from "../lib/jobs/job-filters";
+import { isJobEligible, normalizeJobUrl, normalizeJobTitle, isSameCompany } from "../lib/jobs/job-filters";
 import { rerankJobsForCandidate } from "../lib/jobs/reranker";
 
 interface ScrapeStats {
@@ -385,8 +385,18 @@ async function runPipeline() {
       }
     }
 
-    // Sort descending by score
+    // Sort descending by score and select top 3 from strictly distinct companies
     userMatches.sort((a, b) => b.score - a.score);
+    const top3DistinctMatches: typeof userMatches = [];
+    for (const m of userMatches) {
+      if (!m.company) continue;
+      if (user.company && isSameCompany(m.company, user.company)) continue;
+      const isDuplicate = top3DistinctMatches.some(t => isSameCompany(t.company, m.company));
+      if (!isDuplicate) {
+        top3DistinctMatches.push(m);
+      }
+      if (top3DistinctMatches.length >= 3) break;
+    }
 
     matchReports.push({
       userId: user.id,
@@ -394,11 +404,11 @@ async function runPipeline() {
       userRole: user.job_title || "Professional",
       userCompany: user.company || "Independent",
       totalCandidatesEvaluated: jobsToRerank.length,
-      matches: userMatches.slice(0, 3), // Top 3
+      matches: top3DistinctMatches,
     });
 
     console.log(`   Top Matches for ${user.full_name}:`);
-    for (const m of userMatches.slice(0, 3)) {
+    for (const m of top3DistinctMatches) {
       console.log(`     ⭐ [Score: ${m.score} | ${m.label}] ${m.title} @ ${m.company}`);
       console.log(`        Rationale: ${m.reason}`);
     }

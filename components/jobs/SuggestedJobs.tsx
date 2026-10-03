@@ -21,6 +21,7 @@ import { ColdOutreachModal } from "./ColdOutreachModal";
 import { ApplicationSprintMode } from "./ApplicationSprintMode";
 import { CompanyResearchModal } from "./CompanyResearchModal";
 import { BridgeRequestModal } from "./BridgeRequestModal";
+import { openExternalUrl } from "@/lib/external-links";
 
 interface SuggestedJob {
   id: string;
@@ -782,14 +783,8 @@ export function SuggestedJobs() {
     const code = userInviteCode || "";
     const inviteUrl = code ? `${window.location.origin}/join/${code}?company=${encodeURIComponent(companyName)}` : `${window.location.origin}/grow`;
 
-    // 1. Immediately launch LinkedIn with search filters applied
-    if (typeof window !== "undefined") {
-      try {
-        window.open(linkedInUrl, "_blank", "noopener,noreferrer");
-      } catch (err) {
-        console.warn("Could not launch LinkedIn directly:", err);
-      }
-    }
+    // 1. Immediately launch LinkedIn with search filters applied (via native app/external browser)
+    openExternalUrl(linkedInUrl);
 
     // 2. Proactively copy the filtered LinkedIn URL (NOT the invite URL) as backup
     try {
@@ -3677,9 +3672,7 @@ export function SuggestedJobs() {
                   type="button"
                   onClick={() => {
                     setInviteToast(`🔗 Opening LinkedIn with filters...`);
-                    if (typeof window !== "undefined") {
-                      window.open(linkedInLaunchData.url, "_blank", "noopener,noreferrer");
-                    }
+                    openExternalUrl(linkedInLaunchData.url);
                     setTimeout(() => {
                       setInviteToast(null);
                       setLinkedInLaunchData(null);
