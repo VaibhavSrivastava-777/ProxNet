@@ -2,6 +2,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { discoverCompetitorsForCompany } from "@/lib/competitors/discover-competitors";
 import { isSameCompany, isJobEligible, cleanJobTitle, normalizeJobTitle, normalizeJobUrl } from "@/lib/jobs/job-filters";
 import { STRATEGIES, stripHtml } from "@/lib/scrape-strategies";
+import {
+  detectFunctionalDiscipline as detectDisciplineShared,
+  relateDisciplines,
+  type FunctionalDiscipline as SharedFunctionalDiscipline,
+} from "@/lib/jobs/discipline";
 
 export interface ConversionBlueprint {
   jobId: string;
@@ -39,17 +44,7 @@ export interface ConversionBlueprint {
   };
 }
 
-export type FunctionalDiscipline =
-  | "human_resources"
-  | "supply_chain"
-  | "product_management"
-  | "software_engineering"
-  | "data_ai"
-  | "design"
-  | "finance"
-  | "sales_marketing"
-  | "legal"
-  | "operations_general";
+export type FunctionalDiscipline = SharedFunctionalDiscipline;
 
 export interface CandidateContext {
   id: string;
@@ -71,84 +66,7 @@ export interface CandidateContext {
  * Classifies a title/description into a standardized functional discipline
  */
 export function detectFunctionalDiscipline(title?: string | null, description?: string | null): FunctionalDiscipline {
-  const t = (title || "").toLowerCase();
-
-  // 1. First classify by TITLE (title has the highest signal-to-noise ratio)
-  if (
-    /\b(hr|human resources|talent|recruiter|recruiting|recruitment|people ops|people operations|people partner|hrbp|people lead|sourcing specialist|hr generalist|hr manager|hr director|talent partner|head of people|people & culture|people experience)\b/i.test(t)
-  ) {
-    return "human_resources";
-  }
-
-  if (
-    /\b(supply chain|logistics|procurement|sourcing manager|materials manager|warehouse|inventory planning|operations planning|demand planning|fulfillment|freight|purchasing)\b/i.test(t)
-  ) {
-    return "supply_chain";
-  }
-
-  if (
-    /\b(product manager|product management|product lead|product director|group product manager|head of product|technical product manager|principal product|cpo)\b/i.test(t)
-  ) {
-    return "product_management";
-  }
-
-  if (
-    /\b(software|developer|engineer|full stack|backend|frontend|devops|sre|cloud|architect|qa engineer|sde|tech lead|firmware|embedded|solutions engineer|it engineer|systems engineer|infrastructure)\b/i.test(t)
-  ) {
-    return "software_engineering";
-  }
-
-  if (
-    /\b(data scientist|data analyst|machine learning|ml engineer|ai engineer|data engineer|analytics manager|business intelligence|bi analyst|nlp)\b/i.test(t)
-  ) {
-    return "data_ai";
-  }
-
-  if (
-    /\b(ux|ui|product designer|visual designer|motion designer|interaction designer|design lead|creative director|graphic designer)\b/i.test(t)
-  ) {
-    return "design";
-  }
-
-  if (
-    /\b(finance|financial analyst|accountant|accounting|audit|controller|treasury|fp&a|tax manager|cfo|payroll)\b/i.test(t)
-  ) {
-    return "finance";
-  }
-
-  if (
-    /\b(sales|account executive|account manager|customer success|business development|marketing|growth marketing|brand manager|demand gen|bdr|sdr|client success)\b/i.test(t)
-  ) {
-    return "sales_marketing";
-  }
-
-  if (
-    /\b(legal|counsel|attorney|lawyer|compliance officer|general counsel|contracts manager)\b/i.test(t)
-  ) {
-    return "legal";
-  }
-
-  // 2. If title is non-specific (e.g. "Director", "Specialist", "Consultant"), inspect description snippet
-  if (description) {
-    const d = description.slice(0, 1500).toLowerCase();
-    if (/\b(talent acquisition|human resources department|recruiting team|people operations team|hr business partner)\b/i.test(d)) {
-      return "human_resources";
-    }
-    if (/\b(supply chain management|procurement process|logistics operations|vendor management & procurement)\b/i.test(d)) {
-      return "supply_chain";
-    }
-    if (/\b(product roadmap|product discovery|product lifecycle|product backlog|user stories)\b/i.test(d)) {
-      return "product_management";
-    }
-    if (/\b(software development|codebase|pull requests|ci\/cd pipeline|rest api|microservices)\b/i.test(d)) {
-      return "software_engineering";
-    }
-    if (/\b(machine learning models|data pipelines|deep learning|data warehousing|sql queries)\b/i.test(d)) {
-      return "data_ai";
-    }
-  }
-
-  return "operations_general";
+  return detectDisciplineShared(title, description);
 }
 
 /**
@@ -159,20 +77,12 @@ export function areDisciplinesCompatible(
   jobDiscipline: FunctionalDiscipline
 ): boolean {
   if (candDiscipline === jobDiscipline) return true;
-  // Only match general if both are general
-  if (candDiscipline === "operations_general" && jobDiscipline === "operations_general") return true;
+  // Only match general if both are general (miner stays strict for unknown disciplines)
+  if (candDiscipline === "operations_general" || jobDiscipline === "operations_general") return false;
 
-  // Plausible cross-functional overlaps
-  if (
-    (candDiscipline === "product_management" && (jobDiscipline === "data_ai" || jobDiscipline === "software_engineering")) ||
-    (candDiscipline === "data_ai" && (jobDiscipline === "product_management" || jobDiscipline === "software_engineering")) ||
-    (candDiscipline === "software_engineering" && (jobDiscipline === "data_ai" || jobDiscipline === "product_management"))
-  ) {
-    return true;
-  }
-
-  // Distinct functional areas (e.g. HR vs Supply Chain) are strictly incompatible
-  return false;
+  // Plausible cross-functional overlaps (shared adjacency map)
+  // Distinct functional areas (e.g. Finance vs Operations) are strictly incompatible
+  return relateDisciplines(candDiscipline, jobDiscipline) === "adjacent";
 }
 
 /**

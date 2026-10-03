@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { CompanyLogo } from "@/components/qa/QuestionList";
 import { JobDetailSheet, JobItem } from "./JobDetailSheet";
+import { detectFunctionalDiscipline, relateDisciplines, FunctionalDiscipline } from "@/lib/jobs/discipline";
+import { computeSkillAlignment } from "@/lib/jobs/skill-matching";
 
 interface RawCompanyData {
   company: string;
@@ -61,6 +63,8 @@ function formatAge(postedAt: string | undefined): string {
 // Client-side module memory cache for instant tab switching
 let memoryFeedCompanies: RawCompanyData[] = [];
 let memoryFeedWallet: number = 0;
+let memoryFeedSkills: string[] = [];
+let memoryFeedJobTitle: string = "";
 let memoryFeedLoaded = false;
 
 export function JobsFeed() {
@@ -68,6 +72,9 @@ export function JobsFeed() {
   const [error, setError] = useState<string | null>(null);
   const [allCompanies, setAllCompanies] = useState<RawCompanyData[]>(memoryFeedCompanies);
   const [userWallet, setUserWallet] = useState(memoryFeedWallet);
+  const [userDiscipline, setUserDiscipline] = useState<string>("operations_general");
+  const [userSkills, setUserSkills] = useState<string[]>(memoryFeedSkills);
+  const [userJobTitle, setUserJobTitle] = useState<string>(memoryFeedJobTitle);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   
@@ -91,13 +98,20 @@ export function JobsFeed() {
       const data = await res.json();
       const comps = data.companies || [];
       const wallet = data.wallet ?? 0;
+      const skills = data.userSkills || [];
+      const jobTitle = data.userJobTitle || "";
 
       memoryFeedCompanies = comps;
       memoryFeedWallet = wallet;
+      memoryFeedSkills = skills;
+      memoryFeedJobTitle = jobTitle;
       memoryFeedLoaded = true;
 
       setAllCompanies(comps);
       setUserWallet(wallet);
+      setUserDiscipline(data.userDiscipline || "operations_general");
+      setUserSkills(skills);
+      setUserJobTitle(jobTitle);
       setError(null);
     } catch (err: any) {
       console.error("Error loading all jobs:", err);
@@ -140,16 +154,39 @@ export function JobsFeed() {
   // Group jobs by company, sort company's jobs by match rate, and sort company groups by topJob.matchRate
   const companyGroups = useMemo(() => {
     const groups: CompanyJobGroup[] = [];
+    const candidateContext = {
+      profile_digest: { skills: userSkills },
+      job_title: userJobTitle,
+    };
 
     for (const comp of allCompanies) {
       if (!comp.jobs || comp.jobs.length === 0) continue;
 
       const companyJobs: JobItem[] = comp.jobs.map((j) => {
-        let baseScore = 78;
-        if (comp.contactsCount > 0) baseScore += 8;
-        if (j.keywords && j.keywords.length > 2) baseScore += 5;
-        if (j.description && j.description.length > 500) baseScore += 4;
-        const matchRate = Math.min(97, baseScore);
+        const jobDisc = detectFunctionalDiscipline(j.title, j.description);
+        const skillAlign = computeSkillAlignment(candidateContext, j);
+        let matchRate = 50;
+
+        if (userDiscipline && userDiscipline !== "operations_general") {
+          const relation = relateDisciplines(userDiscipline as FunctionalDiscipline, jobDisc);
+          if (relation === "same") {
+            const coverageBonus = Math.round(skillAlign.coveragePercent * 0.22);
+            matchRate = 70 + coverageBonus;
+            if (comp.contactsCount > 0) matchRate += 3;
+            matchRate = Math.min(94, matchRate);
+          } else if (relation === "adjacent") {
+            const coverageBonus = Math.round(skillAlign.coveragePercent * 0.18);
+            matchRate = 50 + coverageBonus;
+            if (comp.contactsCount > 0) matchRate += 3;
+            matchRate = Math.min(72, matchRate);
+          } else if (relation === "incompatible") {
+            matchRate = 25;
+          }
+        } else {
+          const coverageBonus = Math.round(skillAlign.coveragePercent * 0.20);
+          matchRate = 50 + coverageBonus;
+          if (comp.contactsCount > 0) matchRate += 4;
+        }
 
         return {
           id: j.id,
@@ -164,6 +201,9 @@ export function JobsFeed() {
           keywords: j.keywords || [],
           contactsCount: comp.contactsCount,
           referralContacts: comp.referralContacts,
+          matchedSkills: skillAlign.matchedSkills,
+          missingSkills: skillAlign.missingSkills,
+          skillCoveragePercent: skillAlign.coveragePercent,
         };
       });
 
@@ -186,7 +226,7 @@ export function JobsFeed() {
 
     // Sort company groups by topJob.matchRate descending
     return groups.sort((a, b) => b.topJob.matchRate - a.topJob.matchRate);
-  }, [allCompanies]);
+  }, [allCompanies, userDiscipline, userSkills, userJobTitle]);
 
   // Compute total individual jobs count
   const totalOpeningsCount = useMemo(() => {
@@ -369,11 +409,13 @@ export function JobsFeed() {
           {displayedGroups.map((group) => {
             const topJob = group.topJob;
             const matchColor =
-              topJob.matchRate >= 90
+              topJob.matchRate >= 80
                 ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/30"
-                : topJob.matchRate >= 75
+                : topJob.matchRate >= 60
                 ? "text-blue-500 bg-blue-500/10 border-blue-500/30"
-                : "text-amber-500 bg-amber-500/10 border-amber-500/30";
+                : topJob.matchRate >= 45
+                ? "text-amber-500 bg-amber-500/10 border-amber-500/30"
+                : "text-[var(--color-text-tertiary)] bg-[var(--color-surface-secondary)] border-[var(--color-border-light)]";
 
             return (
               <div
@@ -397,9 +439,16 @@ export function JobsFeed() {
                       <span className="text-sm sm:text-base font-semibold text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors truncate">
                         {topJob.title}
                       </span>
-                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                        ({topJob.matchRate}% Match)
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${matchColor}`}>
+                        {topJob.matchRate < 40
+                          ? `${topJob.matchRate}% • Different Track`
+                          : `${topJob.matchRate}% Match`}
                       </span>
+                      {topJob.matchedSkills && topJob.matchedSkills.length > 0 && (
+                        <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          ✓ {topJob.matchedSkills.length} skill{topJob.matchedSkills.length > 1 ? "s" : ""}
+                        </span>
+                      )}
                     </div>
 
                     {/* Metadata line: Location, Experience, Age, Neighbors */}
@@ -581,6 +630,11 @@ export function JobsFeed() {
                         <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${matchBadgeColor}`}>
                           {job.matchRate}% Match
                         </span>
+                        {job.matchedSkills && job.matchedSkills.length > 0 && (
+                          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            ✓ {job.matchedSkills.length} skills
+                          </span>
+                        )}
                         <span className="text-xs text-[var(--color-text-tertiary)]">
                           {job.posted_at}
                         </span>

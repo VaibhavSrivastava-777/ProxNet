@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { CompanyJobBundle } from "@/app/api/jobs/discover-company-jobs/route";
 import { calculateProfileMatchScore } from "@/lib/matching/profile-similarity";
+import { detectCandidateDiscipline, relateDisciplines } from "@/lib/jobs/discipline";
 
 export interface MatchReason {
   label: string;
@@ -165,8 +166,12 @@ export function rankDiscoverProfiles({
         });
       }
 
-      // 4. Role Match badge (+15%)
-      if (wordMatchOverlap(myRole, targetRole)) {
+      // 4. Role Match badge (+15% only for same or compatible disciplines)
+      const myDisc = detectCandidateDiscipline(profile);
+      const targetDisc = detectCandidateDiscipline(person);
+      const discRelation = relateDisciplines(myDisc, targetDisc);
+
+      if (discRelation === "same" || (discRelation === "adjacent" && wordMatchOverlap(myRole, targetRole))) {
         hybridScore += 15;
         reasons.push({
           label: `Both working in ${targetRole || "similar"} roles`,
@@ -241,8 +246,11 @@ export function rankDiscoverProfiles({
         hybridScore += Math.round(similarity * 20);
       }
 
-      // Calibrate final score to realistic 48% - 98%
-      const finalScore = Math.min(98, Math.max(48, hybridScore));
+      // Calibrate final score to realistic 48% - 98% (cap incompatible disciplines at 58%)
+      let finalScore = Math.min(98, Math.max(48, hybridScore));
+      if (discRelation === "incompatible") {
+        finalScore = Math.min(58, finalScore);
+      }
 
       // Choose most compelling primary reason
       let primaryReason = reasons[0]?.label || "Verified professional in your neighbourhood";

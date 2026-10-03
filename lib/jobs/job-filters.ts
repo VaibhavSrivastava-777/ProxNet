@@ -8,6 +8,8 @@
  * 4. URL Normalization & Duplicate Detection (prevent duplicate scraping & OpenAI token waste)
  */
 
+import { isLikelyJobPostingUrl } from "./job-quality";
+
 export const INDIAN_TECH_HUBS = [
   "bangalore", "bengaluru", "mumbai", "pune", "delhi", "new delhi", "ncr",
   "gurugram", "gurgaon", "noida", "greater noida", "hyderabad", "chennai",
@@ -343,9 +345,15 @@ export function isJobEligible(job: {
   location?: string | null;
   description?: string | null;
   posted_at?: string | null;
+  url?: string | null;
 }): { eligible: boolean; reason?: string } {
   if (!job.title || job.title.trim().length < 3 || job.title === "Unknown Title") {
     return { eligible: false, reason: "Invalid or empty job title" };
+  }
+
+  // URL Quality Filter: reject non-posting pages (search, landing, category, PDF)
+  if (job.url && !isLikelyJobPostingUrl(job.url)) {
+    return { eligible: false, reason: "URL is not a specific job posting requisition" };
   }
 
   // 30-Day Freshness Filter

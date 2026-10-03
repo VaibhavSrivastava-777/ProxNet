@@ -145,6 +145,8 @@ function safeString(val: any): string {
   }
 }
 
+import { detectCandidateDiscipline, relateDisciplines } from "@/lib/jobs/discipline";
+
 /**
  * Returns calibrated match score (0-99%) and raw cosine similarity.
  * Combines real-world structural affinities (Company, College, Society, Role)
@@ -156,6 +158,11 @@ export function calculateProfileMatchScore(
 ): { score: number; similarity: number } {
   const similarity = computeProfileCosineSimilarity(profileA, profileB);
   
+  // Functional discipline check
+  const discA = detectCandidateDiscipline(profileA);
+  const discB = detectCandidateDiscipline(profileB);
+  const discRelation = relateDisciplines(discA, discB);
+
   // Structural affinities
   let structuralBonus = 0;
   if (profileA && profileB) {
@@ -177,22 +184,24 @@ export function calculateProfileMatchScore(
       structuralBonus += 20; // Same residential society
     }
 
-    const titleA = safeString(profileA.job_title);
-    const titleB = safeString(profileB.job_title);
-    if (titleA && titleB) {
-      const wordsA = titleA.split(/\s+/);
-      const wordsB = titleB.split(/\s+/);
-      const match = wordsA.some((w: string) => w.length > 3 && wordsB.includes(w));
-      if (match) structuralBonus += 15; // Similar functional title
+    // Role match only when functional disciplines are compatible (not incompatible like Finance vs Operations)
+    if (discRelation === "same") {
+      structuralBonus += 15; // Same functional discipline
+    } else if (discRelation === "adjacent") {
+      structuralBonus += 8; // Adjacent discipline
     }
   }
 
   // Baseline calibration:
-  // Zero similarity and zero structural affinity yields baseline 35%
   let score = 35;
   if (similarity > 0.001 || structuralBonus > 0) {
     const vectorBonus = Math.min(25, Math.round(similarity * 35));
     score = Math.min(98, Math.max(45, 45 + structuralBonus + vectorBonus));
+  }
+
+  // Hard cap for incompatible functional disciplines (e.g. Finance vs Operations)
+  if (discRelation === "incompatible") {
+    score = Math.min(55, score);
   }
 
   return { score, similarity };

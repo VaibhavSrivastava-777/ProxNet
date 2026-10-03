@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cleanJobTitle, isSameCompany } from "@/lib/jobs/job-filters";
+import { detectCandidateDiscipline, detectFunctionalDiscipline, areDisciplinesCompatible } from "@/lib/jobs/discipline";
+import { isLikelyJobPostingUrl } from "@/lib/jobs/job-quality";
+import { computeSkillAlignment } from "@/lib/jobs/skill-matching";
 
 function isJuniorJob(title: string, description: string): boolean {
   const t = title.toLowerCase();
@@ -198,19 +201,6 @@ Return ONLY a JSON object with:
 
     const userCompany = userProfile.company?.trim() || "";
 
-    // Pre-filter candidate jobs by freshness (30-day window), seniority, and EXCLUDE candidate's own company
-    const candidateJobs: ScrapedJobRow[] = [];
-    for (const row of (matchedJobsList as ScrapedJobRow[] | null) || []) {
-      if (isSameCompany(row.company, userCompany)) continue;
-      if (row.posted_at) {
-        const jobDate = new Date(row.posted_at);
-        if (!isNaN(jobDate.getTime()) && jobDate < thirtyDaysAgo) continue;
-      }
-      if (isJuniorJob(row.title, row.description || "")) continue;
-      candidateJobs.push(row);
-    }
-
-    // 4. Stage 2: Intelligent LLM Reranking with Company Diversity
     const candidateProfile = {
       id: user.id,
       job_title: userProfile.job_title,
@@ -219,6 +209,23 @@ Return ONLY a JSON object with:
       resume_text: userProfile.resume_text,
       profile_digest: profileDigest,
     };
+    const candDiscipline = detectCandidateDiscipline(candidateProfile);
+
+    // Pre-filter candidate jobs by freshness (30-day window), seniority, valid job posting URL,
+    // EXCLUDE candidate's own company, and ensure functional discipline compatibility
+    const candidateJobs: ScrapedJobRow[] = [];
+    for (const row of (matchedJobsList as ScrapedJobRow[] | null) || []) {
+      if (isSameCompany(row.company, userCompany)) continue;
+      if (row.url && !isLikelyJobPostingUrl(row.url)) continue;
+      if (row.posted_at) {
+        const jobDate = new Date(row.posted_at);
+        if (!isNaN(jobDate.getTime()) && jobDate < thirtyDaysAgo) continue;
+      }
+      if (isJuniorJob(row.title, row.description || "")) continue;
+      const jobDiscipline = detectFunctionalDiscipline(row.title, row.description);
+      if (!areDisciplinesCompatible(candDiscipline, jobDiscipline)) continue;
+      candidateJobs.push(row);
+    }
 
     // Pick up to 3 best-matching jobs per company to guarantee rich cross-company diversity in reranking
     const companyJobCounts = new Map<string, number>();
@@ -265,6 +272,9 @@ Return ONLY a JSON object with:
         score: number;
         label: string;
         reason: string;
+        matchedSkills?: string[];
+        missingSkills?: string[];
+        skillCoveragePercent?: number;
       }>;
     }> = {};
 
@@ -273,6 +283,7 @@ Return ONLY a JSON object with:
       const score = reranked ? reranked.score : Math.min(45, Math.round((row.similarity || 0.35) * 100));
       const label = reranked ? reranked.label : "Low Match";
       const reason = reranked ? reranked.reason : "Profile evaluation completed.";
+      const skillsAlignment = reranked?.skillsAlignment || computeSkillAlignment(candidateProfile, row);
 
       // Only display jobs with at least Moderate Match (>= 50%) to eliminate cross-functional noise
       if (score < 50) continue;
@@ -313,21 +324,30 @@ Return ONLY a JSON object with:
           score,
           label,
           reason,
+          matchedSkills: skillsAlignment.matchedSkills,
+          missingSkills: skillsAlignment.missingSkills,
+          skillCoveragePercent: skillsAlignment.coveragePercent,
         });
       }
     }
 
-    // Fallback pass: If user has fewer than 6 companies (e.g. different industry / sparse resume),
-    // populate with the best diverse candidate openings so NO user ever gets an empty screen
+    // Fallback pass: If user has fewer than 6 companies, populate with the best diverse candidate openings
+    // that are discipline-compatible and carry a genuine match score
     if (Object.keys(companyGroups).length < 6) {
       for (const row of diverseCandidateJobs) {
         const companyKey = (row.company || "Hiring Company").trim();
         if (companyGroups[companyKey]) continue; // already added
 
+        const jobDiscipline = detectFunctionalDiscipline(row.title, row.description);
+        if (!areDisciplinesCompatible(candDiscipline, jobDiscipline)) continue;
+        if (row.url && !isLikelyJobPostingUrl(row.url)) continue;
+
         const reranked = rerankedMap.get(row.id);
-        const score = reranked ? Math.max(50, reranked.score) : Math.max(50, Math.round((row.similarity || 0.45) * 100));
+        const score = reranked ? reranked.score : Math.round((row.similarity || 0.45) * 100);
+        if (score < 45) continue;
         const label = reranked ? reranked.label : "Active Role";
         const reason = reranked ? reranked.reason : "Verified active opening from company career board.";
+        const skillsAlignment = reranked?.skillsAlignment || computeSkillAlignment(candidateProfile, row);
 
         companyGroups[companyKey] = {
           company: row.company,
@@ -345,6 +365,9 @@ Return ONLY a JSON object with:
             score,
             label,
             reason,
+            matchedSkills: skillsAlignment.matchedSkills,
+            missingSkills: skillsAlignment.missingSkills,
+            skillCoveragePercent: skillsAlignment.coveragePercent,
           }]
         };
 
@@ -390,6 +413,10 @@ Return ONLY a JSON object with:
           .in("id", missingJobIds);
 
         for (const job of missingJobs || []) {
+          if (job.url && !isLikelyJobPostingUrl(job.url)) continue;
+          const jobDiscipline = detectFunctionalDiscipline(job.title, job.description);
+          if (!areDisciplinesCompatible(candDiscipline, jobDiscipline)) continue;
+
           const compKey = (job.company || "Hiring Company").trim();
           if (!companyGroups[compKey]) {
             companyGroups[compKey] = {

@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { deductWalletCredits } from "@/lib/wallet";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
+import { inspectJobPage, hasSubstantiveDescription } from "@/lib/jobs/job-quality";
 
 export const maxDuration = 60;
 
@@ -83,6 +84,33 @@ export async function POST(request: Request) {
       }, { status: 402 });
     }
 
+    // Inspect posting URL before charging credit: ensure opportunity is live & retrieve full description
+    let activeDescription = description || "";
+    if (url) {
+      const inspection = await inspectJobPage(url, 5000);
+      if (inspection.status === "closed") {
+        if (validJobUuid) {
+          try {
+            await supabase.from("scraped_jobs").delete().eq("id", validJobUuid);
+          } catch {}
+        }
+        return NextResponse.json({
+          error: "JOB_CLOSED",
+          message: `This job opportunity is no longer active on the employer's career site (${inspection.reason}). No credits were deducted.`,
+          wallet: currentWallet,
+        }, { status: 410 });
+      }
+
+      if (inspection.description && (!activeDescription || !hasSubstantiveDescription(activeDescription, title))) {
+        activeDescription = inspection.description;
+        if (validJobUuid) {
+          try {
+            await supabase.from("scraped_jobs").update({ description: inspection.description }).eq("id", validJobUuid);
+          } catch {}
+        }
+      }
+    }
+
     // 2. Discover Networking Path: Check for ProxNet insiders at this company
     const compClean = company.trim().toLowerCase();
     const { data: companyUsers } = await supabase
@@ -156,7 +184,7 @@ Company: ${company}
 Job Title: ${title}
 Location: ${location || "Remote / India"}
 Description:
-${(description || "").substring(0, 3000)}
+${(activeDescription || description || "").substring(0, 3000)}
 
 --- CANDIDATE DETAILS ---
 ${candidateContext}
@@ -242,7 +270,7 @@ Provide a JSON object with:
         linkedinSearchUrl,
         customPitch,
       },
-      jobDescription: description || "",
+      jobDescription: activeDescription || description || "",
       preparedAt: new Date().toISOString(),
     };
 
@@ -289,6 +317,7 @@ Provide a JSON object with:
       preparation,
       alreadyPrepared: false,
       newWalletBalance: deduction.newBalance,
+      liveDescription: activeDescription,
     });
 
   } catch (error: any) {

@@ -16,6 +16,12 @@ export interface JobItem {
   keywords?: string[];
   contactsCount?: number;
   referralContacts?: Array<{ id: string; alias: string; is_followed?: boolean }>;
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  skillCoveragePercent?: number;
+  score?: number;
+  label?: string;
+  reason?: string;
 }
 
 export interface PreparationData {
@@ -273,6 +279,10 @@ export function JobDetailSheet({
         throw new Error(data.message || "Failed to generate preparation playbook.");
       }
 
+      if (data.liveDescription) {
+        job.description = data.liveDescription;
+      }
+
       setPreparation(data.preparation);
       setActiveTab("prepare");
 
@@ -314,18 +324,23 @@ export function JobDetailSheet({
       if (checkRes.ok) {
         const checkData = await checkRes.json();
         if (checkData.isExpired) {
-          finalUrlToOpen = checkData.fallbackUrl || job.url;
           setLinkNotice({
-            message: `Notice: This requisition has closed or returned 404 on the ATS portal (${checkData.reason}). We've opened the active search fallback for '${job.title}' at ${job.company}.`,
+            message: `This opportunity is no longer available on the employer's career site (${checkData.reason}).`,
             url: checkData.fallbackUrl,
           });
+          setCheckingLink(false);
+          return;
+        }
+
+        if (checkData.description && !job.description) {
+          job.description = checkData.description;
         }
       }
     } catch {}
 
     setCheckingLink(false);
 
-    // 1. Open official job opportunity (or smart search fallback) in a new tab/browser
+    // 1. Open official active job opportunity in a new tab/browser
     if (typeof window !== "undefined") {
       window.open(finalUrlToOpen, "_blank", "noopener,noreferrer");
     }
@@ -572,6 +587,89 @@ export function JobDetailSheet({
           {/* Tab 1: Overview */}
           {activeTab === "overview" && (
             <div className="flex flex-col gap-5">
+              {/* Method 1: Hard Skill & Tooling Coverage */}
+              {((job.matchedSkills && job.matchedSkills.length > 0) || (job.missingSkills && job.missingSkills.length > 0) || typeof job.skillCoveragePercent === "number") && (
+                <div className="p-4 rounded-xl bg-gradient-to-br from-[var(--color-surface-secondary)]/70 via-[var(--color-surface-secondary)]/40 to-transparent border border-[var(--color-border-light)] flex flex-col gap-3 shadow-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🎯</span>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-text)] m-0">
+                        Skill & Tooling Alignment
+                      </h4>
+                    </div>
+                    {typeof job.skillCoveragePercent === "number" && (
+                      <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                        job.skillCoveragePercent >= 75
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                          : job.skillCoveragePercent >= 50
+                          ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                          : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                      }`}>
+                        {job.skillCoveragePercent}% Coverage
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Progress Bar */}
+                  {typeof job.skillCoveragePercent === "number" && (
+                    <div className="w-full h-1.5 rounded-full bg-[var(--color-border-light)] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          job.skillCoveragePercent >= 75
+                            ? "bg-emerald-500"
+                            : job.skillCoveragePercent >= 50
+                            ? "bg-blue-500"
+                            : "bg-amber-500"
+                        }`}
+                        style={{ width: `${Math.min(100, Math.max(5, job.skillCoveragePercent))}%` }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Matched Skills */}
+                  {job.matchedSkills && job.matchedSkills.length > 0 && (
+                    <div>
+                      <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mb-1.5 flex items-center gap-1">
+                        <span>✓</span>
+                        <span>Matched in your profile ({job.matchedSkills.length})</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {job.matchedSkills.map((s, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2.5 py-1 text-xs rounded-lg font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 flex items-center gap-1"
+                          >
+                            <span className="text-[10px] font-bold">✓</span>
+                            <span>{s}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Missing Skills / Gaps */}
+                  {job.missingSkills && job.missingSkills.length > 0 && (
+                    <div>
+                      <div className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mb-1.5 flex items-center gap-1">
+                        <span>•</span>
+                        <span>Target role requirements not in your resume ({job.missingSkills.length})</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {job.missingSkills.map((s, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2.5 py-1 text-xs rounded-lg font-medium bg-amber-500/10 text-amber-800 dark:text-amber-200 border border-amber-500/25 flex items-center gap-1"
+                          >
+                            <span className="text-[10px] font-bold opacity-60">•</span>
+                            <span>{s}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {job.keywords && job.keywords.length > 0 && (
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-2">
@@ -594,9 +692,25 @@ export function JobDetailSheet({
                 <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-2">
                   Role Description
                 </h4>
-                <div className="text-xs sm:text-sm text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-line bg-[var(--color-surface-secondary)]/30 p-4 rounded-xl border border-[var(--color-border-light)] font-sans">
-                  {cleanJobDescription(job.description)}
-                </div>
+                {job.description && job.description.length > 50 && !job.description.toLowerCase().startsWith("no full job description") ? (
+                  <div className="text-xs sm:text-sm text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-line bg-[var(--color-surface-secondary)]/30 p-4 rounded-xl border border-[var(--color-border-light)] font-sans">
+                    {cleanJobDescription(job.description)}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-[var(--color-surface-secondary)]/30 border border-[var(--color-border-light)] flex flex-col gap-2.5">
+                    <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed">
+                      Full description was not indexed in the ATS summary feed. You can review all role qualifications directly on the employer career portal.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleApplyDirectly}
+                      disabled={checkingLink}
+                      className="self-start text-xs font-bold text-[var(--color-primary)] hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+                    >
+                      <span>{checkingLink ? "Checking link..." : `Open Requisition on ${job.company} Career Site →`}</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

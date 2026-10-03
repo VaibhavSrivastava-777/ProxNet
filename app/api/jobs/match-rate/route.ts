@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMatchLabel } from "@/lib/jobs/reranker";
+import { detectCandidateDiscipline, detectFunctionalDiscipline, relateDisciplines, DISCIPLINE_LABELS } from "@/lib/jobs/discipline";
+import { hasSubstantiveDescription } from "@/lib/jobs/job-quality";
+import { computeSkillAlignment } from "@/lib/jobs/skill-matching";
 
 export async function POST(request: Request) {
   try {
@@ -64,18 +67,33 @@ export async function POST(request: Request) {
 
     const newWallet = currentWallet - 1;
 
-    // 4. Evaluate match rate in real-time using OpenAI
+    // 4. Evaluate match rate in real-time using OpenAI with Method 1 Skill Coverage
     const openaiKey = process.env.OPENAI_API_KEY;
+    const candDiscipline = detectCandidateDiscipline(userData);
+    const jobDiscipline = detectFunctionalDiscipline(job.title, job.description);
+    const relation = relateDisciplines(candDiscipline, jobDiscipline);
+    const isSubstantive = hasSubstantiveDescription(job.description, job.title);
+    const skillsAlignment = computeSkillAlignment(userData, job);
+
     let score = 50;
     let label = "Moderate Match";
     let reason = "Profile and resume evaluated against role requirements.";
 
-    if (openaiKey) {
+    if (relation === "incompatible") {
+      score = 25;
+      label = "Low Match";
+      reason = `Candidate background in ${DISCIPLINE_LABELS[candDiscipline]} does not match this role in ${DISCIPLINE_LABELS[jobDiscipline]}.`;
+    } else if (!isSubstantive) {
+      score = 35;
+      label = "Low Match";
+      reason = "Job description is missing or minimal; role requirements cannot be verified.";
+    } else if (openaiKey) {
       try {
         const candidateContext = `
 CANDIDATE PROFILE (LATEST RESUME & PROFILE):
 - Current Title: ${userData.job_title || "Professional"}
 - Current Company: ${userData.company || "Unknown"}
+- Functional Discipline: ${DISCIPLINE_LABELS[candDiscipline]}
 - Skills: ${(userData.profile_digest?.skills || []).join(", ") || "General"}
 - Summary: ${userData.profile_digest?.summary || userData.about || "N/A"}
 - Full Resume Excerpt:
@@ -86,18 +104,23 @@ ${resumeText.slice(0, 3000)}
 JOB POSTING DETAILS:
 - Title: ${job.title}
 - Company: ${job.company}
+- Functional Discipline: ${DISCIPLINE_LABELS[jobDiscipline]}
 - Location: ${job.location || "Remote"}
 - Keywords: ${(job.keywords || []).join(", ") || "General"}
+- Skill Coverage Analysis (Method 1):
+  * Coverage: ${skillsAlignment.coveragePercent}%
+  * Matched Skills: ${skillsAlignment.matchedSkills.join(", ") || "None"}
+  * Missing Skills / Gaps: ${skillsAlignment.missingSkills.join(", ") || "None identified"}
 - Description:
 ${(job.description || job.title).slice(0, 2000)}
 `.trim();
 
         const prompt = `You are an expert technical talent evaluator. Evaluate how strongly the candidate's latest resume and background match the target job opening.
-Score the match strictly from 0 to 100 based on functional domain, skills, and seniority fit.
-- 85-100: Strong Match (Direct alignment on role, tech stack, or domain)
+Score the match strictly from 0 to 100 based on functional domain, hard skill coverage (Method 1), and seniority fit.
+- 85-100: Strong Match (Direct alignment on role, tech stack, or domain with high skill coverage >70%)
 - 70-84: Good Match (Strong transferable overlap, adjacent seniority or stack)
-- 50-69: Moderate Match (Partial overlap, different sub-domain)
-- Below 50: Low Match (Completely different career track)
+- 50-69: Moderate Match (Partial overlap, different sub-domain or noticeable skill gaps)
+- Below 50: Low Match (Completely different career track or major skill deficit)
 
 Provide a concise, compelling 1-2 sentence fit reason explaining why this candidate is a match or where the overlap lies.
 
@@ -130,7 +153,14 @@ ${jobContext}`;
           const oaiData = await oaiRes.json();
           const parsed = JSON.parse(oaiData.choices[0].message.content);
           if (typeof parsed.score === "number") {
-            score = Math.min(99, Math.max(10, Math.round(parsed.score)));
+            let parsedScore = Math.min(99, Math.max(10, Math.round(parsed.score)));
+            if (relation === "adjacent") {
+              parsedScore = Math.min(74, parsedScore);
+            }
+            if (skillsAlignment.totalRequiredSkills >= 3 && skillsAlignment.coveragePercent < 30) {
+              parsedScore = Math.min(50, parsedScore);
+            }
+            score = parsedScore;
             label = getMatchLabel(score);
           }
           if (parsed.reason && typeof parsed.reason === "string") {
@@ -141,6 +171,12 @@ ${jobContext}`;
         const msg = aiErr instanceof Error ? aiErr.message : String(aiErr);
         console.error("[match-rate] AI evaluation error:", msg);
       }
+    } else {
+      // Fallback without OpenAI key using skill coverage
+      const coverageBoost = Math.round(skillsAlignment.coveragePercent * 0.3);
+      score = Math.min(75, 45 + coverageBoost);
+      label = getMatchLabel(score);
+      reason = `Evaluated using skill coverage ratio (${skillsAlignment.coveragePercent}% tooling match).`;
     }
 
     // 5. Persist evaluated match in user's profile_digest.evaluated_matches & deduct wallet credit
@@ -151,6 +187,7 @@ ${jobContext}`;
       score,
       label,
       reason,
+      skillsAlignment,
       evaluated_at: new Date().toISOString(),
     };
 
@@ -171,6 +208,7 @@ ${jobContext}`;
       score,
       label,
       reason,
+      skillsAlignment,
       remainingWallet: newWallet,
     });
   } catch (err: unknown) {

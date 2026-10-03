@@ -6,6 +6,8 @@ import { isJobEligible, cleanJobTitle, normalizeJobTitle, normalizeJobUrl, isSam
 import { discoverCompetitorsForCompany } from "@/lib/competitors/discover-competitors";
 import { deductWalletCredits } from "@/lib/wallet";
 import { verifyJobUrlLive } from "@/lib/jobs/url-validator";
+import { detectCandidateDiscipline, detectFunctionalDiscipline, areDisciplinesCompatible, relateDisciplines } from "@/lib/jobs/discipline";
+import { isLikelyJobPostingUrl } from "@/lib/jobs/job-quality";
 
 export const maxDuration = 60;
 
@@ -350,11 +352,18 @@ export async function POST(request: Request) {
       }
     }
 
+    const candDiscipline = detectCandidateDiscipline(userData);
+
     // Pick diverse set across companies for AI evaluation (up to 35 jobs, max 2 per company)
+    // Filter by posting URL validity and candidate discipline compatibility
     const companyCounts = new Map<string, number>();
     const evaluationBatch: LiveScrapedItem[] = [];
 
     for (const j of allCandidateJobs) {
+      if (j.url && !isLikelyJobPostingUrl(j.url)) continue;
+      const jobDiscipline = detectFunctionalDiscipline(j.title, j.description);
+      if (!areDisciplinesCompatible(candDiscipline, jobDiscipline)) continue;
+
       const cKey = j.company.toLowerCase().trim();
       const count = companyCounts.get(cKey) || 0;
       if (count < 2) {
@@ -461,7 +470,13 @@ Output valid JSON ONLY with format:
             const targetJob = chunk[idx];
             if (!targetJob) continue;
 
-            const score = typeof ev.score === "number" ? Math.min(100, Math.max(0, Math.round(ev.score))) : 30;
+            const jobDiscipline = detectFunctionalDiscipline(targetJob.title, targetJob.description);
+            if (relateDisciplines(candDiscipline, jobDiscipline) === "incompatible") continue;
+
+            let score = typeof ev.score === "number" ? Math.min(100, Math.max(0, Math.round(ev.score))) : 30;
+            if (relateDisciplines(candDiscipline, jobDiscipline) === "adjacent") {
+              score = Math.min(74, score);
+            }
             // FILTER: STRICTLY SCORE >= 70
             if (score >= 70) {
               const label = score >= 85 ? "Strong Match" : "Good Match";
@@ -551,16 +566,16 @@ Output valid JSON ONLY with format:
       }
     }
 
-    // Automatically deactivate confirmed 404/dead jobs in database (fire-and-forget)
+    // Automatically delete confirmed 404/dead jobs from database (fire-and-forget)
     if (deadJobIds.length > 0) {
       (async () => {
         try {
           await supabase
             .from("scraped_jobs")
-            .update({ is_active: false })
+            .delete()
             .in("id", deadJobIds);
         } catch {
-          // Non-critical: ignore deactivation errors
+          // Non-critical: ignore deletion errors
         }
       })();
     }

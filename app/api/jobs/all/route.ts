@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cleanJobTitle } from "@/lib/jobs/job-filters";
+import { isLikelyJobPostingUrl } from "@/lib/jobs/job-quality";
+import { detectCandidateDiscipline } from "@/lib/jobs/discipline";
+import { extractCandidateSkills } from "@/lib/jobs/skill-matching";
+
+export const dynamic = "force-dynamic";
 
 function cleanUrlAndTitle(rawTitle: string, rawUrl: string) {
   const cleanUrl = (rawUrl || "").replace(/&amp;/g, "&").trim();
@@ -142,6 +147,7 @@ async function refreshCompaniesCache(supabase: any) {
 
       const compData = companiesMap.get(compKey)!;
       if (!compData.jobs.some(j => j.id === job.id)) {
+        if (job.url && !isLikelyJobPostingUrl(job.url)) continue;
         const { title: formattedTitle, url: formattedUrl } = cleanUrlAndTitle(job.title, job.url);
 
         compData.jobs.push({
@@ -192,7 +198,7 @@ export async function GET(request: Request) {
     const [userProfileRes, followsRes] = await Promise.all([
       supabase
         .from("users")
-        .select("resume_text, resume_url, wallet, company, invite_code")
+        .select("job_title, resume_text, resume_url, wallet, company, invite_code, profile_digest, about, professional_bio")
         .eq("id", user.id)
         .single(),
       supabase
@@ -202,6 +208,8 @@ export async function GET(request: Request) {
     ]);
 
     const userProfile = userProfileRes.data;
+    const userDiscipline = userProfile ? detectCandidateDiscipline(userProfile) : "operations_general";
+    const userSkills = userProfile ? Array.from(extractCandidateSkills(userProfile)) : [];
     const followedSet = new Set(followsRes.data?.map(f => f.following_id) || []);
 
     // 3. Personalize followed status on referral contacts (instant memory map)
@@ -228,6 +236,9 @@ export async function GET(request: Request) {
       inviteCode: userProfile?.invite_code || null,
       currentUserId: user.id,
       currentUserCompany: userProfile?.company || null,
+      userJobTitle: userProfile?.job_title || null,
+      userDiscipline,
+      userSkills,
       totalCompanies: personalizedCompanies.length,
       totalJobs: cachedTotalJobsCount,
       companies: personalizedCompanies,
