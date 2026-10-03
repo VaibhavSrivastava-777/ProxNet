@@ -78,16 +78,13 @@ export function JobsFeed() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   
-  // Paging state: first 25 companies, then +10 each time
-  const [visibleCount, setVisibleCount] = useState(25);
+  // Paging state: first 30 opportunities, then +20 each time
+  const [visibleCount, setVisibleCount] = useState(30);
   
-  // Drawer state for inspecting/preparing a job
+  // Modal state for inspecting/preparing a job
   const [selectedJob, setSelectedJob] = useState<JobItem | null>(null);
 
-  // Modal state for viewing other jobs of a company
-  const [modalCompanyGroup, setModalCompanyGroup] = useState<CompanyJobGroup | null>(null);
-
-  // Load all ~7k scraped jobs grouped by company with stale-while-revalidate
+  // Load all ~7k scraped jobs with stale-while-revalidate
   const loadJobs = useCallback(async (showLoadingSpinner = false) => {
     try {
       if (showLoadingSpinner || !memoryFeedLoaded) {
@@ -140,20 +137,20 @@ export function JobsFeed() {
     return () => window.removeEventListener("proxnet:wallet-updated", handleWalletUpdated);
   }, []);
 
-  // Close modal on Escape key
+  // Close job detail modal on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setModalCompanyGroup(null);
+        setSelectedJob(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Group jobs by company, sort company's jobs by match rate, and sort company groups by topJob.matchRate
-  const companyGroups = useMemo(() => {
-    const groups: CompanyJobGroup[] = [];
+  // Flatten all jobs across all companies, compute match rate, and sort by matchRate descending
+  const allMatchedJobs = useMemo(() => {
+    const list: JobItem[] = [];
     const candidateContext = {
       profile_digest: { skills: userSkills },
       job_title: userJobTitle,
@@ -162,7 +159,7 @@ export function JobsFeed() {
     for (const comp of allCompanies) {
       if (!comp.jobs || comp.jobs.length === 0) continue;
 
-      const companyJobs: JobItem[] = comp.jobs.map((j) => {
+      for (const j of comp.jobs) {
         const jobDisc = detectFunctionalDiscipline(j.title, j.description);
         const skillAlign = computeSkillAlignment(candidateContext, j);
         let matchRate = 50;
@@ -173,12 +170,12 @@ export function JobsFeed() {
             const coverageBonus = Math.round(skillAlign.coveragePercent * 0.22);
             matchRate = 70 + coverageBonus;
             if (comp.contactsCount > 0) matchRate += 3;
-            matchRate = Math.min(94, matchRate);
+            matchRate = Math.min(96, matchRate);
           } else if (relation === "adjacent") {
             const coverageBonus = Math.round(skillAlign.coveragePercent * 0.18);
             matchRate = 50 + coverageBonus;
             if (comp.contactsCount > 0) matchRate += 3;
-            matchRate = Math.min(72, matchRate);
+            matchRate = Math.min(74, matchRate);
           } else if (relation === "incompatible") {
             matchRate = 25;
           }
@@ -188,7 +185,7 @@ export function JobsFeed() {
           if (comp.contactsCount > 0) matchRate += 4;
         }
 
-        return {
+        list.push({
           id: j.id,
           title: j.title,
           company: comp.company,
@@ -204,70 +201,49 @@ export function JobsFeed() {
           matchedSkills: skillAlign.matchedSkills,
           missingSkills: skillAlign.missingSkills,
           skillCoveragePercent: skillAlign.coveragePercent,
-        };
-      });
-
-      // Sort jobs within company by matchRate descending
-      companyJobs.sort((a, b) => b.matchRate - a.matchRate);
-
-      const topJob = companyJobs[0];
-      const otherJobs = companyJobs.slice(1);
-
-      groups.push({
-        company: comp.company,
-        topJob,
-        otherJobs,
-        allJobs: companyJobs,
-        totalJobsCount: companyJobs.length,
-        contactsCount: comp.contactsCount,
-        referralContacts: comp.referralContacts,
-      });
+        });
+      }
     }
 
-    // Sort company groups by topJob.matchRate descending
-    return groups.sort((a, b) => b.topJob.matchRate - a.topJob.matchRate);
+    // Sort all individual jobs strictly by top matchRate descending
+    return list.sort((a, b) => b.matchRate - a.matchRate);
   }, [allCompanies, userDiscipline, userSkills, userJobTitle]);
 
   // Compute total individual jobs count
   const totalOpeningsCount = useMemo(() => {
-    return allCompanies.reduce((acc, c) => acc + (c.jobs?.length || 0), 0);
-  }, [allCompanies]);
+    return allMatchedJobs.length;
+  }, [allMatchedJobs]);
 
-  // Apply search query and location filter across company groups
-  const filteredCompanyGroups = useMemo(() => {
-    let result = companyGroups;
+  // Apply search query and location filter across individual matched jobs
+  const filteredJobs = useMemo(() => {
+    let result = allMatchedJobs;
     const q = searchQuery.trim().toLowerCase();
 
     if (q) {
-      result = result.filter((g) => {
-        const matchesComp = g.company.toLowerCase().includes(q);
-        const matchesJob = g.allJobs.some(
-          (j) =>
-            j.title.toLowerCase().includes(q) ||
-            j.location.toLowerCase().includes(q) ||
-            j.keywords?.some((k) => k.toLowerCase().includes(q))
-        );
-        return matchesComp || matchesJob;
-      });
+      result = result.filter(
+        (j) =>
+          j.company.toLowerCase().includes(q) ||
+          j.title.toLowerCase().includes(q) ||
+          j.location.toLowerCase().includes(q) ||
+          j.keywords?.some((k) => k.toLowerCase().includes(q))
+      );
     }
 
     if (selectedLocation !== "all") {
       const locMatch = selectedLocation.toLowerCase();
-      result = result.filter((g) =>
-        g.allJobs.some((j) => j.location.toLowerCase().includes(locMatch))
-      );
+      result = result.filter((j) => j.location.toLowerCase().includes(locMatch));
     }
 
     return result;
-  }, [companyGroups, searchQuery, selectedLocation]);
+  }, [allMatchedJobs, searchQuery, selectedLocation]);
 
-  // Paginated company groups: first 25, then +10
-  const displayedGroups = useMemo(() => {
-    return filteredCompanyGroups.slice(0, visibleCount);
-  }, [filteredCompanyGroups, visibleCount]);
+  // Paginated jobs: first 30, then +20 each time
+  const displayedJobs = useMemo(() => {
+    return filteredJobs.slice(0, visibleCount);
+  }, [filteredJobs, visibleCount]);
 
   const handleLoadMore = () => {
-    setVisibleCount((prev) => prev + 10);
+    setVisibleCount((prev) => prev + 20);
   };
 
   return (
@@ -282,7 +258,7 @@ export function JobsFeed() {
             </span>
           </h1>
           <p className="text-xs text-[var(--color-text-secondary)] m-0 mt-0.5">
-            Grouped by verified enterprise company boards & sorted by top match rates.
+            Top matched tech opportunities sorted by relevance to your profile.
           </p>
         </div>
 
@@ -311,7 +287,7 @@ export function JobsFeed() {
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
-              setVisibleCount(25);
+              setVisibleCount(30);
             }}
             placeholder="Search 7,000+ jobs by company, role, or skill..."
             className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-primary)] transition-all shadow-sm"
@@ -320,7 +296,7 @@ export function JobsFeed() {
             <button
               onClick={() => {
                 setSearchQuery("");
-                setVisibleCount(25);
+                setVisibleCount(30);
               }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text)] border-none bg-transparent cursor-pointer"
             >
@@ -343,7 +319,7 @@ export function JobsFeed() {
               key={loc.id}
               onClick={() => {
                 setSelectedLocation(loc.id);
-                setVisibleCount(25);
+                setVisibleCount(30);
               }}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer ${
                 selectedLocation === loc.id
@@ -383,7 +359,7 @@ export function JobsFeed() {
       )}
 
       {/* Zero matches state */}
-      {!loading && filteredCompanyGroups.length === 0 && (
+      {!loading && filteredJobs.length === 0 && (
         <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-secondary)]/20">
           <span className="text-3xl mb-2 block">🔍</span>
           <h3 className="text-sm font-bold text-[var(--color-text)]">No matching job opportunities</h3>
@@ -394,7 +370,7 @@ export function JobsFeed() {
             onClick={() => {
               setSearchQuery("");
               setSelectedLocation("all");
-              setVisibleCount(25);
+              setVisibleCount(30);
             }}
             className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-all cursor-pointer border-none"
           >
@@ -403,94 +379,77 @@ export function JobsFeed() {
         </div>
       )}
 
-      {/* Company Grouped Jobs Feed */}
-      {!loading && displayedGroups.length > 0 && (
+      {/* Matched Jobs Feed - Format: company-logo, company name, position */}
+      {!loading && displayedJobs.length > 0 && (
         <div className="flex flex-col gap-3">
-          {displayedGroups.map((group) => {
-            const topJob = group.topJob;
+          {displayedJobs.map((job) => {
             const matchColor =
-              topJob.matchRate >= 80
+              job.matchRate >= 80
                 ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/30"
-                : topJob.matchRate >= 60
+                : job.matchRate >= 60
                 ? "text-blue-500 bg-blue-500/10 border-blue-500/30"
-                : topJob.matchRate >= 45
+                : job.matchRate >= 45
                 ? "text-amber-500 bg-amber-500/10 border-amber-500/30"
                 : "text-[var(--color-text-tertiary)] bg-[var(--color-surface-secondary)] border-[var(--color-border-light)]";
 
             return (
               <div
-                key={group.company}
-                onClick={() => setSelectedJob(topJob)}
+                key={job.id}
+                onClick={() => setSelectedJob(job)}
                 className="group p-3.5 sm:p-4 rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/50 hover:shadow-md transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 active:scale-[0.995]"
               >
-                {/* Left: Company Logo + Top Job Title + Details */}
+                {/* Left: Company Logo, Company Name, Position */}
                 <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                  {/* Company Logo */}
                   <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-[var(--color-border-light)] bg-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
-                    <CompanyLogo company={group.company} className="w-9 h-9 object-contain" />
+                    <CompanyLogo company={job.company} className="w-9 h-9 object-contain" />
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    {/* Header: Company - Top Job Title (Match %) */}
+                    {/* Header: Company Name — Position */}
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       <span className="text-sm sm:text-base font-bold text-[var(--color-text)]">
-                        {group.company}
+                        {job.company}
                       </span>
                       <span className="text-xs text-[var(--color-text-tertiary)] font-bold">—</span>
                       <span className="text-sm sm:text-base font-semibold text-[var(--color-text)] group-hover:text-[var(--color-primary)] transition-colors truncate">
-                        {topJob.title}
+                        {job.title}
                       </span>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${matchColor}`}>
-                        {topJob.matchRate < 40
-                          ? `${topJob.matchRate}% • Different Track`
-                          : `${topJob.matchRate}% Match`}
+                        {job.matchRate < 40
+                          ? `${job.matchRate}% • Different Track`
+                          : `${job.matchRate}% Match`}
                       </span>
-                      {topJob.matchedSkills && topJob.matchedSkills.length > 0 && (
+                      {job.matchedSkills && job.matchedSkills.length > 0 && (
                         <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                          ✓ {topJob.matchedSkills.length} skill{topJob.matchedSkills.length > 1 ? "s" : ""}
+                          ✓ {job.matchedSkills.length} skill{job.matchedSkills.length > 1 ? "s" : ""}
                         </span>
                       )}
                     </div>
 
-                    {/* Metadata line: Location, Experience, Age, Neighbors */}
+                    {/* Metadata line: Location, Experience, Posted Age, Neighbors */}
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-text-tertiary)] mt-1">
-                      <span className="font-medium text-[var(--color-text-secondary)]">{topJob.location}</span>
+                      <span className="font-medium text-[var(--color-text-secondary)]">{job.location}</span>
                       <span>&bull;</span>
-                      <span>{topJob.experience}</span>
+                      <span>{job.experience}</span>
                       <span>&bull;</span>
-                      <span>{topJob.posted_at}</span>
-                      {group.contactsCount > 0 && (
+                      <span>{job.posted_at}</span>
+                      {job.contactsCount && job.contactsCount > 0 ? (
                         <>
                           <span>&bull;</span>
                           <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                            🤝 {group.contactsCount} neighbor{group.contactsCount > 1 ? "s" : ""}
+                            🤝 {job.contactsCount} neighbor{job.contactsCount > 1 ? "s" : ""}
                           </span>
                         </>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>
 
-                {/* Right: "and X others..." Modal Trigger + Match Badge + Arrow */}
+                {/* Right: Match Score Badge & Arrow */}
                 <div className="flex items-center gap-2.5 self-end sm:self-center shrink-0">
-                  {group.otherJobs.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setModalCompanyGroup(group);
-                      }}
-                      className="px-2.5 sm:px-3 py-1.5 rounded-xl font-bold text-[11px] sm:text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-subtle)] border border-[var(--color-border)] hover:border-[var(--color-primary)]/40 transition-all cursor-pointer flex items-center gap-1 shadow-xs active:scale-95"
-                      title={`View ${group.otherJobs.length} more roles at ${group.company}`}
-                    >
-                      <span>& {group.otherJobs.length} other{group.otherJobs.length > 1 ? "s" : ""}</span>
-                      <svg className="w-3 h-3 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                  )}
-
                   <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${matchColor}`}>
-                    {topJob.matchRate}%
+                    {job.matchRate}%
                   </span>
 
                   <span className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--color-text-tertiary)] group-hover:text-[var(--color-primary)] group-hover:bg-[var(--color-primary-subtle)] transition-all">
@@ -505,177 +464,23 @@ export function JobsFeed() {
         </div>
       )}
 
-      {/* Pagination: Load 10 More Button */}
-      {!loading && visibleCount < filteredCompanyGroups.length && (
+      {/* Pagination: Load 20 More Opportunities */}
+      {!loading && visibleCount < filteredJobs.length && (
         <div className="flex flex-col items-center justify-center gap-2 pt-4 pb-8">
           <button
             type="button"
             onClick={handleLoadMore}
             className="px-6 py-3 rounded-xl font-bold text-xs sm:text-sm bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-primary)] transition-all shadow-sm active:scale-95 cursor-pointer flex items-center gap-2"
           >
-            <span>Load 10 More Companies</span>
+            <span>Load 20 More Opportunities</span>
             <span className="text-xs text-[var(--color-text-tertiary)]">
-              ({displayedGroups.length} of {filteredCompanyGroups.length.toLocaleString()})
+              ({displayedJobs.length} of {filteredJobs.length.toLocaleString()})
             </span>
           </button>
         </div>
       )}
 
-      {/* Modal for viewing all other jobs of a company */}
-      {modalCompanyGroup && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-fadeIn"
-          onClick={() => setModalCompanyGroup(null)}
-        >
-          <div 
-            className="relative w-full max-w-2xl max-h-[85vh] rounded-3xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-2xl flex flex-col overflow-hidden animate-scaleIn"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header with High-Visibility Top 'X' Close Button */}
-            <div className="sticky top-0 z-10 px-5 py-4 bg-[var(--color-surface)] border-b border-[var(--color-border-light)] flex items-center justify-between gap-3 shadow-xs">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-[var(--color-border-light)] bg-white flex items-center justify-center">
-                  <CompanyLogo company={modalCompanyGroup.company} className="w-8 h-8 object-contain" />
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-base sm:text-lg font-bold text-[var(--color-text)] m-0 truncate">
-                    {modalCompanyGroup.company}
-                  </h2>
-                  <p className="text-xs text-[var(--color-text-secondary)] m-0 mt-0.5">
-                    Showing all {modalCompanyGroup.totalJobsCount} open positions
-                  </p>
-                </div>
-              </div>
-
-              {/* CLEARLY VISIBLE TOP 'X' CLOSE BUTTON */}
-              <button
-                type="button"
-                onClick={() => setModalCompanyGroup(null)}
-                className="w-9 h-9 rounded-full bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors flex items-center justify-center border border-[var(--color-border)] cursor-pointer shrink-0 shadow-xs active:scale-95"
-                aria-label="Close other jobs modal"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Modal Body: Top Job Highlight + Other Jobs List */}
-            <div className="p-4 sm:p-5 flex flex-col gap-3 overflow-y-auto flex-1">
-              {/* Top Job Highlight */}
-              <div
-                onClick={() => {
-                  setSelectedJob(modalCompanyGroup.topJob);
-                  setModalCompanyGroup(null);
-                }}
-                className="p-3.5 rounded-2xl border-2 border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500 text-white shadow-xs">
-                      ⭐ Top Match
-                    </span>
-                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                      {modalCompanyGroup.topJob.matchRate}% Match
-                    </span>
-                  </div>
-                  <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0 mt-1 truncate">
-                    {modalCompanyGroup.topJob.title}
-                  </h3>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-tertiary)] mt-1">
-                    <span>{modalCompanyGroup.topJob.location}</span>
-                    <span>&bull;</span>
-                    <span>{modalCompanyGroup.topJob.experience}</span>
-                    <span>&bull;</span>
-                    <span>{modalCompanyGroup.topJob.posted_at}</span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  className="px-3 py-1.5 rounded-xl font-bold text-xs bg-emerald-600 text-white border-none cursor-pointer self-start sm:self-center shrink-0 shadow-xs"
-                >
-                  View & Prepare ➔
-                </button>
-              </div>
-
-              {/* Other Jobs Section Header */}
-              {modalCompanyGroup.otherJobs.length > 0 && (
-                <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-tertiary)] px-1 mt-2">
-                  Other Open Roles ({modalCompanyGroup.otherJobs.length})
-                </div>
-              )}
-
-              {/* Other Jobs List */}
-              {modalCompanyGroup.otherJobs.map((job) => {
-                const matchBadgeColor =
-                  job.matchRate >= 90
-                    ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/30"
-                    : job.matchRate >= 75
-                    ? "text-blue-500 bg-blue-500/10 border-blue-500/30"
-                    : "text-amber-500 bg-amber-500/10 border-amber-500/30";
-
-                return (
-                  <div
-                    key={job.id}
-                    onClick={() => {
-                      setSelectedJob(job);
-                      setModalCompanyGroup(null);
-                    }}
-                    className="p-3.5 rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40 hover:bg-[var(--color-surface-hover)] transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${matchBadgeColor}`}>
-                          {job.matchRate}% Match
-                        </span>
-                        {job.matchedSkills && job.matchedSkills.length > 0 && (
-                          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                            ✓ {job.matchedSkills.length} skills
-                          </span>
-                        )}
-                        <span className="text-xs text-[var(--color-text-tertiary)]">
-                          {job.posted_at}
-                        </span>
-                      </div>
-                      <h4 className="text-sm font-bold text-[var(--color-text)] m-0 mt-1 truncate">
-                        {job.title}
-                      </h4>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-tertiary)] mt-1">
-                        <span>{job.location}</span>
-                        <span>&bull;</span>
-                        <span>{job.experience}</span>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="px-3 py-1.5 rounded-xl font-bold text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text)] hover:text-[var(--color-primary)] border border-[var(--color-border-light)] cursor-pointer self-start sm:self-center shrink-0"
-                    >
-                      View Details ➔
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-5 py-3 bg-[var(--color-surface-secondary)]/50 border-t border-[var(--color-border-light)] flex items-center justify-between text-xs text-[var(--color-text-secondary)]">
-              <span>Select any role to view ATS job details or prepare.</span>
-              <button
-                type="button"
-                onClick={() => setModalCompanyGroup(null)}
-                className="px-3 py-1.5 rounded-xl font-bold text-xs bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Slide-over Opportunity Detail Drawer */}
+      {/* Floating Opportunity Detail Modal (not full screen, top notification bell remains visible) */}
       <JobDetailSheet
         job={selectedJob}
         isOpen={Boolean(selectedJob)}

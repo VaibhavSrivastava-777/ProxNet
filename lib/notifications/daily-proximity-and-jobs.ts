@@ -105,126 +105,144 @@ export async function sendDailyUserDigest(userId: string): Promise<DailyDigestRe
 
   // -------------------------------------------------------------
   // PART 2: Daily Notification of Top 3 Matching Opportunities
-  // STRICT REQUIREMENT: Only send to members who have provided a resume.
+  // Evaluates top 3 jobs and clubs profile completion reminder when profile is incomplete
   // -------------------------------------------------------------
+  const missingProfileFields: string[] = [];
   const hasResume = Boolean(user.resume_text && user.resume_text.trim().length >= 20);
+  if (!hasResume) missingProfileFields.push("resume");
+  if (!user.job_title?.trim()) missingProfileFields.push("current designation");
+  if (!user.company?.trim()) missingProfileFields.push("company");
+  if (!user.home_lat) missingProfileFields.push("location");
+  const isProfileIncomplete = missingProfileFields.length > 0;
 
-  if (hasResume) {
-    try {
-      // 1. Check if user already received top 3 opportunities notification in the last 20 hours
-      const twentyHoursAgo = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
-      const { data: recentJobNotifs } = await supabase
-        .from("in_app_notifications")
-        .select("id")
-        .eq("user_id", user.id)
-        .gte("created_at", twentyHoursAgo)
-        .or("title.ilike.%Top 3%,body.ilike.%Top 3%")
-        .limit(1);
+  try {
+    // 1. Check if user already received top 3 opportunities notification in the last 20 hours
+    const twentyHoursAgo = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
+    const { data: recentJobNotifs } = await supabase
+      .from("in_app_notifications")
+      .select("id")
+      .eq("user_id", user.id)
+      .gte("created_at", twentyHoursAgo)
+      .or("title.ilike.%Top 3%,body.ilike.%Top 3%")
+      .limit(1);
 
-      if (!recentJobNotifs || recentJobNotifs.length === 0) {
-        let userEmbedding = user.embedding;
+    if (!recentJobNotifs || recentJobNotifs.length === 0) {
+      let userEmbedding = user.embedding;
 
-        // Generate embedding if missing
-        if (!userEmbedding && process.env.OPENAI_API_KEY) {
-          try {
-            const textToEmbed = `Resume: ${user.resume_text}\nTitle: ${user.job_title || ""}\nCompany: ${user.company || ""}`.slice(0, 8000);
-            const embRes = await fetch("https://api.openai.com/v1/embeddings", {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                input: textToEmbed,
-                model: "text-embedding-3-small",
-              }),
-            });
-            if (embRes.ok) {
-              const embData = await embRes.json();
-              userEmbedding = embData.data?.[0]?.embedding;
-              if (userEmbedding) {
-                await supabase.from("users").update({ embedding: userEmbedding }).eq("id", user.id);
-              }
-            }
-          } catch (e: any) {
-            console.warn(`[daily-digest] Failed embedding generation for ${user.id}:`, e.message);
-          }
-        }
-
-        let candidateMatches: any[] = [];
-
-        // Match against active scraped jobs
-        if (userEmbedding) {
-          const { data: vectorMatches, error: matchError } = await supabase.rpc("match_scraped_jobs", {
-            query_embedding: userEmbedding,
-            match_threshold: 0.15,
-            match_count: 60,
-          });
-
-          if (!matchError && vectorMatches) {
-            candidateMatches = vectorMatches;
-          }
-        }
-
-        // If vector matching returned few, supplement with fresh jobs
-        if (candidateMatches.length < 5) {
-          const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-          const { data: freshJobs } = await supabase
-            .from("scraped_jobs")
-            .select("id, title, company, location, url, posted_at, similarity")
-            .gte("posted_at", thirtyDaysAgoIso)
-            .order("posted_at", { ascending: false })
-            .limit(30);
-
-          if (freshJobs) {
-            candidateMatches = [...candidateMatches, ...freshJobs];
-          }
-        }
-
-        // Exclude current company and pick top 3 from distinct companies
-        const userCompany = user.company?.trim() || "";
-        const seenCompanies = new Set<string>();
-
-        for (const j of candidateMatches) {
-          if (!j.company) continue;
-          if (userCompany && isSameCompany(j.company, userCompany)) continue;
-          const cKey = j.company.trim().toLowerCase();
-          if (!seenCompanies.has(cKey)) {
-            seenCompanies.add(cKey);
-            const sim = Number(j.similarity) || 0.6;
-            const score = Math.min(98, Math.max(76, Math.round(52 + sim * 50)));
-
-            topJobs.push({
-              id: j.id,
-              title: j.title || "Job Opportunity",
-              company: j.company,
-              score,
-            });
-          }
-          if (topJobs.length >= 3) break;
-        }
-
-        if (topJobs.length > 0) {
-          const summaryList = topJobs.map((j, idx) => `${idx + 1}. ${j.title} @ ${j.company} (${j.score}%)`).join(" | ");
-          const title = `🎯 Top 3 Job Opportunities Today`;
-          const body = `Matched to your resume: ${summaryList}. Tap to prepare & apply!`;
-
-          await sendNotification(user.id, {
-            title,
-            body,
-            url: `/jobs?highlight=${encodeURIComponent(topJobs[0].id)}`,
-            data: {
-              type: "daily_top_3_jobs",
-              jobIds: topJobs.map((j) => j.id),
-              scores: topJobs.map((j) => j.score),
+      // Generate embedding if missing and resume exists
+      if (!userEmbedding && process.env.OPENAI_API_KEY && hasResume) {
+        try {
+          const textToEmbed = `Resume: ${user.resume_text}\nTitle: ${user.job_title || ""}\nCompany: ${user.company || ""}`.slice(0, 8000);
+          const embRes = await fetch("https://api.openai.com/v1/embeddings", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+              "Content-Type": "application/json",
             },
+            body: JSON.stringify({
+              input: textToEmbed,
+              model: "text-embedding-3-small",
+            }),
           });
-          jobNotificationSent = true;
+          if (embRes.ok) {
+            const embData = await embRes.json();
+            userEmbedding = embData.data?.[0]?.embedding;
+            if (userEmbedding) {
+              await supabase.from("users").update({ embedding: userEmbedding }).eq("id", user.id);
+            }
+          }
+        } catch (e: any) {
+          console.warn(`[daily-digest] Failed embedding generation for ${user.id}:`, e.message);
         }
       }
-    } catch (err) {
-      console.error(`Failed to dispatch top 3 jobs notification for user ${user.id}:`, err);
+
+      let candidateMatches: any[] = [];
+
+      // Match against active scraped jobs
+      if (userEmbedding) {
+        const { data: vectorMatches, error: matchError } = await supabase.rpc("match_scraped_jobs", {
+          query_embedding: userEmbedding,
+          match_threshold: 0.15,
+          match_count: 60,
+        });
+
+        if (!matchError && vectorMatches) {
+          candidateMatches = vectorMatches;
+        }
+      }
+
+      // If vector matching returned few or user has no embedding, supplement with fresh jobs
+      if (candidateMatches.length < 5) {
+        const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: freshJobs } = await supabase
+          .from("scraped_jobs")
+          .select("id, title, company, location, url, posted_at, similarity")
+          .gte("posted_at", thirtyDaysAgoIso)
+          .order("posted_at", { ascending: false })
+          .limit(30);
+
+        if (freshJobs) {
+          candidateMatches = [...candidateMatches, ...freshJobs];
+        }
+      }
+
+      // Exclude current company and pick top 3 from distinct companies
+      const userCompany = user.company?.trim() || "";
+      const seenCompanies = new Set<string>();
+
+      for (const j of candidateMatches) {
+        if (!j.company) continue;
+        if (userCompany && isSameCompany(j.company, userCompany)) continue;
+        const cKey = j.company.trim().toLowerCase();
+        if (!seenCompanies.has(cKey)) {
+          seenCompanies.add(cKey);
+          const sim = Number(j.similarity) || 0.6;
+          const score = Math.min(98, Math.max(76, Math.round(52 + sim * 50)));
+
+          topJobs.push({
+            id: j.id,
+            title: j.title || "Job Opportunity",
+            company: j.company,
+            score,
+          });
+        }
+        if (topJobs.length >= 3) break;
+      }
+
+      if (topJobs.length > 0) {
+        const summaryList = topJobs.map((j, idx) => `${idx + 1}. ${j.title} @ ${j.company} (${j.score}%)`).join(" | ");
+        const title = `🎯 Top 3 Job Opportunities Today`;
+        let body = hasResume
+          ? `Matched to your resume: ${summaryList}. Tap to prepare & apply!`
+          : `Top tech openings today: ${summaryList}. Tap to prepare & apply!`;
+
+        if (isProfileIncomplete) {
+          const missingText = missingProfileFields.join(" & ");
+          body += ` 💡 Tip: Add your ${missingText} in your profile to unlock tailored 90%+ match accuracy and inside referrals!`;
+        }
+
+        const targetUrl = isProfileIncomplete
+          ? `/jobs?highlight=${encodeURIComponent(topJobs[0].id)}&wizard=profile`
+          : `/jobs?highlight=${encodeURIComponent(topJobs[0].id)}`;
+
+        await sendNotification(user.id, {
+          title,
+          body,
+          url: targetUrl,
+          data: {
+            type: "daily_top_3_jobs",
+            jobIds: topJobs.map((j) => j.id),
+            scores: topJobs.map((j) => j.score),
+            incompleteProfile: isProfileIncomplete,
+            missingProfileFields,
+            forceEmail: true,
+          },
+        });
+        jobNotificationSent = true;
+      }
     }
+  } catch (err) {
+    console.error(`Failed to dispatch top 3 jobs notification for user ${user.id}:`, err);
   }
 
   return {

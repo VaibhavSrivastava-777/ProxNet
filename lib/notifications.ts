@@ -148,6 +148,8 @@ export async function sendNotification(
       notifType === "chat_starter_reminder" ||
       notifType === "starter_reminder" ||
       notifType.startsWith("job_match") ||
+      notifType === "daily_top_3_jobs" ||
+      notifType === "morning_job_brief" ||
       notifType.startsWith("weekly_digest") ||
       notifType.startsWith("daily_engagement") ||
       notifType.startsWith("event_") ||

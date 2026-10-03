@@ -117,19 +117,21 @@ async function runTests() {
   const checkForce = checkEmailRateLimit(testUserId, "chat_message", true);
   assert(checkForce.allowed === true, "forceEmail: true bypasses cooldown");
 
-  // Test daily cap limit
+  // Test daily cap limit has been removed: 6+ emails are permitted
   const cappedUser = `capped-user-${Date.now()}`;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 15; i++) {
     const c = checkEmailRateLimit(cappedUser, `type_${i}`);
-    assert(c.allowed === true, `Send ${i + 1} allowed`);
+    assert(c.allowed === true, `Send ${i + 1} allowed (hard daily cap removed)`);
     recordEmailSent(cappedUser, `type_${i}`);
   }
 
-  // 6th send should be blocked by daily limit
-  const checkCap = checkEmailRateLimit(cappedUser, "daily_engagement");
-  assert(checkCap.allowed === false, "6th email is blocked by 5/day limit");
-  assert(checkCap.reason?.includes("Daily limit"), "Reason mentions daily limit");
-  console.log("✅ Anti-spam rate limiter and cooldown verified.");
+  // Digest cooldown removed: subsequent digests allowed without 4-hour delay
+  const checkDigest1 = checkEmailRateLimit(testUserId, "weekly_digest");
+  assert(checkDigest1.allowed === true, "1st weekly digest allowed");
+  recordEmailSent(testUserId, "weekly_digest");
+  const checkDigest2 = checkEmailRateLimit(testUserId, "weekly_digest");
+  assert(checkDigest2.allowed === true, "Subsequent digest allowed immediately (cooldown removed)");
+  console.log("✅ Anti-spam rate limiter (hard cap & digest cooldown removed) verified.");
 
   console.log("\n=================================================");
   console.log("🎉 ALL CONTEXT EMAIL TESTS PASSED SUCCESSFULLY!  ");

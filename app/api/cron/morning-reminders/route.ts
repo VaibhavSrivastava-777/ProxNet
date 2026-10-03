@@ -39,68 +39,13 @@ export async function handleMorningReminders(request?: Request | null, bypassAut
   // Use a 20-hour window so daily morning runs (e.g., 9:00 AM) are never skipped due to minor cron invocation drift
   const twentyFourHoursAgo = new Date(now - 20 * 60 * 60 * 1000).toISOString();
 
-  let profileRemindersSent = 0;
   let starterRemindersSent = 0;
   const auditLog: Array<{ type: string; userId: string; title: string; url: string }> = [];
 
   // =========================================================================
-  // 1. INCOMPLETE PROFILES REMINDERS
+  // NOTE: Standalone profile reminders have been removed per specification.
+  // Profile completion reminders are clubbed into the Morning Job notifications.
   // =========================================================================
-  try {
-    const { data: activeUsers, error: usersErr } = await supabase
-      .from("users")
-      .select("id, email, full_name, company, job_title, home_lat, office_lat")
-      .eq("is_active", true)
-      .eq("is_blocked", false);
-
-    if (!usersErr && activeUsers) {
-      // Find users with incomplete profiles (missing name, title, company, or location)
-      const incompleteUsers = activeUsers.filter((u) => {
-        const hasName = Boolean(u.full_name?.trim());
-        const hasTitle = Boolean(u.job_title?.trim());
-        const hasCompany = Boolean(u.company?.trim());
-        const hasLocation = Boolean(u.home_lat || u.office_lat);
-        return !hasName || !hasTitle || !hasCompany || !hasLocation;
-      });
-
-      // Find users who already received a profile reminder in the last 24 hours
-      const { data: recentProfileNotifs } = await supabase
-        .from("in_app_notifications")
-        .select("user_id")
-        .eq("url", "/profile")
-        .gte("created_at", twentyFourHoursAgo);
-
-      const recentlyRemindedProfiles = new Set((recentProfileNotifs || []).map((n) => n.user_id));
-
-      for (const u of incompleteUsers) {
-        if (recentlyRemindedProfiles.has(u.id)) continue;
-
-        try {
-          const title = "📝 Complete your ProxNet profile";
-          const body = "Add your designation, company, and location to get discovered by professional neighbors and unlock full access!";
-          const targetUrl = "/profile";
-
-          await sendNotification(u.id, {
-            title,
-            body,
-            url: targetUrl,
-            data: {
-              type: "profile_reminder",
-              soundType: "notification",
-              sound: "default",
-            },
-          });
-
-          profileRemindersSent++;
-          auditLog.push({ type: "profile_reminder", userId: u.id, title, url: targetUrl });
-        } catch (err) {
-          console.warn(`Failed to send profile reminder to ${u.id}:`, err);
-        }
-      }
-    }
-  } catch (profileErr) {
-    console.error("Error processing incomplete profile reminders:", profileErr);
-  }
 
   // =========================================================================
   // 2. UNRESPONDED INITIAL OPENING MESSAGES (>24h)
@@ -402,19 +347,35 @@ export async function handleMorningReminders(request?: Request | null, bypassAut
           ? `\u{1F305} Morning Brief: ${strongMatchCount} Strong Match${strongMatchCount > 1 ? "es" : ""} found!`
           : `\u{1F305} Morning Brief: ${newJobCount} new role${newJobCount > 1 ? "s" : ""} posted`;
 
+        // Check for missing profile fields to club profile completion guidance
+        const missingFields: string[] = [];
+        if (!seeker.job_title?.trim()) missingFields.push("current designation");
+        if (!seeker.company?.trim()) missingFields.push("company");
+        const isProfileIncomplete = missingFields.length > 0;
+
         const topCompanyList = Array.from(newCompanies).slice(0, 3).join(", ");
-        const briefBody = strongMatchCount > 0
+        let briefBody = strongMatchCount > 0
           ? `${strongMatchCount} new 75%+ matches for your profile. ${newJobCount} total new roles across ${newCompanies.size} companies (${topCompanyList}). Tap to review!`
           : `${newJobCount} new roles from ${topCompanyList}${newCompanies.size > 3 ? ` and ${newCompanies.size - 3} more` : ""}. Check your personalized matches!`;
+
+        if (isProfileIncomplete) {
+          briefBody += ` 💡 Tip: Add your ${missingFields.join(" & ")} to sharpen match accuracy & direct referrals!`;
+        }
+
+        const briefUrl = isProfileIncomplete
+          ? "/jobs?morning_brief=1&wizard=profile"
+          : "/jobs?morning_brief=1";
 
         await sendNotification(seeker.id, {
           title: briefTitle,
           body: briefBody,
-          url: "/jobs?morning_brief=1",
+          url: briefUrl,
           data: {
             type: "morning_job_brief",
             newJobCount,
             strongMatchCount,
+            incompleteProfile: isProfileIncomplete,
+            missingProfileFields: missingFields,
             soundType: "notification",
             sound: "default",
           },
@@ -425,7 +386,7 @@ export async function handleMorningReminders(request?: Request | null, bypassAut
           type: "morning_job_brief",
           userId: seeker.id,
           title: briefTitle,
-          url: "/jobs?morning_brief=1",
+          url: briefUrl,
         });
       }
     }
@@ -436,10 +397,9 @@ export async function handleMorningReminders(request?: Request | null, bypassAut
   return NextResponse.json({
     success: true,
     scheduledTime: "09:00 AM IST (03:30 UTC)",
-    profileRemindersSent,
     starterRemindersSent,
     jobBriefsSent,
-    totalSent: profileRemindersSent + starterRemindersSent + jobBriefsSent,
+    totalSent: starterRemindersSent + jobBriefsSent,
     auditLog: auditLog.slice(0, 30),
   });
 }

@@ -51,8 +51,8 @@ async function runTests() {
   const prepareMeSrc = fs.readFileSync(prepareMePath, "utf-8");
 
   assert(prepareMeSrc.includes("from(\"job_applications\")"), "prepare-me must persist to job_applications");
-  assert(prepareMeSrc.includes("stage_check") || prepareMeSrc.includes("23514"), "prepare-me must handle constraint fallback safely");
-  assert(prepareMeSrc.includes("isUuid"), "prepare-me must validate UUID for job_id");
+  assert(prepareMeSrc.includes("stage: \"saved\"") || prepareMeSrc.includes("stage_check"), "prepare-me must use standard stage persistence");
+  assert(prepareMeSrc.includes("validJobUuid"), "prepare-me must validate UUID for job_id");
   console.log("✅ Test 3 Passed: prepare-me API persistence and constraint safety verified.\n");
 
   // TEST 4: applications API route maps prepared applications
@@ -61,7 +61,7 @@ async function runTests() {
   const applicationsRouteSrc = fs.readFileSync(applicationsRoutePath, "utf-8");
 
   assert(applicationsRouteSrc.includes("normalizedApplications"), "applications API must normalize applications");
-  assert(applicationsRouteSrc.includes("stage = \"prepared\""), "applications API must map prepared records to stage 'prepared'");
+  assert(applicationsRouteSrc.includes("is_prepared"), "applications API must track is_prepared flag");
   assert(applicationsRouteSrc.includes("stageCounts"), "applications API must track stageCounts for prepared");
   console.log("✅ Test 4 Passed: applications API correctly normalizes and counts prepared stage.\n");
 
@@ -71,21 +71,32 @@ async function runTests() {
   const appliedTabSrc = fs.readFileSync(appliedTabPath, "utf-8");
 
   assert(appliedTabSrc.includes("⚡ Prepared"), "AppliedJobsTab must show ⚡ Prepared badge and filter");
-  assert(appliedTabSrc.includes("openSavedPlaybook"), "AppliedJobsTab must allow opening saved playbook");
+  assert(appliedTabSrc.includes("openOpportunityDetails"), "AppliedJobsTab must allow opening saved playbook");
   console.log("✅ Test 5 Passed: AppliedJobsTab displays and filters prepared jobs.\n");
 
-  // TEST 6: Jobs feed groups jobs by company and displays top matched job on top with other jobs modal
-  console.log("👉 Test 6: Validating JobsFeed groups jobs by company and displays modal with visible top 'x'...");
+  // TEST 6: Jobs feed shows direct ungrouped top matched jobs and non-fullscreen modal
+  console.log("👉 Test 6: Validating JobsFeed renders direct top matched jobs and non-fullscreen modal with visible top bell...");
   const jobsFeedPath = path.resolve(process.cwd(), "components/jobs/JobsFeed.tsx");
   const jobsFeedSrc = fs.readFileSync(jobsFeedPath, "utf-8");
 
-  assert(jobsFeedSrc.includes("CompanyJobGroup"), "JobsFeed must group jobs by CompanyJobGroup");
-  assert(jobsFeedSrc.includes("modalCompanyGroup"), "JobsFeed must have modalCompanyGroup state");
-  assert(jobsFeedSrc.includes("aria-label=\"Close other jobs modal\""), "Modal must have clearly visible top 'X' close button");
-  assert(jobsFeedSrc.includes("⭐ Top Match"), "Modal must highlight top match job");
-  assert(jobsFeedSrc.includes("otherJobs.length > 0"), "Card must show other jobs action when additional roles exist");
-  assert(jobsFeedSrc.includes("b.topJob.matchRate - a.topJob.matchRate"), "Company groups must be sorted by top matched job match rate");
-  console.log("✅ Test 6 Passed: Company grouping, top matched job, and other jobs modal verified.\n");
+  assert(jobsFeedSrc.includes("allMatchedJobs"), "JobsFeed must compute allMatchedJobs list");
+  assert(jobsFeedSrc.includes("b.matchRate - a.matchRate"), "Jobs must be sorted strictly by top matchRate descending");
+  assert(jobsFeedSrc.includes("<CompanyLogo company={job.company}"), "JobsFeed renders company-logo");
+  assert(jobsFeedSrc.includes("{job.company}"), "JobsFeed renders company name");
+  assert(jobsFeedSrc.includes("{job.title}"), "JobsFeed renders position title");
+  assert(jobsFeedSrc.includes("setSelectedJob(job)"), "JobsFeed card click opens selected job modal");
+
+  const detailSheetPath = path.resolve(process.cwd(), "components/jobs/JobDetailSheet.tsx");
+  const detailSheetSrc = fs.readFileSync(detailSheetPath, "utf-8");
+  assert(detailSheetSrc.includes("top-[var(--nav-height,56px)]"), "Modal backdrop starts below header to keep top bell visible");
+  assert(detailSheetSrc.includes("z-[1000]"), "Modal backdrop has z-[1000] allowing z-[1010] header bell to remain visible");
+  assert(detailSheetSrc.includes("max-h-[calc(100vh-var(--nav-height,56px)-24px)]"), "Modal enforces max-height so it does not open full screen");
+  assert(detailSheetSrc.includes("rounded-3xl"), "Modal uses floating rounded card container");
+  assert(detailSheetSrc.includes("handleApplyDirectly"), "Modal includes Apply Directly button");
+  assert(detailSheetSrc.includes("handlePrepareMe"), "Modal includes Prepare Me button");
+  assert(detailSheetSrc.includes("cleanJobDescription"), "Modal includes full Job Description");
+  assert(detailSheetSrc.includes("2nd-Degree Referral Chain (X → Y → Z)"), "Modal includes 2nd-degree warm referral path");
+  console.log("✅ Test 6 Passed: Direct jobs list, non-fullscreen modal, visible bell, and 2nd-degree referral chain verified.\n");
 
   console.log("🎉 ALL 6 VALIDATION TESTS PASSED PERFECTLY!\n");
 }

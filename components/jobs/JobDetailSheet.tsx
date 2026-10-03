@@ -224,6 +224,7 @@ export function JobDetailSheet({
   const [preparation, setPreparation] = useState<PreparationData | null>(cachedPreparation || null);
   const [prepareError, setPrepareError] = useState<string | null>(null);
   const [copiedPitch, setCopiedPitch] = useState(false);
+  const [copiedBridgeNote, setCopiedBridgeNote] = useState(false);
   const [directApplied, setDirectApplied] = useState(false);
   const [creditDeductionInfo, setCreditDeductionInfo] = useState<{ prev: number; current: number } | null>(null);
   const [linkNotice, setLinkNotice] = useState<{ message: string; url?: string } | null>(null);
@@ -390,11 +391,11 @@ export function JobDetailSheet({
 
   return (
     <div
-      className="fixed inset-0 z-[1200] flex justify-end bg-black/60 backdrop-blur-sm animate-fadeIn"
+      className="fixed inset-x-0 bottom-0 top-[var(--nav-height,56px)] z-[1000] flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-fadeIn"
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-2xl bg-[var(--color-surface)] h-full overflow-y-auto shadow-2xl border-l border-[var(--color-border)] flex flex-col animate-slideLeft overscroll-contain"
+        className="relative w-full max-w-2xl max-h-[calc(100vh-var(--nav-height,56px)-24px)] rounded-3xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-2xl flex flex-col overflow-hidden animate-scaleIn"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
@@ -425,7 +426,7 @@ export function JobDetailSheet({
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 p-5 sm:p-6 flex flex-col gap-6">
+        <div className="flex-1 p-5 sm:p-6 flex flex-col gap-6 overflow-y-auto overscroll-contain">
           {/* Metadata badges row */}
           <div className="flex flex-wrap items-center gap-2">
             <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${matchColor}`}>
@@ -864,23 +865,62 @@ export function JobDetailSheet({
                     </svg>
                   </a>
 
-                  {/* Tailored Outreach Pitch with 1-click copy */}
-                  <div className="p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border-light)] flex flex-col gap-2 mt-1">
+                  {/* 2nd-Degree Warm Referral Chain (X -> Y -> Z) */}
+                  <div className="mt-3 p-3.5 rounded-2xl bg-gradient-to-br from-blue-500/10 via-[var(--color-surface-secondary)] to-indigo-500/5 border border-blue-500/25 flex flex-col gap-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-tertiary)]">
-                        Tailored Outreach Note
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs font-bold">
+                          🔗
+                        </span>
+                        <h4 className="text-xs font-bold text-[var(--color-text)] m-0">2nd-Degree Referral Chain (X → Y → Z)</h4>
+                      </div>
+                      <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/30">
+                        Mutual Referral Bridge
                       </span>
-                      <button
-                        type="button"
-                        onClick={copyOutreachPitch}
-                        className="text-xs font-bold text-[var(--color-primary)] hover:underline cursor-pointer bg-transparent border-none p-0"
-                      >
-                        {copiedPitch ? "✓ Copied to Clipboard!" : "Copy Note"}
-                      </button>
                     </div>
-                    <p className="text-xs text-[var(--color-text-secondary)] italic leading-relaxed m-0 select-all">
-                      "{preparation.networkingPath.customPitch}"
+
+                    <p className="text-xs text-[var(--color-text-secondary)] m-0 leading-relaxed">
+                      Tap below to see your <strong>2nd-degree connections on LinkedIn</strong> who work at {job.company} via your mutual friends (Y):
                     </p>
+
+                    <a
+                      href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(job.company + " " + job.title)}&network=%5B"S"%5D`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl font-bold text-xs bg-[#0A66C2] text-white hover:bg-[#004182] transition-all shadow-sm no-underline"
+                    >
+                      <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">
+                        <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
+                      </svg>
+                      <span>Find 2nd-Degree Connections (Y → Z) on LinkedIn</span>
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+
+                    {/* Pre-drafted 1-click intro message for User X to send to mutual connection Y */}
+                    <div className="p-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border-light)] flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-tertiary)]">
+                          1-Click Warm Bridge Intro (Send to Y to introduce Z)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const bridgeNote = `Hi [Name], hope you're having a great week! I saw you're connected with someone on the team at ${job.company}. I'm applying for their ${job.title} opening—would you be open to introducing us or putting in a brief word? Really appreciate your help!`;
+                            navigator.clipboard.writeText(bridgeNote);
+                            setCopiedBridgeNote(true);
+                            setTimeout(() => setCopiedBridgeNote(false), 2500);
+                          }}
+                          className="text-xs font-bold text-[var(--color-primary)] hover:underline cursor-pointer bg-transparent border-none p-0"
+                        >
+                          {copiedBridgeNote ? "✓ Copied to Clipboard!" : "Copy Intro Note"}
+                        </button>
+                      </div>
+                      <p className="text-xs text-[var(--color-text-secondary)] italic leading-relaxed m-0 select-all">
+                        "Hi [Name], hope you're having a great week! I saw you're connected with someone on the team at {job.company}. I'm applying for their ${job.title} opening—would you be open to introducing us or putting in a brief word? Really appreciate your help!"
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -56,7 +56,7 @@ export function checkEmailRateLimit(
     userEmailRateMap.set(userId, stats);
   }
 
-  // High-priority live beacon and direct contact notifications bypass daily email caps
+  // High-priority live beacon and direct contact notifications bypass email checks
   if (
     notificationType === "beacon_broadcast" ||
     notificationType === "beacon_join" ||
@@ -65,13 +65,8 @@ export function checkEmailRateLimit(
     return { allowed: true };
   }
 
-  // Absolute hard cap per day
-  const maxDaily = forceEmail ? 10 : 5;
-  if (stats.countToday >= maxDaily) {
-    return { allowed: false, reason: `Daily limit reached (${stats.countToday}/${maxDaily})` };
-  }
-
-  // Cooldown rules for real-time chat
+  // NOTE: Hard daily email cap and digest cooldown have been removed per specification.
+  // Cooldown rules are preserved exclusively for real-time chat rapid exchanges.
   const isChatMessage =
     notificationType === "chat_message" ||
     notificationType === "colleague_message" ||
@@ -84,21 +79,6 @@ export function checkEmailRateLimit(
     const CHAT_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
     if (timeSinceLastChat < CHAT_COOLDOWN_MS) {
       return { allowed: false, reason: `Chat email cooldown active (${Math.round((CHAT_COOLDOWN_MS - timeSinceLastChat) / 1000)}s left)` };
-    }
-  }
-
-  // Cooldown rules for digests / nudges / engagement
-  const isDigestOrNudge =
-    notificationType.startsWith("weekly_digest") ||
-    notificationType.startsWith("daily_engagement") ||
-    notificationType.startsWith("referral_network_nudge") ||
-    notificationType === "profile_reminder";
-
-  if (isDigestOrNudge && !forceEmail) {
-    const timeSinceLastDigest = now - stats.lastDigestSentAt;
-    const DIGEST_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours
-    if (timeSinceLastDigest < DIGEST_COOLDOWN_MS) {
-      return { allowed: false, reason: `Digest/nudge cooldown active (${Math.round((DIGEST_COOLDOWN_MS - timeSinceLastDigest) / (60 * 1000))}m left)` };
     }
   }
 
@@ -363,6 +343,58 @@ export function generateContextEmail(payload: EmailTemplatePayload): GeneratedEm
       <p style="font-size: 13px; color: #64748b; margin: 0;">
         ProxNet also identifies verified neighbors currently working at this company who can refer you directly.
       </p>
+    `;
+  }
+
+  // 6b. Daily Top 3 Jobs & Morning Job Brief (with clubbed profile completion when incomplete)
+  else if (notifType === "daily_top_3_jobs" || notifType === "morning_job_brief") {
+    category = "job";
+    badgeText = "🎯 TOP 3 DAILY JOBS";
+    badgeColor = "#0A66C2";
+    badgeBg = "#eff6ff";
+    heading = title || "Top Job Opportunities Today";
+    ctaLabel = "Explore & Prepare Applications &rarr;";
+    ctaUrl = actionUrl;
+
+    const isIncomplete = Boolean(data?.incompleteProfile);
+    const missingFields: string[] = Array.isArray(data?.missingProfileFields)
+      ? data.missingProfileFields
+      : [];
+
+    let profilePromptHtml = "";
+    if (isIncomplete) {
+      const missingText = missingFields.length > 0
+        ? missingFields.join(" & ")
+        : "resume and job preferences";
+
+      profilePromptHtml = `
+        <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 16px; margin-top: 18px;">
+          <div style="font-weight: 700; color: #92400e; font-size: 14px; margin-bottom: 6px;">
+            💡 Tip: Boost Your Job Match Accuracy
+          </div>
+          <p style="font-size: 13px; color: #78350f; margin: 0 0 12px 0; line-height: 1.5;">
+            Your profile is currently missing your <strong>${escapeHtml(missingText)}</strong>. Complete your profile in 60 seconds to unlock verified 90%+ match scoring and direct referrals from employees in your neighborhood!
+          </p>
+          <a href="${baseUrl}/qa?wizard=profile" style="display: inline-block; background-color: #f59e0b; color: #ffffff; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 6px; text-decoration: none;">
+            Complete Profile &rarr;
+          </a>
+        </div>
+      `;
+    }
+
+    bodyHtml = `
+      <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 16px 0;">
+        Here are today's top curated opportunities selected for your tech cluster:
+      </p>
+      <div style="background-color: #f8fafc; border-left: 4px solid #0A66C2; border-radius: 0 8px 8px 0; padding: 14px 16px; margin-bottom: 16px;">
+        <p style="font-size: 15px; color: #1e293b; line-height: 1.6; margin: 0;">
+          ${escapeHtml(body)}
+        </p>
+      </div>
+      <p style="font-size: 13px; color: #64748b; margin: 0;">
+        ProxNet also identifies verified neighbors currently working at these companies who can refer you directly.
+      </p>
+      ${profilePromptHtml}
     `;
   }
 
