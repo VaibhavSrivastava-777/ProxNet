@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { isIndiaLocation } from "./jobs/job-filters";
 
 // Helper to strip HTML and decode common entities
 export const stripHtml = (html: string): string => {
@@ -261,7 +262,7 @@ export const successfactorsSitemapStrategy: ScrapeStrategy = async (
 
       if (title && url) {
         // Simple location extraction from url or title
-        let location = "Remote";
+        let location = "India";
         const urlLower = url.toLowerCase();
         const locations = ["bangalore", "bengaluru", "mumbai", "hyderabad", "delhi", "pune", "remote", "chennai", "noida", "gurgaon"];
         for (const loc of locations) {
@@ -270,14 +271,17 @@ export const successfactorsSitemapStrategy: ScrapeStrategy = async (
             break;
           }
         }
-        rssJobs.push({
-          title,
-          location,
-          url,
-          posted_at,
-          description: description || title,
-          source: "successfactors_sitemap",
-        });
+        // Strict India check on title, location, description
+        if (isIndiaLocation(location, description || title, title)) {
+          rssJobs.push({
+            title,
+            location,
+            url,
+            posted_at,
+            description: description || title,
+            source: "successfactors_sitemap",
+          });
+        }
       }
     }
     if (rssJobs.length > 0) {
@@ -286,37 +290,49 @@ export const successfactorsSitemapStrategy: ScrapeStrategy = async (
   }
 
   // Fallback to url entries
-  return allEntries.map((entry) => {
-    const cleanUrl = (entry.url || "").replace(/&amp;/g, "&").trim();
-    const parts = cleanUrl.split("/").filter(Boolean);
-    const jobIndex = parts.findIndex((p) => p.toLowerCase() === "job");
-    let title = "Job Opportunity";
-    let location = "India";
+  return allEntries
+    .map((entry) => {
+      const cleanUrl = (entry.url || "").replace(/&amp;/g, "&").trim();
+      const parts = cleanUrl.split("/").filter(Boolean);
+      const jobIndex = parts.findIndex((p) => p.toLowerCase() === "job");
+      let title = "Job Opportunity";
+      let location = "India";
 
-    if (jobIndex !== -1 && parts[jobIndex + 1]) {
-      const slug = decodeURIComponent(parts[jobIndex + 1]);
-      const cleanedSlug = slug
-        .replace(/-(IND|USA|CAN|GBR|AUS|SGP|DEU|FRA|NLD|IND|KA|MH|DL|TG|TN|AP)-\d+.*$/i, "")
-        .replace(/-\d{5,8}.*$/, "");
-      
-      const slugParts = cleanedSlug.split("-");
-      if (slugParts.length > 1) {
-        location = slugParts[0];
-        title = slugParts.slice(1).join(" ").replace(/_/g, " ").trim();
-      } else {
-        title = cleanedSlug.replace(/_/g, " ").trim();
+      if (jobIndex !== -1 && parts[jobIndex + 1]) {
+        const slug = decodeURIComponent(parts[jobIndex + 1]);
+        // If slug indicates foreign country (e.g. -USA-, -GBR-, -CAN-, -AUS-, etc.), skip
+        if (/-(USA|CAN|GBR|AUS|SGP|DEU|FRA|NLD|MEX|JPN)-\d+/i.test(slug)) {
+          return null;
+        }
+
+        const cleanedSlug = slug
+          .replace(/-(IND|KA|MH|DL|TG|TN|AP)-\d+.*$/i, "")
+          .replace(/-\d{5,8}.*$/, "");
+        
+        const slugParts = cleanedSlug.split("-");
+        if (slugParts.length > 1) {
+          location = slugParts[0];
+          title = slugParts.slice(1).join(" ").replace(/_/g, " ").trim();
+        } else {
+          title = cleanedSlug.replace(/_/g, " ").trim();
+        }
       }
-    }
 
-    return {
-      title: title || "Job Opportunity",
-      location: location || "India",
-      url: cleanUrl,
-      posted_at: entry.lastmod ? new Date(entry.lastmod).toISOString() : new Date().toISOString(),
-      description: `${title} role located at ${location}. View details and apply directly on the company career portal.`,
-      source: "successfactors_sitemap",
-    };
-  });
+      const desc = `${title} role located at ${location}. View details and apply directly on the company career portal.`;
+      if (!isIndiaLocation(location, desc, title)) {
+        return null;
+      }
+
+      return {
+        title: title || "Job Opportunity",
+        location: location || "India",
+        url: cleanUrl,
+        posted_at: entry.lastmod ? new Date(entry.lastmod).toISOString() : new Date().toISOString(),
+        description: desc,
+        source: "successfactors_sitemap",
+      };
+    })
+    .filter((j): j is ScrapedJob => j !== null);
 };
 
 export const customStrategy: ScrapeStrategy = async (boardUrl, companyName) => {

@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
-import { isSameCompany } from "@/lib/jobs/job-filters";
+import { isSameCompany, isIndiaLocation } from "@/lib/jobs/job-filters";
 
 export interface DailyDigestResult {
   userId: string;
@@ -192,6 +192,7 @@ export async function sendDailyUserDigest(userId: string): Promise<DailyDigestRe
 
       for (const j of candidateMatches) {
         if (!j.company) continue;
+        if (!isIndiaLocation(j.location, j.description, j.title)) continue;
         if (userCompany && isSameCompany(j.company, userCompany)) continue;
         const cKey = j.company.trim().toLowerCase();
         if (!seenCompanies.has(cKey)) {

@@ -46,7 +46,7 @@ async function handleJobMatches(request: Request) {
   const twentyHoursAgo = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
 
   const { rerankJobsForCandidate } = await import("@/lib/jobs/reranker");
-  const { isSameCompany } = await import("@/lib/jobs/job-filters");
+  const { isSameCompany, isIndiaLocation } = await import("@/lib/jobs/job-filters");
 
   // 2. Evaluate top 3 job matches for each member (clubbing profile completion if incomplete)
   for (const user of users) {
@@ -147,6 +147,7 @@ async function handleJobMatches(request: Request) {
     const userCompany = user.company?.trim() || "";
 
     for (const job of candidateJobs) {
+      if (!isIndiaLocation(job.location, job.description, job.title)) continue;
       if (job.posted_at) {
         const jobDate = new Date(job.posted_at);
         if (!isNaN(jobDate.getTime()) && jobDate < thirtyDaysAgo) continue;

@@ -5,6 +5,7 @@ import { CompanyLogo } from "@/components/qa/QuestionList";
 import { JobDetailSheet, JobItem } from "./JobDetailSheet";
 import { detectFunctionalDiscipline, relateDisciplines, FunctionalDiscipline } from "@/lib/jobs/discipline";
 import { computeSkillAlignment } from "@/lib/jobs/skill-matching";
+import { isIndiaLocation } from "@/lib/jobs/job-filters";
 
 interface RawCompanyData {
   company: string;
@@ -160,6 +161,7 @@ export function JobsFeed() {
       if (!comp.jobs || comp.jobs.length === 0) continue;
 
       for (const j of comp.jobs) {
+        if (!isIndiaLocation(j.location, j.description, j.title)) continue;
         const jobDisc = detectFunctionalDiscipline(j.title, j.description);
         const skillAlign = computeSkillAlignment(candidateContext, j);
         let matchRate = 50;

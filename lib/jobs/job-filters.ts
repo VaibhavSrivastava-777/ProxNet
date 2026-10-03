@@ -27,35 +27,123 @@ export const INDIAN_STATES = [
 ];
 
 export const FOREIGN_DISQUALIFIERS = [
-  "united states", "usa", "u.s.", "u.s.a.", "us", "san francisco", "seattle", "new york",
+  "united states", "usa", "u.s.", "u.s.a.", "san francisco", "seattle", "new york",
   "austin", "chicago", "boston", "los angeles", "california", "texas",
   "united kingdom", "uk", "london", "emea", "latam", "apac", "canada",
   "toronto", "vancouver", "europe", "germany", "berlin", "munich",
   "france", "paris", "australia", "sydney", "melbourne", "singapore",
   "netherlands", "amsterdam", "ireland", "dublin", "israel", "tel aviv",
   "brazil", "mexico", "philippines", "poland", "spain", "madrid", "barcelona",
-  "sweden", "stockholm", "switzerland", "zurich", "geneva", "japan", "tokyo"
+  "sweden", "stockholm", "switzerland", "zurich", "geneva", "japan", "tokyo",
+  "atlanta", "tampa", "charlotte", "raleigh", "dallas", "houston",
+  "sunnyvale", "santa clara", "mountain view", "palo alto", "redmond", "bellevue",
+  "minneapolis", "denver", "boulder", "philadelphia", "pittsburgh", "detroit",
+  "cleveland", "columbus", "jersey city", "louisville", "florida", "georgia",
+  "north carolina", "south carolina", "virginia", "ohio", "illinois",
+  "pennsylvania", "michigan", "colorado", "washington", "arizona",
+  "massachusetts", "new jersey", "connecticut"
 ];
 
 /**
- * Checks if a job location represents an Indian position or an acceptable India-friendly remote position.
- * Disqualifies foreign locations, US-only remote jobs, and omitted locations with no India context.
+ * Checks if a job title/subject contains foreign country or regional disqualifiers.
+ * Detects patterns like "USA-FL", "Account Executive - US", "Senior Manager (London)", etc.
  */
-export function isIndiaLocation(location?: string | null, description?: string | null): boolean {
-  if (!location || !location.trim()) {
-    // If location is omitted, verify if the description explicitly mentions India or an Indian tech city
-    if (!description) return false;
-    const descLower = description.toLowerCase();
-    const hasIndiaCity = INDIAN_TECH_HUBS.some(city => descLower.includes(city));
-    const hasIndiaWord = /\bindia\b/i.test(descLower);
-    return hasIndiaCity || hasIndiaWord;
+export function hasForeignTitleIndicators(title?: string | null): boolean {
+  if (!title) return false;
+  const t = title.trim();
+  const tLower = t.toLowerCase();
+
+  // 1. SuccessFactors / ATS country codes: USA-FL, USA-CA, AUS-VIC, GBR-37, CAN-ON, etc.
+  if (/\b(USA-[A-Z]{2}|AUS-[A-Z]{2,3}|GBR-[A-Z0-9]+|CAN-[A-Z]{2}|DEU-[A-Z0-9]+|FRA-[A-Z0-9]+|MEX-[A-Z0-9]+)\b/i.test(t)) {
+    return true;
   }
 
-  const loc = location.toLowerCase().trim();
+  // 2. Explicit USA or United States
+  if (/\b(usa|united states|u\.s\.a\.)\b/i.test(t)) {
+    const mentionsIndia = INDIAN_TECH_HUBS.some(city => tLower.includes(city)) || /\bindia\b/i.test(tLower);
+    if (!mentionsIndia) return true;
+  }
 
-  // 1. Check for explicit foreign disqualifiers first
-  const isForeign = FOREIGN_DISQUALIFIERS.some(foreign => {
-    // Exact word boundary or substring depending on length
+  // 3. Explicit US with boundaries or suffixes (e.g. " - US", " (US)", " [US]", " / US", ", US", " – US", " — US", " US Remote")
+  const usBoundaryRegex = /(?:[\-\–\—\/\|,\[\(]\s*)(?:US|U\.S\.)(?:\s*[\-\–\—\/\|,\]\)]|\s*(?:remote|only|east|west|central|north|south|region|territory|market)\b|$)/i;
+  const usEndRegex = /(?:^|\s)(?:US|U\.S\.)\s*$/i;
+  const usPrefixRegex = /^(?:US|U\.S\.)\s*[\-\–\—\/\|,:]/i;
+  if (usBoundaryRegex.test(t) || usEndRegex.test(t) || usPrefixRegex.test(t)) {
+    const mentionsIndia = INDIAN_TECH_HUBS.some(city => tLower.includes(city)) || /\bindia\b/i.test(tLower);
+    if (!mentionsIndia) return true;
+  }
+
+  // 4. Foreign regions (EMEA, LATAM, North America, UK, Europe, etc.)
+  const regionRegex = /(?:[\-\–\—\/\|,\[\(]\s*)(?:EMEA|LATAM|North America|United Kingdom|UK|Canada|Australia|Germany|France|Singapore|Europe)\b/i;
+  if (regionRegex.test(t)) {
+    const mentionsIndia = INDIAN_TECH_HUBS.some(city => tLower.includes(city)) || /\bindia\b/i.test(tLower);
+    if (!mentionsIndia) return true;
+  }
+
+  // 5. Foreign tech cities in title
+  const hasForeignCity = FOREIGN_DISQUALIFIERS.some(foreign => {
+    if (foreign.length <= 4) return false;
+    const regex = new RegExp(`(?:^|[\\s\\(\\[\\-\\–\\—\\/\\|,])\\b${foreign}\\b(?:[\\s\\)\\]\\-\\–\\—\\/\\|,]|$|\\d)`, "i");
+    return regex.test(tLower);
+  });
+  if (hasForeignCity) {
+    const mentionsIndia = INDIAN_TECH_HUBS.some(city => tLower.includes(city)) || /\bindia\b/i.test(tLower);
+    if (!mentionsIndia) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Checks if a job location represents an Indian position or an acceptable India-friendly remote position.
+ * Disqualifies foreign locations, US-only remote jobs, foreign titles, and omitted locations with no India context.
+ */
+export function isIndiaLocation(
+  location?: string | null,
+  description?: string | null,
+  title?: string | null
+): boolean {
+  // 1. If title explicitly indicates foreign location, reject immediately
+  if (title && hasForeignTitleIndicators(title)) {
+    return false;
+  }
+
+  const loc = (location || "").toLowerCase().trim();
+  const desc = (description || "").toLowerCase();
+
+  // 2. Check if location has an Indian city or state FIRST
+  const isIndianCity = INDIAN_TECH_HUBS.some(city => loc.includes(city));
+  const isIndianState = INDIAN_STATES.some(state => loc.includes(state));
+  const hasIndiaExplicit =
+    loc.includes("india") ||
+    loc === "in" ||
+    loc === "ind" ||
+    loc.includes("pan india") ||
+    /\b(IND-\d+|IN,\s*\d+)\b/i.test(title || "") ||
+    /\bindia\b/i.test(title || "");
+
+  // If it's an Indian city or state or explicitly India, check if it's tainted by an explicit foreign marker (e.g. "USA-", "United States", "US")
+  if (isIndianCity || isIndianState || hasIndiaExplicit) {
+    const hasExplicitForeign =
+      /\bUSA-[A-Z]{2}\b/i.test(loc) ||
+      /\b(AUS-[A-Z]{2,3}|GBR-[A-Z0-9]+|CAN-[A-Z]{2}|DEU-[A-Z0-9]+|FRA-[A-Z0-9]+|MEX-[A-Z0-9]+)\b/i.test(loc) ||
+      /\b(usa|united states|u\.s\.a\.)\b/i.test(loc) ||
+      /(?:[\-\–\—\/\|,\[\(]\s*)(?:US|U\.S\.)(?:\s*[\-\–\—\/\|,\]\)]|\s*(?:only|east|west)\b|$)/i.test(loc);
+
+    // If it has Indian hub and no explicit foreign marker, it is a valid India job!
+    if (!hasExplicitForeign) {
+      return true;
+    }
+    // If it has explicit foreign marker (e.g. Bangalore, USA), reject
+    return false;
+  }
+
+  // 3. Check for foreign indicators in location
+  const hasUsaStateTag = /\bUSA-[A-Z]{2}\b/i.test(loc);
+  const hasOtherCountryTag = /\b(AUS-[A-Z]{2,3}|GBR-[A-Z0-9]+|CAN-[A-Z]{2}|DEU-[A-Z0-9]+|FRA-[A-Z0-9]+|MEX-[A-Z0-9]+)\b/i.test(loc);
+  const hasUsPostalCode = /,\s*(?:al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy)\b/i.test(loc);
+
+  const isForeignLoc = hasUsaStateTag || hasOtherCountryTag || hasUsPostalCode || FOREIGN_DISQUALIFIERS.some(foreign => {
     if (foreign.length <= 4) {
       const escaped = foreign.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const regex = new RegExp(`(^|[^a-z])${escaped}([^a-z]|$)`, "i");
@@ -64,28 +152,15 @@ export function isIndiaLocation(location?: string | null, description?: string |
     return loc.includes(foreign);
   });
 
-  // If explicitly foreign and doesn't mention India, reject immediately
-  const mentionsIndiaExplicitly = loc.includes("india") || loc === "in" || loc === "ind" || loc.includes("pan india");
-  if (isForeign && !mentionsIndiaExplicitly) {
+  if (isForeignLoc) {
     return false;
   }
 
-  // 2. Check if it's an Indian city or state
-  const isIndianCity = INDIAN_TECH_HUBS.some(city => loc.includes(city));
-  const isIndianState = INDIAN_STATES.some(state => loc.includes(state));
-  if (isIndianCity || isIndianState || mentionsIndiaExplicitly) {
-    return true;
-  }
-
-  // 3. Handle remote designations
+  // 4. Handle remote designations
   const isRemote = loc.includes("remote") || loc.includes("anywhere") || loc.includes("work from home") || loc.includes("wfh");
   if (isRemote) {
-    // If it mentions foreign regions, reject
-    if (isForeign) return false;
-
-    // Check description for US-only / foreign-only eligibility restrictions
-    if (description) {
-      const descLower = description.toLowerCase();
+    // Check description for US-only / foreign-only restrictions
+    if (desc) {
       const usOnlyPhrases = [
         "must be located in the us",
         "must be located in the united states",
@@ -95,14 +170,23 @@ export function isIndiaLocation(location?: string | null, description?: string |
         "us only",
         "north america only",
         "eligible to work in the united states",
+        "within the united states",
+        "resident of the united states",
       ];
-      if (usOnlyPhrases.some(phrase => descLower.includes(phrase))) {
+      if (usOnlyPhrases.some(phrase => desc.includes(phrase))) {
         return false;
       }
     }
 
-    // Generic remote without foreign disqualifiers is allowed
     return true;
+  }
+
+  // 5. If location was blank or unspecified, check description
+  if (!loc) {
+    if (!desc) return false;
+    const hasIndiaCityInDesc = INDIAN_TECH_HUBS.some(city => desc.includes(city));
+    const hasIndiaWordInDesc = /\bindia\b/i.test(desc);
+    return hasIndiaCityInDesc || hasIndiaWordInDesc;
   }
 
   return false;
@@ -361,9 +445,9 @@ export function isJobEligible(job: {
     return { eligible: false, reason: `Posted more than 30 days ago (${job.posted_at})` };
   }
 
-  // India Location Filter
-  if (!isIndiaLocation(job.location, job.description)) {
-    return { eligible: false, reason: `Location '${job.location || "unspecified"}' does not match India criteria` };
+  // India Location Filter (incorporating title & subject indicators)
+  if (!isIndiaLocation(job.location, job.description, job.title)) {
+    return { eligible: false, reason: `Location '${job.location || "unspecified"}' / Title '${job.title}' does not match India criteria` };
   }
 
   // Junior Role Filter

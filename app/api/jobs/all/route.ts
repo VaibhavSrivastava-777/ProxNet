@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { cleanJobTitle } from "@/lib/jobs/job-filters";
+import { cleanJobTitle, isIndiaLocation } from "@/lib/jobs/job-filters";
 import { isLikelyJobPostingUrl } from "@/lib/jobs/job-quality";
 import { detectCandidateDiscipline } from "@/lib/jobs/discipline";
 import { extractCandidateSkills } from "@/lib/jobs/skill-matching";
@@ -146,6 +146,7 @@ async function refreshCompaniesCache(supabase: any) {
       const compData = companiesMap.get(compKey)!;
       if (!compData.jobs.some(j => j.id === job.id)) {
         if (job.url && !isLikelyJobPostingUrl(job.url)) continue;
+        if (!isIndiaLocation(job.location, job.description, job.title)) continue;
         const { title: formattedTitle, url: formattedUrl } = cleanUrlAndTitle(job.title, job.url);
 
         compData.jobs.push({
@@ -169,8 +170,10 @@ async function refreshCompaniesCache(supabase: any) {
       });
     }
 
-    // Sort companies by total job count (descending)
-    cachedCompaniesList = Array.from(companiesMap.values()).sort((a, b) => b.jobs.length - a.jobs.length);
+    // Filter out companies with 0 eligible India jobs and sort by total job count (descending)
+    const activeCompanies = Array.from(companiesMap.values()).filter(c => c.jobs.length > 0 || c.contactsCount > 0);
+    cachedCompaniesList = activeCompanies.sort((a, b) => b.jobs.length - a.jobs.length);
+    cachedTotalJobsCount = activeCompanies.reduce((acc, c) => acc + c.jobs.length, 0);
     lastCacheTime = Date.now();
   } catch (err) {
     console.error("[/api/jobs/all] Error refreshing cache:", err);
