@@ -1083,12 +1083,30 @@ export function SuggestedJobs() {
           jobs = jobs.filter(j => (j.score ?? j.matchRate ?? 0) >= minScoreFilter);
         }
 
-        return { ...c, jobs };
+        // Sort jobs within each company by score descending, then by freshness
+        const sortedJobs = [...jobs].sort((a, b) => {
+          const scoreA = a.score ?? a.matchRate ?? 0;
+          const scoreB = b.score ?? b.matchRate ?? 0;
+          if (scoreB !== scoreA) return scoreB - scoreA;
+          const dateA = a.posted_at ? new Date(a.posted_at).getTime() : 0;
+          const dateB = b.posted_at ? new Date(b.posted_at).getTime() : 0;
+          return dateB - dateA;
+        });
+
+        return { ...c, jobs: sortedJobs };
       })
       // Has referrers filter
       .filter(c => {
         if (hasReferrersOnly && c.contactsCount === 0) return false;
         return c.jobs.length > 0;
+      })
+      // Group companies and rank them with top most matched opportunity at the top
+      .sort((a, b) => {
+        const topA = a.jobs[0]?.score ?? a.jobs[0]?.matchRate ?? 0;
+        const topB = b.jobs[0]?.score ?? b.jobs[0]?.matchRate ?? 0;
+        if (topB !== topA) return topB - topA;
+        if (b.jobs.length !== a.jobs.length) return b.jobs.length - a.jobs.length;
+        return a.company.localeCompare(b.company);
       });
   };
 
@@ -2595,55 +2613,160 @@ export function SuggestedJobs() {
           </p>
         </div>
       ) : (
-        <div id="jobs-company-list" className="space-y-3">
-          {displayedCompanies.map((group) => (
-            <div
-              key={group.company}
-              className="card p-3 sm:p-4 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)] transition-all flex items-center justify-between gap-4"
-            >
-              <div 
-                className="flex items-center gap-3 min-w-0 cursor-pointer"
-                onClick={() => setActiveCompanyModal(group)}
-                title="Click to view openings"
-              >
-                <CompanyLogo company={group.company} size={40} />
-                <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-bold text-[var(--color-text)] truncate hover:text-[var(--color-primary)] transition-colors">
-                    {group.company}
-                  </span>
-                  <span className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                    📂 {group.jobs.length} Opening{group.jobs.length > 1 ? "s" : ""}
-                  </span>
-                </div>
-              </div>
+        <div id="jobs-company-list" className="space-y-4">
+          {displayedCompanies.map((group) => {
+            const topJob = group.jobs[0];
+            const topScore = topJob ? (topJob.score ?? topJob.matchRate ?? 0) : 0;
+            const otherJobs = group.jobs.slice(1);
+            const otherJobsCount = otherJobs.length;
 
-              <div className="shrink-0">
-                {group.contactsCount > 0 ? (
-                  <button
-                    onClick={() => {
-                      router.push(`/qa?tab=network&company=${encodeURIComponent(group.company)}`);
-                      window.dispatchEvent(new CustomEvent("tabchange", { detail: "/network" }));
-                    }}
-                    className="btn btn-sm btn-primary text-xs cursor-pointer font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+            return (
+              <div
+                key={group.company}
+                className="card p-3.5 sm:p-5 rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/50 transition-all shadow-xs flex flex-col gap-3 group/card"
+              >
+                {/* Header: Company Info + Referrers / Pioneer action */}
+                <div className="flex items-center justify-between gap-3">
+                  <div 
+                    className="flex items-center gap-3 min-w-0 cursor-pointer"
+                    onClick={() => setActiveCompanyModal(group)}
+                    title={`Click to view all ${group.company} openings`}
                   >
-                    <span>🤝</span> {group.contactsCount} Referrer{group.contactsCount > 1 ? "s" : ""} Available
-                  </button>
-                ) : (
+                    <CompanyLogo company={group.company} size={42} />
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-base font-bold text-[var(--color-text)] truncate group-hover/card:text-[var(--color-primary)] transition-colors">
+                          {group.company}
+                        </span>
+                        {topScore > 0 && (
+                          <span className={`badge text-xs font-black px-2 py-0.5 rounded-full border flex items-center gap-1 shrink-0 ${
+                            topScore >= 80
+                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                              : topScore >= 60
+                              ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                              : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                          }`}>
+                            <span>{topScore >= 80 ? "🔥" : "✨"}</span>
+                            <span>{topScore}% Match</span>
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-[var(--color-text-secondary)] mt-0.5 flex items-center gap-1.5">
+                        <span>📂 {group.jobs.length} Opening{group.jobs.length > 1 ? "s" : ""}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    {group.contactsCount > 0 ? (
+                      <button
+                        onClick={() => {
+                          router.push(`/qa?tab=network&company=${encodeURIComponent(group.company)}`);
+                          window.dispatchEvent(new CustomEvent("tabchange", { detail: "/network" }));
+                        }}
+                        className="btn btn-sm btn-primary text-xs cursor-pointer font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                      >
+                        <span>🤝</span> {group.contactsCount} Referrer{group.contactsCount > 1 ? "s" : ""} Available
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handlePioneerClick(group.company);
+                          setActiveCompanyModal(group);
+                        }}
+                        className="btn btn-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-lg border-0 shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        title={`Open LinkedIn with ${group.company} & claim +10 pts Pioneer Bounty`}
+                      >
+                        <span>🏆</span> Pioneer +10 pts
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Top Matched Opportunity Spotlight */}
+                {topJob && (
+                  <div
+                    onClick={() => setActiveCompanyModal(group)}
+                    className="p-3.5 rounded-xl bg-[var(--color-surface-secondary)]/70 hover:bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] transition-all cursor-pointer flex flex-col gap-2"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                            Top Matched Opportunity
+                          </span>
+                          {topJob.label && (
+                            <span className="text-[11px] font-semibold text-[var(--color-text-secondary)]">
+                              {topJob.label}
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="font-bold text-sm sm:text-base text-[var(--color-text)] hover:text-primary transition-colors leading-snug m-0">
+                          {cleanJobTitle(topJob.title)}
+                        </h4>
+                        <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)] mt-1.5 flex-wrap">
+                          <span>📍 {topJob.location || "Remote"}</span>
+                          {topJob.posted_at && (
+                            <span className={getFreshnessBadge(topJob.posted_at).cls}>
+                              {getFreshnessBadge(topJob.posted_at).text}
+                            </span>
+                          )}
+                        </div>
+                        {topJob.reason && (
+                          <p className="text-xs text-[var(--color-text-secondary)] mt-1.5 line-clamp-1 italic m-0">
+                            💡 {topJob.reason}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="shrink-0 flex flex-col items-end gap-1">
+                        <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
+                          {topScore > 0 ? `${topScore}%` : "Top"}
+                        </span>
+                        <span className="text-[10px] text-[var(--color-text-secondary)] font-medium">
+                          Match Score
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-footer: Link to view others in modal */}
+                <div className="pt-2 border-t border-[var(--color-border-light)]/60 flex items-center justify-between text-xs">
+                  {otherJobsCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setActiveCompanyModal(group)}
+                      className="font-semibold text-primary hover:text-primary-hover flex items-center gap-1.5 cursor-pointer bg-transparent border-0 p-0 transition-colors"
+                      title="View all opportunities for this company in modal"
+                    >
+                      <span>📂</span>
+                      <span>
+                        +{otherJobsCount} other opportunit{otherJobsCount > 1 ? "ies" : "y"}{" "}
+                        <span className="text-[var(--color-text-secondary)] font-normal">
+                          (and others on click in a modal)
+                        </span>
+                      </span>
+                    </button>
+                  ) : (
+                    <span className="text-xs text-[var(--color-text-secondary)]">
+                      Top opportunity currently available
+                    </span>
+                  )}
+
                   <button
                     type="button"
-                    onClick={() => {
-                      handlePioneerClick(group.company);
-                      setActiveCompanyModal(group);
-                    }}
-                    className="btn btn-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-lg border-0 shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                    title={`Open LinkedIn with ${group.company} & claim +10 pts Pioneer Bounty`}
+                    onClick={() => setActiveCompanyModal(group)}
+                    className="text-xs font-bold text-[var(--color-text-secondary)] hover:text-primary flex items-center gap-1 cursor-pointer bg-transparent border-0 p-0 transition-colors shrink-0 ml-auto"
                   >
-                    <span>🏆</span> Pioneer +10 pts
+                    <span>View All ({group.jobs.length})</span>
+                    <span>→</span>
                   </button>
-                )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

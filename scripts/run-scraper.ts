@@ -101,12 +101,12 @@ async function runScraper() {
     }
   }
 
-  // 3. Round-Robin Processing
+  // 3. Round-Robin Processing (Equitable 30 jobs per company per round)
   console.log(`\n==========================================`);
-  console.log(`Starting Round-Robin AI Processing (Batch size: 200)`);
+  console.log(`Starting Round-Robin AI Processing (Batch size: 30 jobs per company)`);
   console.log(`==========================================`);
 
-  const BATCH_SIZE = 200;
+  const BATCH_SIZE = 30;
   let keepProcessing = true;
 
   while (keepProcessing) {

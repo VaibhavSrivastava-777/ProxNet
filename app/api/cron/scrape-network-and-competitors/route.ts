@@ -230,7 +230,7 @@ async function handleScrape(request: Request) {
     const seenUrls = new Set<string>();
     const toInsert: typeof jobs = [];
 
-    // Enforce maximum representation cap: at most 20 new jobs inserted per run
+    // Enforce maximum representation cap: at most 30 new jobs inserted per run for equitable round-robin
     for (const job of eligibleJobs) {
       const normUrl = normalizeJobUrl(job.url || "");
       const normTitle = normalizeJobTitle(job.title || "");
@@ -242,7 +242,7 @@ async function handleScrape(request: Request) {
       }
       if (normUrl) seenUrls.add(normUrl);
       toInsert.push(job);
-      if (toInsert.length >= 20) break; // Strict per-company batch limit
+      if (toInsert.length >= 30) break; // Strict per-company batch limit (30 jobs per round)
     }
 
     let companySaved = 0;

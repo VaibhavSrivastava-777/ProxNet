@@ -203,9 +203,9 @@ export function StreakGraffitiBanner({
           </div>
 
           {/* Motivational Graffiti Quote Pill */}
-          <div className="bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-[11px] sm:text-xs text-white/90 italic flex items-center gap-2">
-            <span className="text-amber-300 font-bold shrink-0">⚡</span>
-            <span className="truncate sm:whitespace-normal">&ldquo;{quote}&rdquo;</span>
+          <div className="bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-[11px] sm:text-xs text-white/90 italic flex items-start gap-2">
+            <span className="text-amber-300 font-bold shrink-0 mt-0.5">⚡</span>
+            <span className="whitespace-normal break-words leading-relaxed">&ldquo;{quote}&rdquo;</span>
           </div>
 
           {/* Action Row */}

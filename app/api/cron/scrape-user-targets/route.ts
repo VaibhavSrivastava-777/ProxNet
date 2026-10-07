@@ -184,7 +184,7 @@ export async function GET(request: Request) {
     const seenBatchUrls = new Set<string>();
     const toProcess: typeof jobs = [];
 
-    // Cap per run to 20 jobs
+    // Cap per run to 30 jobs for equitable round-robin
     for (const job of eligibleJobs) {
       const normUrl = normalizeJobUrl(job.url || "");
       const normTitle = normalizeJobTitle(job.title || "");
@@ -196,7 +196,7 @@ export async function GET(request: Request) {
       }
       if (normUrl) seenBatchUrls.add(normUrl);
       toProcess.push(job);
-      if (toProcess.length >= 20) break;
+      if (toProcess.length >= 30) break;
     }
 
     let companySaved = 0;

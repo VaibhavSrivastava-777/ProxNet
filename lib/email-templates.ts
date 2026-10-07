@@ -56,27 +56,36 @@ export function checkEmailRateLimit(
     userEmailRateMap.set(userId, stats);
   }
 
-  // High-priority live beacon and direct contact notifications bypass email checks
+  // High-priority live beacon, direct contact, and detailed job notifications bypass email checks
+  const isDetailedNotification =
+    notificationType === "daily_top_3_jobs" ||
+    notificationType === "morning_job_brief" ||
+    notificationType === "top_3_jobs" ||
+    notificationType.startsWith("job_match") ||
+    notificationType === "job_digest" ||
+    notificationType.startsWith("weekly_digest");
+
   if (
+    forceEmail ||
+    isDetailedNotification ||
     notificationType === "beacon_broadcast" ||
     notificationType === "beacon_join" ||
-    ((notificationType === "new_question" || notificationType === "direct_question" || notificationType === "referral_request") && forceEmail)
+    notificationType === "new_question" ||
+    notificationType === "direct_question" ||
+    notificationType === "referral_request"
   ) {
     return { allowed: true };
   }
 
-  // NOTE: Hard daily email cap and digest cooldown have been removed per specification.
-  // Cooldown rules are preserved exclusively for real-time chat rapid exchanges.
+  // Cooldown rules are preserved for rapid chat bursts (2 minute threshold)
   const isChatMessage =
     notificationType === "chat_message" ||
     notificationType === "colleague_message" ||
-    notificationType === "chat_starter_reminder" ||
-    notificationType === "new_question" ||
-    notificationType === "direct_question";
+    notificationType === "chat_starter_reminder";
 
-  if (isChatMessage && !forceEmail) {
+  if (isChatMessage) {
     const timeSinceLastChat = now - stats.lastChatSentAt;
-    const CHAT_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
+    const CHAT_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes debounce
     if (timeSinceLastChat < CHAT_COOLDOWN_MS) {
       return { allowed: false, reason: `Chat email cooldown active (${Math.round((CHAT_COOLDOWN_MS - timeSinceLastChat) / 1000)}s left)` };
     }

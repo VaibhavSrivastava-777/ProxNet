@@ -43,11 +43,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val channelId = "proxnet_messages"
         val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         
-        // Build notification
+        // Build notification with BigTextStyle to prevent truncation
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(messageBody)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(messageBody))
             .setAutoCancel(true)
             .setSound(defaultSoundUri)
             .setDefaults(NotificationCompat.DEFAULT_ALL)

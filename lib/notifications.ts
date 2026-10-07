@@ -2,6 +2,90 @@
 import { fcmMessaging } from "./firebase-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+/**
+ * Frames FCM notification title and body into concise, complete sentences
+ * that fit standard push notification preview boundaries (Title <= 45 chars, Body <= 110-120 chars)
+ * and never truncate awkwardly on mobile or desktop lock screens.
+ */
+export function frameFcmNotification(
+  title: string,
+  body: string,
+  data?: Record<string, any>
+): { title: string; body: string } {
+  let fcmTitle = (title || "ProxNet").trim();
+  let fcmBody = (body || "").trim();
+
+  const notifType = String(data?.type || "");
+  const isTop3Jobs =
+    notifType === "daily_top_3_jobs" ||
+    notifType === "morning_job_brief" ||
+    notifType === "top_3_jobs" ||
+    fcmTitle.toLowerCase().includes("top 3") ||
+    fcmBody.toLowerCase().includes("top 3");
+
+  // 1. Specialized sentence framing for Top 3 Job Opportunities
+  if (isTop3Jobs) {
+    fcmTitle = "🎯 Top 3 Job Matches Today";
+
+    // Extract companies if present in body or data
+    const companyMatches = Array.from(body.matchAll(/@\s*([^(\n|]+)/g))
+      .map((m) => m[1]?.trim())
+      .filter(Boolean);
+
+    if (companyMatches.length >= 2) {
+      const distinctCos = Array.from(new Set(companyMatches)).slice(0, 3);
+      if (distinctCos.length === 3) {
+        fcmBody = `Top matches at ${distinctCos[0]}, ${distinctCos[1]} & ${distinctCos[2]}. Tap to review & apply!`;
+      } else {
+        fcmBody = `Top matches at ${distinctCos.join(" & ")}. Tap to review & apply!`;
+      }
+    } else {
+      fcmBody = "3 top opportunities match your profile today. Tap to review all 3 & apply!";
+    }
+
+    return { title: fcmTitle, body: fcmBody };
+  }
+
+  // 2. Title framing (keep under 45 chars so it doesn't get clipped with ...)
+  if (fcmTitle.length > 45) {
+    if (fcmTitle.includes("Job Match")) {
+      const matchPercent = fcmTitle.match(/\((\d+%)\)/)?.[1] || "";
+      const atCompany = fcmTitle.match(/at\s+([^:]+)/i)?.[1]?.trim();
+      if (atCompany) {
+        fcmTitle = `🔥 ${matchPercent ? matchPercent + " " : ""}Match: ${atCompany}`.slice(0, 45);
+      } else {
+        fcmTitle = fcmTitle.slice(0, 42).trim() + "...";
+      }
+    } else if (fcmTitle.includes("New Message from")) {
+      const sender = fcmTitle.replace(/^New Message from\s+/i, "").split("@")[0].trim();
+      fcmTitle = `💬 Message from ${sender}`.slice(0, 45);
+    } else {
+      const cut = fcmTitle.slice(0, 42);
+      const lastSpace = cut.lastIndexOf(" ");
+      fcmTitle = (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).trim() + "...";
+    }
+  }
+
+  // 3. Body framing (keep under 120 chars so mobile collapsed view does not truncate)
+  if (fcmBody.length > 120) {
+    // Attempt to end cleanly at the first complete sentence if between 25 and 115 chars
+    const sentenceMatch = fcmBody.match(/^(.+?[.!?])(?:\s+|$)/);
+    if (sentenceMatch && sentenceMatch[1].length >= 25 && sentenceMatch[1].length <= 115) {
+      fcmBody = sentenceMatch[1].trim();
+    } else {
+      const sub = fcmBody.slice(0, 110);
+      const lastSpace = sub.lastIndexOf(" ");
+      const cleanSub = (lastSpace > 30 ? sub.slice(0, lastSpace) : sub).trim();
+      fcmBody = cleanSub.endsWith(".") || cleanSub.endsWith("!") ? cleanSub : `${cleanSub}. Tap to view!`;
+      if (fcmBody.length > 120) {
+        fcmBody = cleanSub + "...";
+      }
+    }
+  }
+
+  return { title: fcmTitle, body: fcmBody };
+}
+
 export async function sendNotification(
   userId: string,
   { title, body, url, data }: { title: string; body: string; url: string; data?: Record<string, any> }
@@ -37,11 +121,14 @@ export async function sendNotification(
     console.error("Failed to fetch FCM tokens for user:", userId, fcmError);
   }
 
-  // 2. Dispatch FCM notifications
+  // 2. Dispatch FCM notifications with non-truncating sentence framing
   let fcmSuccessCount = 0;
   if (fcmMessaging && fcmTokens && fcmTokens.length > 0) {
     console.log(`Sending FCM to ${fcmTokens.length} active devices for user ${userId}...`);
     
+    // Frame sentence specifically for push notification boundaries
+    const { title: fcmTitle, body: fcmBody } = frameFcmNotification(title, body, data);
+
     // Ensure all FCM data payload values are strings (required by Firebase Admin)
     const stringifiedData: Record<string, string> = {
       url: url || "/",
@@ -78,8 +165,8 @@ export async function sendNotification(
         await fcmMessaging.send({
           token: tokenRecord.token,
           notification: {
-            title,
-            body,
+            title: fcmTitle,
+            body: fcmBody,
           },
           data: stringifiedData,
           webpush: {
@@ -109,8 +196,8 @@ export async function sendNotification(
             payload: {
               aps: {
                 alert: {
-                  title,
-                  body,
+                  title: fcmTitle,
+                  body: fcmBody,
                 },
                 sound: "default",
                 badge: 1,
@@ -133,24 +220,40 @@ export async function sendNotification(
     }
   }
 
-  // 3. Send Email Notification via Resend (Fallback for users without FCM, failed FCM delivery, or priority events)
+  // 3. Send Email Notification via Resend
+  // Rule 1: Use Resend email service as universal fallback whenever FCM delivery fails or user has 0 devices
+  // Rule 2: Detailed notifications such as top 3 job opportunities should be sent via Resend (in addition to FCM notifications)
   const resendApiKey = process.env.RESEND_API_KEY;
   if (resendApiKey) {
-    const hasFcmTokens = Boolean(fcmTokens && fcmTokens.length > 0);
     const hasSuccessfulFcm = fcmSuccessCount > 0;
     const notifType = String(data?.type || "general");
-    const isPriorityNotification =
+    const lowerTitle = (title || "").toLowerCase();
+    const lowerBody = (body || "").toLowerCase();
+
+    // Identify detailed notifications (must be sent via Resend in addition to FCM)
+    const isDetailedNotification =
+      notifType === "daily_top_3_jobs" ||
+      notifType === "morning_job_brief" ||
+      notifType === "top_3_jobs" ||
+      lowerTitle.includes("top 3") ||
+      lowerBody.includes("top 3") ||
+      notifType === "job_digest" ||
+      notifType.startsWith("weekly_digest") ||
+      notifType.startsWith("job_match") ||
+      data?.isDetailed === true ||
+      data?.detailed === true ||
       data?.forceEmail === true ||
+      (Array.isArray(data?.jobIds) && data.jobIds.length > 1);
+
+    // Other priority interaction events
+    const isPriorityNotification =
+      isDetailedNotification ||
       notifType === "profile_reminder" ||
       notifType === "complete_profile" ||
       notifType === "enable_notifications" ||
       notifType === "push_enable_reminder" ||
       notifType === "chat_starter_reminder" ||
       notifType === "starter_reminder" ||
-      notifType.startsWith("job_match") ||
-      notifType === "daily_top_3_jobs" ||
-      notifType === "morning_job_brief" ||
-      notifType.startsWith("weekly_digest") ||
       notifType.startsWith("daily_engagement") ||
       notifType.startsWith("event_") ||
       notifType === "referral_network_nudge" ||
@@ -162,28 +265,49 @@ export async function sendNotification(
       notifType === "beacon_join" ||
       notifType === "beacon_broadcast" ||
       notifType === "colleague_message" ||
+      notifType === "chat_message" ||
       notifType === "job_post_nearby" ||
       notifType.includes("hiring") ||
       notifType.includes("looking");
 
-    // Dispatch email if user has no FCM tokens, or if FCM delivery failed on all tokens (vital fallback), or for priority/forceEmail events
-    if (!hasSuccessfulFcm || isPriorityNotification) {
+    // 1. Fallback: if 0 devices received FCM (or user has no FCM tokens), ALWAYS fall back to Resend email
+    // 2. Detailed / Priority notifications: ALWAYS sent via Resend in addition to FCM
+    const isFallback = !hasSuccessfulFcm;
+    const shouldSendEmail = isFallback || isDetailedNotification || isPriorityNotification;
+
+    if (shouldSendEmail) {
       const { checkEmailRateLimit, recordEmailSent, generateContextEmail } = await import("@/lib/email-templates");
 
-      // Anti-spam gate check
-      const rateCheck = checkEmailRateLimit(userId, notifType, data?.forceEmail === true);
+      // Anti-spam gate check (fallback emails and detailed job notifications bypass rate limit)
+      const rateCheck = checkEmailRateLimit(userId, notifType, isFallback || isDetailedNotification || data?.forceEmail === true);
       if (!rateCheck.allowed) {
         console.log(`[Anti-Spam] Suppressed email to ${userId} (${notifType}): ${rateCheck.reason}`);
         return;
       }
 
-      const { data: user, error: uError } = await supabase
+      let { data: user, error: uError } = await supabase
         .from("users")
         .select("email, full_name")
         .eq("id", userId)
         .single();
 
-      if (uError || !user || !user.email) {
+      let recipientEmail = user?.email?.trim();
+      if (!recipientEmail) {
+        // Fallback to auth.users if public.users record is missing email
+        try {
+          const { data: authData } = await supabase.auth.admin.getUserById(userId);
+          if (authData?.user?.email) {
+            recipientEmail = authData.user.email.trim();
+            user = { ...(user || {}), email: recipientEmail, full_name: user?.full_name || authData.user.user_metadata?.full_name || "Neighbor" };
+            // Self-heal public.users record asynchronously
+            Promise.resolve(supabase.from("users").update({ email: recipientEmail }).eq("id", userId)).catch(() => {});
+          }
+        } catch (authErr) {
+          console.warn("[Resend] Could not query auth.users fallback:", authErr);
+        }
+      }
+
+      if (!recipientEmail) {
         console.warn("Could not retrieve user email or email is blank for ID:", userId);
         return;
       }
@@ -208,10 +332,10 @@ export async function sendNotification(
       }
 
       try {
-        const recipientName = user.full_name?.split(" ")[0] || "Neighbor";
+        const recipientName = user?.full_name?.split(" ")[0] || "Neighbor";
         const emailContent = generateContextEmail({
           recipientName,
-          recipientEmail: user.email,
+          recipientEmail: recipientEmail,
           title,
           body,
           url,
@@ -219,7 +343,7 @@ export async function sendNotification(
           otherUnreadNotifs,
         });
 
-        console.log(`[Resend] Sending ${emailContent.category} notification email to ${user.email} (${emailContent.subject})...`);
+        console.log(`[Resend] Sending ${emailContent.category} notification email to ${recipientEmail} (${emailContent.subject})...`);
         const fromEmail = process.env.RESEND_FROM_EMAIL || "notifications@proxnet.in";
 
         const res = await fetch("https://api.resend.com/emails", {
@@ -230,7 +354,7 @@ export async function sendNotification(
           },
           body: JSON.stringify({
             from: `ProxNet <${fromEmail}>`,
-            to: user.email,
+            to: recipientEmail,
             subject: emailContent.subject,
             html: emailContent.html,
           }),
@@ -241,12 +365,12 @@ export async function sendNotification(
           const errorData = await res.json().catch(() => null);
           const errorText = errorData ? JSON.stringify(errorData) : await res.text().catch(() => "Unknown error");
           if (res.status === 403 && (errorData?.message?.includes("verify a domain") || errorData?.message?.includes("testing emails"))) {
-            console.warn(`[Resend Sandbox Notice] Recipient ${user.email} requires verified domain at resend.com/domains.`);
+            console.warn(`[Resend Sandbox Notice] Recipient ${recipientEmail} requires verified domain at resend.com/domains.`);
           } else {
             console.error("[Resend] Email delivery failed:", errorText);
           }
         } else {
-          console.log(`[Resend] Notification email successfully delivered to ${user.email}.`);
+          console.log(`[Resend] Notification email successfully delivered to ${recipientEmail}.`);
           recordEmailSent(userId, notifType);
 
           // Best-effort audit logging into email_notifications_log if table exists
@@ -255,7 +379,7 @@ export async function sendNotification(
               user_id: userId,
               notification_type: notifType,
               subject: emailContent.subject,
-              recipient_email: user.email,
+              recipient_email: recipientEmail,
             })
           ).catch(() => {});
         }
