@@ -104,27 +104,53 @@ async function runTests() {
   });
 
   // ------------------------------------------------------------------
-  // Test 2: UI Presentation Strings and Modal Trigger Verification
+  // Test 2: UI Presentation Strings and Modal Trigger Verification in JobsFeed & SuggestedJobs
   // ------------------------------------------------------------------
-  test("SuggestedJobs.tsx contains modal trigger copy and top match presentation", () => {
-    const filePath = path.resolve("components/jobs/SuggestedJobs.tsx");
+  test("JobsFeed.tsx contains company grouping, top match spotlight, and non-truncated close modal", () => {
+    const filePath = path.resolve("components/jobs/JobsFeed.tsx");
     const content = fs.readFileSync(filePath, "utf-8");
 
     assert(
       content.includes("(and others on click in a modal)"),
-      "SuggestedJobs.tsx must contain explicit user requested copy: (and others on click in a modal)"
+      "JobsFeed.tsx must contain explicit user requested copy: (and others on click in a modal)"
     );
     assert(
       content.includes("Top Matched Opportunity"),
-      "SuggestedJobs.tsx must render Top Matched Opportunity spotlight badge"
+      "JobsFeed.tsx must render Top Matched Opportunity spotlight badge"
     );
     assert(
       content.includes("setActiveCompanyModal(group)"),
-      "SuggestedJobs.tsx must trigger company modal on click of card or others link"
+      "JobsFeed.tsx must trigger company modal on click of card or others link"
     );
     assert(
-      content.includes("topB - topA"),
-      "SuggestedJobs.tsx applyAdvancedFilters must rank company groups by top opportunity score descending"
+      content.includes("b.topJob.matchRate - a.topJob.matchRate"),
+      "JobsFeed.tsx must rank company groups strictly by top opportunity matchRate descending"
+    );
+    assert(
+      content.includes("pt-[max(env(safe-area-inset-top),1.5rem)]"),
+      "JobsFeed.tsx activeCompanyModal must include safe area top padding to prevent top truncation"
+    );
+    assert(
+      content.includes("sticky top-0 z-50 shrink-0"),
+      "JobsFeed.tsx activeCompanyModal header must be sticky and shrink-0 so close button is always visible"
+    );
+  });
+
+  test("JobDetailSheet.tsx and SuggestedJobs.tsx prevent top 'X' icon truncation", () => {
+    const sheetContent = fs.readFileSync(path.resolve("components/jobs/JobDetailSheet.tsx"), "utf-8");
+    assert(
+      sheetContent.includes("pt-[max(env(safe-area-inset-top),1.5rem)]"),
+      "JobDetailSheet.tsx must provide safe-area top padding to prevent 'X' icon truncation"
+    );
+    assert(
+      sheetContent.includes("sticky top-0 z-50 shrink-0"),
+      "JobDetailSheet.tsx header must be sticky top-0 shrink-0"
+    );
+
+    const suggestedContent = fs.readFileSync(path.resolve("components/jobs/SuggestedJobs.tsx"), "utf-8");
+    assert(
+      suggestedContent.includes("pt-[max(env(safe-area-inset-top),1.5rem)]"),
+      "SuggestedJobs.tsx must provide safe-area top padding to prevent 'X' icon truncation"
     );
   });
 

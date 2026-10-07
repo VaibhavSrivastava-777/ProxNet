@@ -2773,15 +2773,15 @@ export function SuggestedJobs() {
       {/* Openings Detail Modal */}
       {activeCompanyModal && mounted && typeof document !== "undefined" && createPortal(
         <div 
-          className="fixed inset-0 z-[100000] flex flex-col items-center justify-end sm:justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 overflow-hidden pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),0.75rem)]"
+          className="fixed inset-0 z-[100000] flex flex-col items-center justify-start sm:justify-center bg-black/75 backdrop-blur-md p-2 sm:p-4 overflow-y-auto pt-[max(env(safe-area-inset-top),1.5rem)] pb-[max(env(safe-area-inset-bottom),1.5rem)]"
           onClick={handleCloseCompanyModal}
         >
           <div 
-            className="bg-[var(--color-surface)] w-full max-w-xl rounded-t-2xl sm:rounded-2xl shadow-2xl border border-[var(--color-border)] animate-scaleIn flex flex-col h-[90dvh] sm:h-auto sm:max-h-[86vh] overflow-hidden"
+            className="relative bg-[var(--color-surface)] w-full max-w-xl rounded-2xl sm:rounded-3xl shadow-2xl border border-[var(--color-border)] animate-scaleIn flex flex-col max-h-[calc(100dvh-3rem)] my-auto overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Pinned Sticky Header */}
-            <div className="flex items-center justify-between px-3.5 sm:px-5 py-3 sm:py-3.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] shrink-0 z-30 gap-2">
+            <div className="sticky top-0 z-50 shrink-0 bg-[var(--color-surface)]/98 backdrop-blur-md px-4 sm:px-5 py-3 sm:py-3.5 border-b border-[var(--color-border-light)] flex items-center justify-between gap-3 shadow-2xs">
               <button
                 type="button"
                 onClick={handleCloseCompanyModal}
@@ -2793,8 +2793,8 @@ export function SuggestedJobs() {
                 <span className="text-xs">Back</span>
               </button>
 
-              <div className="flex items-center gap-2 min-w-0 flex-1 px-1">
-                <CompanyLogo company={activeCompanyModal.company} size={28} />
+              <div className="flex items-center gap-2.5 min-w-0 flex-1 px-1">
+                <CompanyLogo company={activeCompanyModal.company} size={30} />
                 <div className="min-w-0">
                   <h3 className="text-sm sm:text-base font-bold text-[var(--color-text)] m-0 truncate">
                     {activeCompanyModal.company}
@@ -2808,11 +2808,11 @@ export function SuggestedJobs() {
               <button 
                 type="button"
                 onClick={handleCloseCompanyModal} 
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border-light)] bg-[var(--color-surface)] cursor-pointer transition-colors shrink-0 shadow-2xs active:scale-95"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] border border-[var(--color-border)] bg-[var(--color-surface-secondary)] cursor-pointer transition-all shrink-0 shadow-sm hover:scale-105 active:scale-95"
                 aria-label="Close modal"
                 title="Close (Esc)"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
                   <line x1="18" y1="6" x2="6" y2="18"></line>
                   <line x1="6" y1="6" x2="18" y2="18"></line>
                 </svg>

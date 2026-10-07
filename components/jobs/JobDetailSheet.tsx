@@ -401,15 +401,15 @@ export function JobDetailSheet({
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 top-[var(--nav-height,56px)] z-[1000] flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-fadeIn"
+      className="fixed inset-0 z-[100000] flex flex-col items-center justify-start sm:justify-center p-2 sm:p-4 md:p-6 overflow-y-auto pt-[max(env(safe-area-inset-top),1.5rem)] pb-[max(env(safe-area-inset-bottom),1.5rem)] bg-black/75 backdrop-blur-md animate-fadeIn"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-2xl max-h-[calc(100vh-var(--nav-height,56px)-24px)] rounded-3xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-2xl flex flex-col overflow-hidden animate-scaleIn"
+        className="relative w-full max-w-2xl max-h-[calc(100dvh-3rem)] my-auto rounded-2xl sm:rounded-3xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-2xl flex flex-col overflow-hidden animate-scaleIn"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="sticky top-0 z-20 bg-[var(--color-surface)]/95 backdrop-blur-md border-b border-[var(--color-border-light)] px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-3">
+        <div className="sticky top-0 z-50 shrink-0 bg-[var(--color-surface)]/98 backdrop-blur-md border-b border-[var(--color-border-light)] px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 border border-[var(--color-border-light)] bg-white flex items-center justify-center shadow-sm">
               <CompanyLogo company={job.company} className="w-8 h-8 object-contain" />
@@ -426,11 +426,11 @@ export function JobDetailSheet({
           <button
             type="button"
             onClick={onClose}
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] shadow-xs transition-all cursor-pointer shrink-0 hover:scale-105 active:scale-95"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text)] border border-[var(--color-border)] shadow-sm transition-all cursor-pointer shrink-0 hover:scale-105 active:scale-95"
             aria-label="Close modal"
             title="Close (Esc)"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
