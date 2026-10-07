@@ -272,19 +272,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // Enforce Representation Cap: ensure company never exceeds 50 active jobs in database
-    const { data: allCompJobs } = await supabase
-      .from("scraped_jobs")
-      .select("id, posted_at")
-      .ilike("company", target.company_name)
-      .order("posted_at", { ascending: false });
-
-    if (allCompJobs && allCompJobs.length > 50) {
-      const excessIds = allCompJobs.slice(50).map((r) => r.id);
-      await supabase.from("scraped_jobs").delete().in("id", excessIds);
-    }
-
-    let scrapeNotes = `Cron: Scraped ${jobs.length} raw, ${eligibleJobs.length} India, saved ${companySaved}. Representation capped at 50 max.`;
+    let scrapeNotes = `Cron: Scraped ${jobs.length} raw, ${eligibleJobs.length} India, saved ${companySaved} in 30-job round-robin batch.`;
     if (jobs.length > 0 && eligibleJobs.length === 0) {
       scrapeNotes = `Cron: 0 India listings found out of ${jobs.length} global postings (< 30d).`;
     } else if (eligibleJobs.length > 0 && companySaved === 0) {

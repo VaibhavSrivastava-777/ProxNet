@@ -4,6 +4,20 @@ import { STRATEGIES, stripHtml } from "../lib/scrape-strategies";
 import { isJobEligible, normalizeJobUrl, normalizeJobTitle } from "../lib/jobs/job-filters";
 
 dotenv.config({ path: ".env.local" });
+dotenv.config({ path: ".env" });
+
+interface CompanyPool {
+  config: any;
+  allJobs: any[];
+  index: number;
+  added: number;
+  processed: number;
+  skippedFilter: number;
+  skippedDuplicate: number;
+  existingUrls: Set<string>;
+  existingTitles: Set<string>;
+  seenBatchUrls: Set<string>;
+}
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -27,7 +41,12 @@ async function main() {
   const companyArgIndex = process.argv.indexOf("--company");
   const companyFilter = companyArgIndex !== -1 ? process.argv[companyArgIndex + 1] : null;
 
-  let dbQuery = supabase.from("company_ats_config").select("*").neq("provider", "cron_status");
+  // 1. Fetch ATS configurations in round-robin priority order (never scraped first, then oldest last_scraped_at)
+  let dbQuery = supabase
+    .from("company_ats_config")
+    .select("*")
+    .not("provider", "in", '("none","error","cron_status")')
+    .order("last_scraped_at", { ascending: true, nullsFirst: true });
 
   if (companyFilter) {
     console.log(`Filtering to company name: "${companyFilter}"`);
@@ -48,7 +67,7 @@ async function main() {
     }
   }
 
-  console.log("Fetching ATS configurations from database...");
+  console.log("Fetching ATS configurations from database in round-robin priority order...");
   const { data: configs, error: configsError } = await dbQuery;
 
   if (configsError) {
@@ -56,22 +75,25 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`Found ${configs.length} ATS configurations to scrape.`);
+  console.log(`Found ${configs?.length || 0} ATS configurations to scrape.`);
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const cutoffIso = thirtyDaysAgo.toISOString();
 
-  let totalProcessed = 0;
-  let totalAdded = 0;
+  // 2. Build Company Pools by fetching raw postings from ATS
+  console.log("\n==========================================");
+  console.log("Building Company Pools from ATS endpoints...");
+  console.log("==========================================");
 
-  for (const config of configs) {
-    let jobs: any[] = [];
-    console.log(`\nScraping jobs for ${config.company_name} (${config.provider})...`);
+  const pools: CompanyPool[] = [];
+
+  for (const config of configs || []) {
+    console.log(`Fetching jobs for ${config.company_name} [${config.provider}]...`);
 
     const strategy = STRATEGIES[config.provider];
     if (!strategy) {
-      console.error(`  ⚠️ No strategy registered for provider: ${config.provider}`);
+      console.warn(`  ⚠️ No strategy registered for provider: ${config.provider}`);
       await supabase
         .from("company_ats_config")
         .update({
@@ -82,10 +104,11 @@ async function main() {
       continue;
     }
 
+    let jobs: any[] = [];
     try {
       jobs = await strategy(config.board_token_or_url, config.company_name);
     } catch (e: any) {
-      console.error(`Error fetching jobs for ${config.company_name}:`, e.message);
+      console.error(`  Error fetching jobs for ${config.company_name}:`, e.message);
       await supabase
         .from("company_ats_config")
         .update({
@@ -96,9 +119,9 @@ async function main() {
       continue;
     }
 
-    console.log(`Found ${jobs.length} total postings. Pre-checking duplicates and filters...`);
+    console.log(`  Found ${jobs.length} total postings from ${config.company_name} ATS.`);
 
-    // Fetch existing recent jobs for this company
+    // Pre-fetch existing recent jobs for this company to check duplicates
     const { data: existingRows } = await supabase
       .from("scraped_jobs")
       .select("url, title")
@@ -108,163 +131,185 @@ async function main() {
     const existingUrls = new Set((existingRows || []).map(r => normalizeJobUrl(r.url)));
     const existingTitles = new Set((existingRows || []).map(r => normalizeJobTitle(r.title)));
 
-    let companyProcessed = 0;
-    let companyAdded = 0;
-    let companySkippedFilter = 0;
-    let companySkippedDuplicate = 0;
-    const seenBatchUrls = new Set<string>();
-
-    for (const job of jobs) {
-      // 1. Eligibility Check: 30-day age limit, India location, not junior
-      const { eligible, reason } = isJobEligible({
-        title: job.title,
-        location: job.location,
-        description: job.description,
-        posted_at: job.posted_at,
-      });
-
-      if (!eligible) {
-        console.log(`  [SKIP FILTER] "${job.title}" (${job.location}) - ${reason}`);
-        companySkippedFilter++;
-        continue;
-      }
-
-      // 2. Duplicate Check: Before calling OpenAI
-      const normUrl = normalizeJobUrl(job.url || "");
-      const normTitle = normalizeJobTitle(job.title || "");
-      if (normUrl && (existingUrls.has(normUrl) || seenBatchUrls.has(normUrl))) {
-        console.log(`  [SKIP DUPLICATE] "${job.title}" (${job.location}) - URL already exists in database`);
-        companySkippedDuplicate++;
-        continue;
-      }
-      if (normTitle && existingTitles.has(normTitle)) {
-        console.log(`  [SKIP DUPLICATE] "${job.title}" (${job.location}) - Title already exists for ${config.company_name}`);
-        companySkippedDuplicate++;
-        continue;
-      }
-
-      if (normUrl) seenBatchUrls.add(normUrl);
-
-      console.log(`\n[PROCESSING] "${job.title}" (${job.location}) - URL: ${job.url}`);
-      companyProcessed++;
-      totalProcessed++;
-
-      let embedding = null;
-      let keywords: string[] = [];
-      try {
-        const textToEmbed = `Title: ${job.title}\nCompany: ${config.company_name}\nDescription: ${job.description}`.slice(0, 8000); 
-        
-        // 1. Keywords
-        console.log(`  [OPENAI] Extracting keywords for "${job.title}"...`);
-        const keywordPrompt = `Extract 3 to 5 highly relevant technical skills, tools, or buzzwords (e.g., "React", "Python", "B2B Sales") from the following job posting. Return a JSON object with a single key 'keywords' containing an array of strings.\n\nJob:\n${textToEmbed}`;
-        const kwRes = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${openaiKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            messages: [{ role: "user", content: keywordPrompt }],
-            response_format: { type: "json_object" }
-          }),
-          signal: AbortSignal.timeout(15000)
-        });
-        
-        if (kwRes.ok) {
-          const kwData = await kwRes.json();
-          try {
-            const parsed = JSON.parse(kwData.choices[0].message.content);
-            keywords = Array.isArray(parsed) ? parsed : Object.values(parsed)[0] as string[];
-            if (!Array.isArray(keywords)) keywords = [];
-            console.log(`  [OPENAI] Keywords extracted: ${JSON.stringify(keywords)}`);
-          } catch(e) {}
-        } else {
-          console.warn(`  ⚠️ [OPENAI] Failed to extract keywords. Status: ${kwRes.status}`);
-        }
-
-        // 2. Embedding
-        console.log(`  [OPENAI] Generating embedding for "${job.title}"...`);
-        const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${openaiKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            input: textToEmbed,
-            model: "text-embedding-3-small"
-          }),
-          signal: AbortSignal.timeout(15000)
-        });
-        
-        if (oaiRes.ok) {
-          const oaiData = await oaiRes.json();
-          embedding = oaiData.data[0].embedding;
-          console.log(`  [OPENAI] Embedding generated successfully.`);
-        } else {
-          console.warn(`  ⚠️ [OPENAI] Failed to generate embedding. Status: ${oaiRes.status}`);
-        }
-
-      } catch (e: any) {
-        console.error(`OpenAI processing failed for "${job.title}":`, e.message);
-      }
-
-      const jobData: any = {
-        company: config.company_name,
-        title: job.title,
-        location: job.location || "India",
-        url: job.url,
-        description: (job.description || "").substring(0, 5000),
-        ats_source: job.source,
-        posted_at: job.posted_at || new Date().toISOString(),
-        embedding: embedding,
-        created_at: new Date().toISOString(),
-      };
-
-      console.log(`  [DB] Upserting job into Supabase...`);
-      let { error: insertError } = await supabase.from("scraped_jobs").upsert({
-        ...jobData,
-        keywords: keywords.slice(0, 5)
-      }, { onConflict: "url" });
-      
-      if (insertError) {
-        const errMsg = insertError.message || "";
-        if (errMsg.includes("keywords") || errMsg.includes("column")) {
-          console.log(`  [DB RETRY] Retrying upsert without keywords column...`);
-          const { error: retryError } = await supabase.from("scraped_jobs").upsert(jobData, { onConflict: "url" });
-          insertError = retryError;
-        }
-      }
-
-      if (!insertError) {
-        console.log(`  ✅ Successfully saved job "${job.title}" to DB`);
-        companyAdded++;
-        totalAdded++;
-      } else {
-        console.error(`  ❌ Failed to insert job "${job.title}" to DB:`, insertError.message);
-      }
-    }
-
-    console.log(`\n  [SUMMARY for ${config.company_name}]`);
-    console.log(`    Total checked: ${jobs.length}`);
-    console.log(`    Skipped (filters - age/loc/seniority): ${companySkippedFilter}`);
-    console.log(`    Skipped (duplicate URLs/titles): ${companySkippedDuplicate}`);
-    console.log(`    Processed (AI embeddings): ${companyProcessed}`);
-    console.log(`    Successfully saved/updated: ${companyAdded}`);
-
-    // Update config metadata
-    await supabase
-      .from("company_ats_config")
-      .update({
-        last_scraped_at: new Date().toISOString(),
-        total_jobs_found: jobs.length,
-        scrape_notes: `Scraped ${jobs.length} total. Saved ${companyAdded}. Skipped: ${companySkippedFilter} filtered, ${companySkippedDuplicate} duplicate.`
-      })
-      .eq("company_name", config.company_name);
+    pools.push({
+      config,
+      allJobs: jobs,
+      index: 0,
+      added: 0,
+      processed: 0,
+      skippedFilter: 0,
+      skippedDuplicate: 0,
+      existingUrls,
+      existingTitles,
+      seenBatchUrls: new Set<string>()
+    });
   }
 
-  // Update global cron status for admin dashboard
+  // 3. Round-Robin Processing: 30 jobs per company per round, looping until all jobs are processed
+  console.log(`\n==========================================`);
+  console.log(`Starting Round-Robin Scraping (Batch size: 30 jobs per company per round)`);
+  console.log(`==========================================`);
+
+  const BATCH_SIZE = 30;
+  let keepProcessing = true;
+  let round = 1;
+  let totalProcessed = 0;
+  let totalAdded = 0;
+
+  while (keepProcessing) {
+    keepProcessing = false;
+    let roundProcessedAny = false;
+
+    console.log(`\n--- Round-Robin Pass #${round} ---`);
+
+    for (const pool of pools) {
+      if (pool.index >= pool.allJobs.length) continue;
+
+      keepProcessing = true;
+      roundProcessedAny = true;
+
+      const batch = pool.allJobs.slice(pool.index, pool.index + BATCH_SIZE);
+      const endIndex = Math.min(pool.index + BATCH_SIZE, pool.allJobs.length);
+      console.log(`\n[${pool.config.company_name}] (Round ${round}) Processing jobs ${pool.index + 1} to ${endIndex} of ${pool.allJobs.length}...`);
+
+      let companyBatchAdded = 0;
+
+      for (const job of batch) {
+        // 1. Eligibility Check: 30-day age limit, India location, not junior
+        const { eligible, reason } = isJobEligible({
+          title: job.title,
+          location: job.location,
+          description: job.description,
+          posted_at: job.posted_at,
+        });
+
+        if (!eligible) {
+          pool.skippedFilter++;
+          continue;
+        }
+
+        // 2. Duplicate Check
+        const normUrl = normalizeJobUrl(job.url || "");
+        const normTitle = normalizeJobTitle(job.title || "");
+        if (normUrl && (pool.existingUrls.has(normUrl) || pool.seenBatchUrls.has(normUrl))) {
+          pool.skippedDuplicate++;
+          continue;
+        }
+        if (normTitle && pool.existingTitles.has(normTitle)) {
+          pool.skippedDuplicate++;
+          continue;
+        }
+
+        if (normUrl) pool.seenBatchUrls.add(normUrl);
+
+        pool.processed++;
+        totalProcessed++;
+
+        // 3. AI Extraction & Embeddings
+        let embedding = null;
+        let keywords: string[] = [];
+        try {
+          const textToEmbed = `Title: ${job.title}\nCompany: ${pool.config.company_name}\nDescription: ${job.description || ""}`.slice(0, 8000);
+
+          // Keyword extraction
+          const keywordPrompt = `Extract 3 to 5 highly relevant technical skills, tools, or buzzwords (e.g., "React", "Python", "B2B Sales") from the following job posting. Return a JSON object with a single key 'keywords' containing an array of strings.\n\nJob:\n${textToEmbed}`;
+          const kwRes = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${openaiKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              model: "gpt-4o-mini",
+              messages: [{ role: "user", content: keywordPrompt }],
+              response_format: { type: "json_object" }
+            }),
+            signal: AbortSignal.timeout(15000)
+          });
+
+          if (kwRes.ok) {
+            const kwData = await kwRes.json();
+            try {
+              const parsed = JSON.parse(kwData.choices[0].message.content);
+              keywords = Array.isArray(parsed) ? parsed : Object.values(parsed)[0] as string[];
+              if (!Array.isArray(keywords)) keywords = [];
+            } catch {}
+          }
+
+          // OpenAI Embedding
+          const oaiRes = await fetch("https://api.openai.com/v1/embeddings", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${openaiKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              input: textToEmbed,
+              model: "text-embedding-3-small"
+            }),
+            signal: AbortSignal.timeout(15000)
+          });
+
+          if (oaiRes.ok) {
+            const oaiData = await oaiRes.json();
+            embedding = oaiData.data[0].embedding;
+          }
+        } catch (aiErr: any) {
+          console.warn(`    ⚠️ AI processing notice for "${job.title}":`, aiErr.message);
+        }
+
+        const jobData: any = {
+          company: pool.config.company_name,
+          title: job.title,
+          location: job.location || "India",
+          url: job.url,
+          description: (job.description || "").substring(0, 5000),
+          ats_source: job.source,
+          posted_at: job.posted_at || new Date().toISOString(),
+          embedding: embedding,
+          created_at: new Date().toISOString(),
+        };
+
+        let { error: insertError } = await supabase.from("scraped_jobs").upsert({
+          ...jobData,
+          keywords: keywords.slice(0, 5)
+        }, { onConflict: "url" });
+
+        if (insertError) {
+          const errMsg = insertError.message || "";
+          if (errMsg.includes("keywords") || errMsg.includes("column")) {
+            const { error: retryError } = await supabase.from("scraped_jobs").upsert(jobData, { onConflict: "url" });
+            insertError = retryError;
+          }
+        }
+
+        if (!insertError) {
+          pool.added++;
+          companyBatchAdded++;
+          totalAdded++;
+        }
+      }
+
+      pool.index += BATCH_SIZE;
+
+      // Update config metadata after each batch to persist round-robin progress immediately
+      await supabase
+        .from("company_ats_config")
+        .update({
+          last_scraped_at: new Date().toISOString(),
+          total_jobs_found: pool.allJobs.length,
+          scrape_notes: `Round-robin (Round ${round}): Evaluated ${Math.min(pool.index, pool.allJobs.length)}/${pool.allJobs.length}. Saved ${pool.added}. Skipped: ${pool.skippedFilter} filtered, ${pool.skippedDuplicate} duplicate.`
+        })
+        .eq("company_name", pool.config.company_name);
+
+      console.log(`  [${pool.config.company_name}] Batch complete! Saved ${companyBatchAdded} fresh jobs this round (Total saved: ${pool.added}).`);
+    }
+
+    if (!roundProcessedAny) break;
+    round++;
+  }
+
+  // 4. Update global cron status for admin dashboard
   await supabase
     .from("company_ats_config")
     .upsert({
@@ -273,12 +318,16 @@ async function main() {
       board_token_or_url: "cron_status",
       last_scraped_at: new Date().toISOString(),
       total_jobs_found: totalProcessed,
-      scrape_notes: `Daily Morning Scraper finished successfully. Processed: ${totalProcessed} total postings. Saved: ${totalAdded} fresh jobs across ${configs.length} companies.`,
+      scrape_notes: `Daily Morning Scraper finished successfully. Processed: ${totalProcessed} total postings across ${pools.length} companies in ${round - 1} round-robin rounds. Saved: ${totalAdded} fresh jobs.`,
     }, { onConflict: "company_name" });
 
-  console.log(`\n🎉 Finished Scraping All Configs!`);
+  console.log(`\n==========================================`);
+  console.log(`🎉 Finished Scraping All Companies in Round-Robin Mode!`);
+  console.log(`  Total Companies Scraped: ${pools.length}`);
+  console.log(`  Total Rounds Completed: ${round - 1}`);
   console.log(`  Total Processed across all companies: ${totalProcessed}`);
   console.log(`  Total Successfully Added/Updated: ${totalAdded}`);
+  console.log(`==========================================`);
 }
 
-main();
+main().catch(console.error);

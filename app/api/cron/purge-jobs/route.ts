@@ -79,53 +79,12 @@ async function handlePurge(request: Request) {
     totalPurged += nullOldBatch.length;
   }
 
-  // Fair Representation Maintenance: prune any company with > 50 jobs down to 50 freshest
-  let representationPruned = 0;
-  try {
-    const { data: allActiveJobs } = await supabase
-      .from("scraped_jobs")
-      .select("id, company, posted_at")
-      .order("posted_at", { ascending: false });
-
-    if (allActiveJobs && allActiveJobs.length > 0) {
-      const companyBuckets = new Map<string, string[]>();
-      for (const j of allActiveJobs) {
-        const cKey = (j.company || "unknown").toLowerCase().trim();
-        const list = companyBuckets.get(cKey) || [];
-        list.push(j.id);
-        companyBuckets.set(cKey, list);
-      }
-
-      const toPruneIds: string[] = [];
-      for (const [_, ids] of companyBuckets.entries()) {
-        if (ids.length > 50) {
-          toPruneIds.push(...ids.slice(50));
-        }
-      }
-
-      if (toPruneIds.length > 0) {
-        const { error: pruneErr } = await supabase
-          .from("scraped_jobs")
-          .delete()
-          .in("id", toPruneIds);
-
-        if (!pruneErr) {
-          representationPruned = toPruneIds.length;
-          totalPurged += representationPruned;
-        }
-      }
-    }
-  } catch (err: any) {
-    console.warn("[purge-jobs] Fair representation pruning notice:", err.message);
-  }
-
-  console.log(`[purge-jobs] Successfully purged ${totalPurged} stale/excess jobs (${representationPruned} representation cap).`);
+  console.log(`[purge-jobs] Successfully purged ${totalPurged} stale jobs older than 30 days.`);
 
   return NextResponse.json({
     success: true,
     totalPurged,
-    representationPruned,
     cutoffDate: cutoffIso,
-    message: `Purged ${totalPurged} jobs older than 30 days or exceeding per-company representation limits.`,
+    message: `Purged ${totalPurged} jobs older than 30 days.`,
   });
 }

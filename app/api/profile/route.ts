@@ -260,10 +260,11 @@ export async function PATCH(request: Request) {
               scrape_notes: "Auto-discovered pioneer company on profile update"
             }, { onConflict: "company_name" });
           } else {
+            const cleanDomain = rawCompany.toLowerCase().replace(/[^a-z0-9]/g, "");
             await supabase.from("company_ats_config").upsert({
               company_name: rawCompany,
               provider: "custom",
-              board_token_or_url: `https://www.google.com/search?q=${encodeURIComponent(rawCompany + " careers jobs")}`,
+              board_token_or_url: `https://www.${cleanDomain || "company"}.com/careers`,
               scrape_notes: "Pioneer company pending direct career portal"
             }, { onConflict: "company_name" });
           }

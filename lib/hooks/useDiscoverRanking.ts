@@ -104,16 +104,20 @@ export function rankDiscoverProfiles({
       if (person.is_me) continue;
 
       // Exclude ProxNet AI / system bots from discover cards
+      const pId = (person.id || "").toLowerCase();
       const pFullName = (person.full_name || "").toLowerCase();
       const pAnonName = (person.anonymous_name || "").toLowerCase();
       const pComp = (person.company || "").toLowerCase();
       const pTitle = (person.job_title || "").toLowerCase();
       const pEmail = (person.email || "").toLowerCase();
       if (
+        pId === "a2a05c8b-5a70-4212-990e-276b91219a24" ||
         pFullName.includes("proxnet ai") ||
         pAnonName.includes("proxnet ai") ||
         pEmail === "ai@proxnet.in" ||
         pEmail === "ai@proxnet.com" ||
+        pEmail.startsWith("ai@") ||
+        pComp === "proxnet" ||
         (pComp === "proxnet" && pTitle.includes("network assistant"))
       ) {
         continue;

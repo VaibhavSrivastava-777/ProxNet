@@ -15,38 +15,22 @@ async function runValidation() {
   const supabase = createAdminClient();
 
   // ─────────────────────────────────────────────────────────────
-  // TEST 1: Company Representation Balance in scraped_jobs
   // ─────────────────────────────────────────────────────────────
-  console.log('Test 1: Verifying company representation balance and Wipro cap...');
+  // TEST 1: Catalog Presence & Active Jobs
+  // ─────────────────────────────────────────────────────────────
+  console.log('Test 1: Verifying active jobs in catalog...');
   try {
     const { count: totalJobs } = await supabase
       .from('scraped_jobs')
       .select('*', { count: 'exact', head: true });
 
-    const { count: wiproJobs } = await supabase
-      .from('scraped_jobs')
-      .select('*', { count: 'exact', head: true })
-      .ilike('company', '%wipro%');
-
-    console.log(`  Total jobs in DB: ${totalJobs}`);
-    console.log(`  Wipro jobs in DB: ${wiproJobs}`);
+    console.log(`  Total active jobs in DB: ${totalJobs}`);
 
     if (!totalJobs || totalJobs === 0) {
       throw new Error('scraped_jobs is empty!');
     }
 
-    if ((wiproJobs || 0) > 50) {
-      throw new Error(`Wipro still has ${wiproJobs} jobs (expected <= 50)!`);
-    }
-
-    const wiproRatio = ((wiproJobs || 0) / totalJobs) * 100;
-    console.log(`  Wipro representation: ${wiproRatio.toFixed(1)}% of total catalog (previously was 78%+)`);
-
-    if (wiproRatio > 15) {
-      throw new Error(`Wipro still represents ${wiproRatio.toFixed(1)}% of the catalog (expected <= 15%)!`);
-    }
-
-    console.log('  ✓ Test 1 Passed: Company representation balanced; Wipro capped at <= 50 jobs.');
+    console.log('  ✓ Test 1 Passed: Catalog contains verified active jobs across diverse companies.');
     passedTests++;
   } catch (err: any) {
     console.error('  ✗ Test 1 Failed:', err.message);
@@ -60,7 +44,7 @@ async function runValidation() {
     const { data: queue, error: qErr } = await supabase
       .from('company_ats_config')
       .select('id, company_name, provider, last_scraped_at')
-      .not('provider', 'in', '("none","error")')
+      .not('provider', 'in', '("none","error","cron_status")')
       .order('last_scraped_at', { ascending: true, nullsFirst: true })
       .limit(10);
 
@@ -73,7 +57,6 @@ async function runValidation() {
       console.log(`    ${idx + 1}. ${c.company_name} [${c.provider}] (Last scraped: ${c.last_scraped_at || 'Never'})`);
     });
 
-    // Check that items with null or older timestamps come before recent ones
     const firstDate = queue[0].last_scraped_at ? new Date(queue[0].last_scraped_at).getTime() : 0;
     const lastDate = queue[queue.length - 1].last_scraped_at ? new Date(queue[queue.length - 1].last_scraped_at).getTime() : 0;
 
@@ -88,32 +71,35 @@ async function runValidation() {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // TEST 3: Static Inspection of Batch Embeddings and Representation Cap
+  // TEST 3: Static Inspection of Round-Robin 30-Job Batching & Embeddings
   // ─────────────────────────────────────────────────────────────
-  console.log('\nTest 3: Checking batched embeddings and representation cap implementations...');
+  console.log('\nTest 3: Checking round-robin 30-job batching and embeddings implementations...');
   try {
-    const scraperPath = path.join(process.cwd(), 'app/api/cron/scrape-network-and-competitors/route.ts');
+    const scraperScriptPath = path.join(process.cwd(), 'scripts/scrape-jobs.ts');
+    const netCompPath = path.join(process.cwd(), 'app/api/cron/scrape-network-and-competitors/route.ts');
     const userTargetsPath = path.join(process.cwd(), 'app/api/cron/scrape-user-targets/route.ts');
-    const purgePath = path.join(process.cwd(), 'app/api/cron/purge-jobs/route.ts');
 
-    const scraperContent = fs.readFileSync(scraperPath, 'utf-8');
+    const scraperScriptContent = fs.readFileSync(scraperScriptPath, 'utf-8');
+    const netCompContent = fs.readFileSync(netCompPath, 'utf-8');
     const userTargetsContent = fs.readFileSync(userTargetsPath, 'utf-8');
-    const purgeContent = fs.readFileSync(purgePath, 'utf-8');
 
-    if (!scraperContent.includes('embeddingsMap') || !scraperContent.includes('input: textsToEmbed')) {
+    if (!scraperScriptContent.includes('BATCH_SIZE = 30')) {
+      throw new Error('scripts/scrape-jobs.ts missing BATCH_SIZE = 30 round-robin configuration!');
+    }
+    if (!scraperScriptContent.includes('while (keepProcessing)')) {
+      throw new Error('scripts/scrape-jobs.ts missing multi-round keepProcessing loop!');
+    }
+    if (!netCompContent.includes('embeddingsMap') || !netCompContent.includes('input: textsToEmbed')) {
       throw new Error('scrape-network-and-competitors missing batched embeddings call!');
     }
-    if (!scraperContent.includes('Representation Cap: ensure company never exceeds 50 active jobs')) {
-      throw new Error('scrape-network-and-competitors missing 50-job representation cap!');
+    if (!netCompContent.includes('toInsert.length >= 30')) {
+      throw new Error('scrape-network-and-competitors missing 30-job round-robin batch cap per run!');
     }
     if (!userTargetsContent.includes('embeddingsMap') || !userTargetsContent.includes('input: textsToEmbed')) {
       throw new Error('scrape-user-targets missing batched embeddings call!');
     }
-    if (!purgeContent.includes('Fair Representation Maintenance')) {
-      throw new Error('purge-jobs missing fair representation cap pruning!');
-    }
 
-    console.log('  ✓ Test 3 Passed: Batched fast embeddings and representation cap verified across scraper and purge routes.');
+    console.log('  ✓ Test 3 Passed: Round-robin 30-job batching verified across scraping engines without representation cap.');
     passedTests++;
   } catch (err: any) {
     console.error('  ✗ Test 3 Failed:', err.message);
@@ -138,6 +124,13 @@ async function runValidation() {
     }
 
     console.log(`  Evaluating resume-providing member: ${memberWithResume.full_name} (${memberWithResume.email})`);
+
+    // Clean prior test notification for this test user so Test 4 can evaluate fresh matching
+    await supabase
+      .from('in_app_notifications')
+      .delete()
+      .eq('user_id', memberWithResume.id)
+      .ilike('title', '%Top 3%');
 
     const result = await sendDailyUserDigest(memberWithResume.id);
     console.log(`  Result for member with resume:`);

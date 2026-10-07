@@ -139,6 +139,24 @@ function getStoredNetworkCache(): NetworkCachePayload | null {
     const raw = localStorage.getItem(NETWORK_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
+    if (parsed?.peopleData?.people && Array.isArray(parsed.peopleData.people)) {
+      parsed.peopleData.people = parsed.peopleData.people.filter((p: any) => {
+        const id = (p.id || "").toLowerCase();
+        const email = (p.email || "").toLowerCase();
+        const fullName = (p.full_name || "").toLowerCase();
+        const anonName = (p.anonymous_name || "").toLowerCase();
+        const comp = (p.company || "").toLowerCase();
+        return (
+          id !== "a2a05c8b-5a70-4212-990e-276b91219a24" &&
+          email !== "ai@proxnet.in" &&
+          email !== "ai@proxnet.com" &&
+          !email.startsWith("ai@") &&
+          comp !== "proxnet" &&
+          !fullName.includes("proxnet ai") &&
+          !anonName.includes("proxnet ai")
+        );
+      });
+    }
     memoryNetworkCache = parsed;
     return parsed;
   } catch {
@@ -449,16 +467,20 @@ export function ProximityMap() {
 
     // Filter out ProxNet AI system bot and any active beacon that exceeds 2km
     const withinRadiusPeople = combined.filter((p: any) => {
+      const pId = (p.id || "").toLowerCase();
       const pFullName = (p.full_name || "").toLowerCase();
       const pAnonName = (p.anonymous_name || "").toLowerCase();
       const pComp = (p.company || "").toLowerCase();
       const pTitle = (p.job_title || "").toLowerCase();
       const pEmail = (p.email || "").toLowerCase();
       if (
+        pId === "a2a05c8b-5a70-4212-990e-276b91219a24" ||
         pFullName.includes("proxnet ai") ||
         pAnonName.includes("proxnet ai") ||
         pEmail === "ai@proxnet.in" ||
         pEmail === "ai@proxnet.com" ||
+        pEmail.startsWith("ai@") ||
+        pComp === "proxnet" ||
         (pComp === "proxnet" && pTitle.includes("network assistant"))
       ) {
         return false;

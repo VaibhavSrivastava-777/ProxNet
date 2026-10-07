@@ -24,7 +24,7 @@ export async function GET() {
       job_title: "Network Assistant",
       company: "ProxNet",
       source: "admin",
-      is_active: true,
+      is_active: false,
       visibility: { showCompany: true, showTitle: true, showPhoto: true }
     })
     .select("id")

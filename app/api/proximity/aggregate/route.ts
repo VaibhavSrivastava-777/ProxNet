@@ -24,7 +24,11 @@ export async function GET(request: Request) {
   const { data: users, error } = await supabase
     .from("users")
     .select("*")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .neq("id", "a2a05c8b-5a70-4212-990e-276b91219a24")
+    .neq("email", "ai@proxnet.in")
+    .not("company", "ilike", "proxnet")
+    .not("full_name", "ilike", "%proxnet ai%");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -49,10 +53,13 @@ export async function GET(request: Request) {
     const visibility = u.visibility as UserVisibility;
     if (!visibility?.showCompany || !u.company?.trim()) continue;
     if (
+      u.id === "a2a05c8b-5a70-4212-990e-276b91219a24" ||
       u.email === "ai@proxnet.in" ||
       u.email === "ai@proxnet.com" ||
       u.full_name?.toLowerCase().includes("proxnet ai") ||
-      (u.company?.toLowerCase() === "proxnet" && u.job_title?.toLowerCase().includes("network assistant"))
+      u.full_name?.toLowerCase() === "proxnet" ||
+      u.company?.toLowerCase() === "proxnet" ||
+      (u.company?.toLowerCase().includes("proxnet") && u.job_title?.toLowerCase().includes("network assistant"))
     ) {
       continue;
     }

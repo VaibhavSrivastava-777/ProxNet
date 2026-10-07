@@ -61,9 +61,13 @@ export async function GET(request: Request) {
   // Note: scrapbook attributes (ask_me_about, help_offers, etc.) live inside profile_digest
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("id, full_name, company, job_title, about, professional_bio, tags, profile_digest, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility, embedding")
+    .select("id, email, full_name, company, job_title, about, professional_bio, tags, profile_digest, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility, embedding")
     .eq("is_active", true)
-    .neq("id", user.id);
+    .neq("id", user.id)
+    .neq("id", "a2a05c8b-5a70-4212-990e-276b91219a24")
+    .neq("email", "ai@proxnet.in")
+    .not("company", "ilike", "proxnet")
+    .not("full_name", "ilike", "%proxnet ai%");
 
   if (errUsers) return NextResponse.json({ error: errUsers.message }, { status: 500 });
 
@@ -95,18 +99,22 @@ export async function GET(request: Request) {
 
 function isBotOrAiUser(u: any): boolean {
   if (!u) return false;
+  const id = (u.id || "").toLowerCase();
   const email = (u.email || "").toLowerCase();
   const fullName = (u.full_name || "").toLowerCase();
   const anonName = (u.anonymous_name || "").toLowerCase();
   const comp = (u.company || "").toLowerCase();
   const title = (u.job_title || "").toLowerCase();
   return (
+    id === "a2a05c8b-5a70-4212-990e-276b91219a24" ||
     email === "ai@proxnet.in" ||
     email === "ai@proxnet.com" ||
     email.startsWith("ai@") ||
     fullName.includes("proxnet ai") ||
+    fullName === "proxnet" ||
     anonName.includes("proxnet ai") ||
-    (comp === "proxnet" && title.includes("network assistant"))
+    comp === "proxnet" ||
+    title.includes("network assistant")
   );
 }
 

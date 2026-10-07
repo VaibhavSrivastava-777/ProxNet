@@ -18,7 +18,7 @@ async function repairBoards() {
     const { error: salErr } = await supabase.from("company_ats_config").insert({
       company_name: "Sal Securities",
       provider: "custom",
-      board_token_or_url: "https://www.google.com/search?q=Sal+Securities+careers+jobs",
+      board_token_or_url: "https://www.salsecurities.com/careers",
       scrape_notes: "Pioneer company added for tracking",
       total_jobs_found: 0
     });

@@ -317,18 +317,6 @@ async function handleScrape(request: Request) {
       }
     }
 
-    // Enforce Representation Cap: ensure company never exceeds 50 active jobs in database
-    const { data: allCompJobs } = await supabase
-      .from("scraped_jobs")
-      .select("id, posted_at")
-      .ilike("company", target.company_name)
-      .order("posted_at", { ascending: false });
-
-    if (allCompJobs && allCompJobs.length > 50) {
-      const excessIds = allCompJobs.slice(50).map((r) => r.id);
-      await supabase.from("scraped_jobs").delete().in("id", excessIds);
-    }
-
     totalSaved += companySaved;
 
     // Update company_ats_config status immediately (pushes to back of round-robin line)
@@ -337,7 +325,7 @@ async function handleScrape(request: Request) {
       .update({
         last_scraped_at: new Date().toISOString(),
         total_jobs_found: jobs.length,
-        scrape_notes: `Scraped ${jobs.length} jobs, saved ${companySaved} new eligible jobs. Representation capped at 50 max.`,
+        scrape_notes: `Scraped ${jobs.length} jobs, saved ${companySaved} new eligible jobs in 30-job round-robin batch.`,
       })
       .eq("id", target.id);
 
