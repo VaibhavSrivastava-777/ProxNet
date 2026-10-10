@@ -1,10 +1,30 @@
 import { createClient } from "@supabase/supabase-js";
 import * as dotenv from "dotenv";
-import { STRATEGIES, stripHtml } from "../lib/scrape-strategies";
+import {
+  STRATEGIES,
+  stripHtml,
+  usesFirecrawl,
+  FirecrawlCreditsExhaustedError,
+  FirecrawlRateLimitedError,
+} from "../lib/scrape-strategies";
 import { isJobEligible, normalizeJobUrl, normalizeJobTitle } from "../lib/jobs/job-filters";
 
 dotenv.config({ path: ".env.local" });
 dotenv.config({ path: ".env" });
+
+/**
+ * Fairness quota: maximum NEW jobs saved per company in a single daily run.
+ *
+ * Previously the round-robin loop kept cycling until EVERY company's pool was fully drained,
+ * so round-robin only affected ordering, not volume. A single large India-heavy board
+ * (e.g. Wipro, 5,000+ postings) therefore contributed ~97% of a day's inserts.
+ * With this cap, no company can exceed this many new jobs per run; the remainder is picked
+ * up on subsequent days (already-saved jobs are de-duplicated, so each run advances).
+ */
+const MAX_NEW_JOBS_PER_COMPANY_PER_RUN = Math.max(
+  1,
+  parseInt(process.env.SCRAPE_MAX_NEW_PER_COMPANY || "30", 10) || 30
+);
 
 interface CompanyPool {
   config: any;
@@ -17,6 +37,7 @@ interface CompanyPool {
   existingUrls: Set<string>;
   existingTitles: Set<string>;
   seenBatchUrls: Set<string>;
+  capped: boolean;
 }
 
 async function main() {
@@ -88,7 +109,18 @@ async function main() {
 
   const pools: CompanyPool[] = [];
 
+  // Circuit breaker: once Firecrawl is out of credits, stop calling it for the rest of the run.
+  let firecrawlExhausted = false;
+  let firecrawlDeferred = 0;
+
   for (const config of configs || []) {
+    const needsFirecrawl = usesFirecrawl(config.provider, config.board_token_or_url);
+    if (needsFirecrawl && firecrawlExhausted) {
+      // Do NOT touch last_scraped_at: keep this company at the front of tomorrow's queue.
+      firecrawlDeferred++;
+      continue;
+    }
+
     console.log(`Fetching jobs for ${config.company_name} [${config.provider}]...`);
 
     const strategy = STRATEGIES[config.provider];
@@ -109,6 +141,26 @@ async function main() {
       jobs = await strategy(config.board_token_or_url, config.company_name);
     } catch (e: any) {
       console.error(`  Error fetching jobs for ${config.company_name}:`, e.message);
+
+      if (e instanceof FirecrawlCreditsExhaustedError) {
+        firecrawlExhausted = true;
+        firecrawlDeferred++;
+        console.error("  ⛔ Firecrawl credits exhausted — deferring all remaining Firecrawl-based companies to the next run.");
+        await supabase
+          .from("company_ats_config")
+          .update({ scrape_notes: `Deferred: Firecrawl credits exhausted (${new Date().toISOString()}). Will retry next run.` })
+          .eq("company_name", config.company_name);
+        continue;
+      }
+      if (e instanceof FirecrawlRateLimitedError) {
+        // Keep queue priority (no last_scraped_at bump) so it is retried first next run.
+        await supabase
+          .from("company_ats_config")
+          .update({ scrape_notes: `Deferred: Firecrawl rate limited after retries (${new Date().toISOString()}).` })
+          .eq("company_name", config.company_name);
+        continue;
+      }
+
       await supabase
         .from("company_ats_config")
         .update({
@@ -141,7 +193,8 @@ async function main() {
       skippedDuplicate: 0,
       existingUrls,
       existingTitles,
-      seenBatchUrls: new Set<string>()
+      seenBatchUrls: new Set<string>(),
+      capped: false,
     });
   }
 
@@ -164,6 +217,11 @@ async function main() {
 
     for (const pool of pools) {
       if (pool.index >= pool.allJobs.length) continue;
+      // Fairness quota reached: this company is done for today.
+      if (pool.added >= MAX_NEW_JOBS_PER_COMPANY_PER_RUN) {
+        pool.capped = true;
+        continue;
+      }
 
       keepProcessing = true;
       roundProcessedAny = true;
@@ -174,7 +232,13 @@ async function main() {
 
       let companyBatchAdded = 0;
 
+      let consumed = 0;
       for (const job of batch) {
+        if (pool.added >= MAX_NEW_JOBS_PER_COMPANY_PER_RUN) {
+          pool.capped = true;
+          break;
+        }
+        consumed++;
         // 1. Eligibility Check: 30-day age limit, India location, not junior
         const { eligible, reason } = isJobEligible({
           title: job.title,
@@ -290,7 +354,7 @@ async function main() {
         }
       }
 
-      pool.index += BATCH_SIZE;
+      pool.index += consumed;
 
       // Update config metadata after each batch to persist round-robin progress immediately
       await supabase
@@ -298,7 +362,7 @@ async function main() {
         .update({
           last_scraped_at: new Date().toISOString(),
           total_jobs_found: pool.allJobs.length,
-          scrape_notes: `Round-robin (Round ${round}): Evaluated ${Math.min(pool.index, pool.allJobs.length)}/${pool.allJobs.length}. Saved ${pool.added}. Skipped: ${pool.skippedFilter} filtered, ${pool.skippedDuplicate} duplicate.`
+          scrape_notes: `Round-robin (Round ${round}): Evaluated ${Math.min(pool.index, pool.allJobs.length)}/${pool.allJobs.length}. Saved ${pool.added}${pool.capped ? ` (daily cap ${MAX_NEW_JOBS_PER_COMPANY_PER_RUN} reached)` : ""}. Skipped: ${pool.skippedFilter} filtered, ${pool.skippedDuplicate} duplicate.`
         })
         .eq("company_name", pool.config.company_name);
 
@@ -318,7 +382,7 @@ async function main() {
       board_token_or_url: "cron_status",
       last_scraped_at: new Date().toISOString(),
       total_jobs_found: totalProcessed,
-      scrape_notes: `Daily Morning Scraper finished successfully. Processed: ${totalProcessed} total postings across ${pools.length} companies in ${round - 1} round-robin rounds. Saved: ${totalAdded} fresh jobs.`,
+      scrape_notes: `Daily Morning Scraper finished. Processed: ${totalProcessed} postings across ${pools.length} companies in ${round - 1} rounds. Saved: ${totalAdded} fresh jobs (cap ${MAX_NEW_JOBS_PER_COMPANY_PER_RUN}/company; ${pools.filter((p) => p.capped).length} capped). Firecrawl: ${firecrawlExhausted ? `CREDITS EXHAUSTED, ${firecrawlDeferred} companies deferred` : "ok"}.`,
     }, { onConflict: "company_name" });
 
   console.log(`\n==========================================`);
@@ -327,6 +391,10 @@ async function main() {
   console.log(`  Total Rounds Completed: ${round - 1}`);
   console.log(`  Total Processed across all companies: ${totalProcessed}`);
   console.log(`  Total Successfully Added/Updated: ${totalAdded}`);
+  console.log(`  Per-company cap: ${MAX_NEW_JOBS_PER_COMPANY_PER_RUN} (companies capped: ${pools.filter((p) => p.capped).length})`);
+  if (firecrawlExhausted) {
+    console.log(`  ⛔ Firecrawl credits exhausted: ${firecrawlDeferred} companies deferred to next run.`);
+  }
   console.log(`==========================================`);
 }
 

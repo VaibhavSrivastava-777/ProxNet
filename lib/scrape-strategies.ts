@@ -335,6 +335,31 @@ export const successfactorsSitemapStrategy: ScrapeStrategy = async (
     .filter((j): j is ScrapedJob => j !== null);
 };
 
+/** Thrown when Firecrawl reports the account is out of credits (HTTP 402). */
+export class FirecrawlCreditsExhaustedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FirecrawlCreditsExhaustedError";
+  }
+}
+
+/** Thrown when Firecrawl keeps returning 429 after all retries. */
+export class FirecrawlRateLimitedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FirecrawlRateLimitedError";
+  }
+}
+
+const FIRECRAWL_PROVIDERS = new Set(["custom", "eightfold", "icims", "successfactors"]);
+
+/** True when scraping this config goes through Firecrawl (i.e. consumes Firecrawl credits). */
+export function usesFirecrawl(provider: string, boardUrl: string | null | undefined): boolean {
+  if (!FIRECRAWL_PROVIDERS.has(provider)) return false;
+  if ((boardUrl || "").includes("wipro.com")) return false; // Wipro uses the free sitemap strategy
+  return true;
+}
+
 export const customStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
   if (boardUrl.includes("wipro.com")) {
     return successfactorsSitemapStrategy(boardUrl, companyName);
@@ -355,28 +380,45 @@ export const customStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
   await new Promise((r) => setTimeout(r, 2500));
 
   if (openaiKey) {
-    // Fast scrape + native OpenAI extraction
-    const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${firecrawlKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        url: boardUrl,
-        formats: ["markdown"],
-        waitFor: 10000,
-        mobile: false
-      }),
-      signal: AbortSignal.timeout(60000) // 1 min timeout
-    });
+    // Fast scrape + native OpenAI extraction (with 429 backoff + credit-exhaustion detection)
+    const MAX_ATTEMPTS = 4;
+    let res: Response | null = null;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${firecrawlKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          url: boardUrl,
+          formats: ["markdown"],
+          waitFor: 10000,
+          mobile: false
+        }),
+        signal: AbortSignal.timeout(60000) // 1 min timeout
+      });
 
-    if (!res.ok) {
+      if (res.ok) break;
+
       const errText = await res.text();
+      if (res.status === 402 || /insufficient credits/i.test(errText)) {
+        throw new FirecrawlCreditsExhaustedError(`Firecrawl credits exhausted: ${res.status} ${errText.slice(0, 200)}`);
+      }
+      if (res.status === 429 && attempt < MAX_ATTEMPTS) {
+        const retryAfter = parseInt(res.headers.get("retry-after") || "", 10);
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 10000 * 2 ** (attempt - 1);
+        console.warn(`  [CUSTOM] Firecrawl 429 for ${companyName}; retrying in ${Math.round(waitMs / 1000)}s (attempt ${attempt}/${MAX_ATTEMPTS})`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      if (res.status === 429) {
+        throw new FirecrawlRateLimitedError(`Firecrawl rate limited after ${MAX_ATTEMPTS} attempts: ${errText.slice(0, 200)}`);
+      }
       throw new Error(`Firecrawl Scrape API error: ${res.status} ${errText}`);
     }
 
-    const data = await res.json();
+    const data = await res!.json();
     if (!data.success || !data.data || !data.data.markdown) {
       throw new Error("Firecrawl Scrape API failed to return markdown");
     }
@@ -428,6 +470,12 @@ export const customStrategy: ScrapeStrategy = async (boardUrl, companyName) => {
 
   if (!res.ok) {
     const errText = await res.text();
+    if (res.status === 402 || /insufficient credits/i.test(errText)) {
+      throw new FirecrawlCreditsExhaustedError(`Firecrawl credits exhausted: ${res.status} ${errText.slice(0, 200)}`);
+    }
+    if (res.status === 429) {
+      throw new FirecrawlRateLimitedError(`Firecrawl rate limited: ${errText.slice(0, 200)}`);
+    }
     throw new Error(`Firecrawl API error: ${res.status} ${errText}`);
   }
 
