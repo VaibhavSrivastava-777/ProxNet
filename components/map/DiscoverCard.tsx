@@ -140,6 +140,7 @@ export function DiscoverCard({
               <img
                 src={person.profile_photo_url}
                 alt={displayName}
+                referrerPolicy="no-referrer"
                 className="w-16 h-16 rounded-2xl object-cover border-2 border-[var(--color-border)] shadow-md"
               />
             ) : (

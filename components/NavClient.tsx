@@ -1038,7 +1038,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                               <div className="w-3.5 h-3.5 rounded-full overflow-hidden bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-[8px] flex items-center justify-center">
                                 {profileUser?.profile_photo_url ? (
-                                  <img src={profileUser.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                                  <img src={profileUser.profile_photo_url} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
                                 ) : (
                                   (userName || "U").charAt(0).toUpperCase()
                                 )}
@@ -1593,7 +1593,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="w-4 h-4 rounded-full overflow-hidden bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-[9px] flex items-center justify-center">
                           {profileUser?.profile_photo_url ? (
-                            <img src={profileUser.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                            <img src={profileUser.profile_photo_url} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
                           ) : (
                             (userName || "U").charAt(0).toUpperCase()
                           )}

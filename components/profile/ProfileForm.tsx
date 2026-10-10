@@ -265,6 +265,7 @@ export function ProfileForm({ initialUser }: Props) {
     }
   };
   const [saving, setSaving] = useState(false);
+  const [photoError, setPhotoError] = useState(false);
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
@@ -330,6 +331,7 @@ export function ProfileForm({ initialUser }: Props) {
 
       const data = await res.json();
       setUser((prev: any) => ({ ...prev, profile_photo_url: data.photoUrl }));
+      setPhotoError(false);
       setToast({ message: "Profile photo updated successfully!", type: "success" });
       setAutoSaveStatus("saved");
       setLastSavedAt(new Date());
@@ -1240,11 +1242,13 @@ export function ProfileForm({ initialUser }: Props) {
                   title="Click to change profile photo"
                   className="absolute inset-2.5 rounded-full overflow-hidden border-2 border-[var(--color-surface)] shadow-md group cursor-pointer bg-[var(--color-surface-secondary)]"
                 >
-                  {user.profile_photo_url ? (
+                  {user.profile_photo_url && !photoError ? (
                     <img
                       src={user.profile_photo_url}
                       alt={user.full_name || "Profile"}
                       className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={() => setPhotoError(true)}
                     />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-bold text-xl flex items-center justify-center">
@@ -1498,19 +1502,51 @@ export function ProfileForm({ initialUser }: Props) {
           </div>
 
           <div style={{ gridColumn: "1 / -1" }}>
-            <label className="label">Profile photo URL <span className="text-red-500">*</span></label>
-            <input
-              className="input"
-              style={showErrors && !user.profile_photo_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
-              value={user.profile_photo_url ?? ""}
-              placeholder="https://..."
-              onChange={(e) =>
-                setUser({ ...user, profile_photo_url: e.target.value })
-              }
-            />
-            {showErrors && !user.profile_photo_url?.trim() && (
-              <p className="text-xs text-red-500 mt-1">Profile photo URL is required</p>
-            )}
+            <label className="label">Profile photo <span className="text-red-500">*</span></label>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div
+                onClick={() => photoInputRef.current?.click()}
+                title="Click to upload/change photo"
+                className="w-14 h-14 rounded-full overflow-hidden border-2 border-[var(--color-border)] shrink-0 bg-[var(--color-surface-secondary)] flex items-center justify-center shadow-xs cursor-pointer hover:border-[var(--color-primary)] transition-colors"
+              >
+                {user.profile_photo_url && !photoError ? (
+                  <img
+                    src={user.profile_photo_url}
+                    alt={user.full_name || "Profile"}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={() => setPhotoError(true)}
+                  />
+                ) : (
+                  <span className="text-lg font-bold text-[var(--color-text-secondary)]">{initials}</span>
+                )}
+              </div>
+              <div className="flex-1 w-full space-y-2">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={uploadingPhoto}
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-all flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap shrink-0"
+                  >
+                    {uploadingPhoto ? "Uploading..." : "📷 Upload Photo"}
+                  </button>
+                  <input
+                    className="input flex-1 text-xs"
+                    style={showErrors && !user.profile_photo_url?.trim() ? { borderColor: "var(--color-error)", boxShadow: "0 0 0 3px rgba(204, 16, 22, 0.15)" } : undefined}
+                    value={user.profile_photo_url ?? ""}
+                    placeholder="Or paste image URL (https://...)"
+                    onChange={(e) => {
+                      setUser({ ...user, profile_photo_url: e.target.value });
+                      setPhotoError(false);
+                    }}
+                  />
+                </div>
+                {showErrors && !user.profile_photo_url?.trim() && (
+                  <p className="text-xs text-red-500 mt-1">Profile photo is required</p>
+                )}
+              </div>
+            </div>
           </div>
 
           <div>
@@ -2867,8 +2903,14 @@ export function ProfileForm({ initialUser }: Props) {
             <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-5 py-4">
               <div className="flex items-center gap-4 bg-[var(--color-surface-secondary)] p-3.5 rounded-xl border border-[var(--color-border-light)] shrink-0">
                 <div className="avatar avatar-md shrink-0">
-                  {user.profile_photo_url ? (
-                    <img src={user.profile_photo_url} alt={user.full_name} className="rounded-full w-12 h-12 object-cover" />
+                  {user.profile_photo_url && !photoError ? (
+                    <img
+                      src={user.profile_photo_url}
+                      alt={user.full_name}
+                      referrerPolicy="no-referrer"
+                      className="rounded-full w-12 h-12 object-cover"
+                      onError={() => setPhotoError(true)}
+                    />
                   ) : (
                     <div className="bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-lg flex items-center justify-center w-12 h-12 rounded-full">
                       {initials}

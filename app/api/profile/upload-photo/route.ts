@@ -53,6 +53,7 @@ export async function POST(request: Request) {
     const ext = file.type.split("/")[1] || "jpg";
     const fileName = `${user.id}-${Date.now()}.${ext}`;
 
+    let photoUrl = "";
     const { error: uploadError } = await supabase.storage
       .from("profile-photos")
       .upload(fileName, buffer, {
@@ -60,16 +61,15 @@ export async function POST(request: Request) {
         upsert: true,
       });
 
-    if (uploadError) {
-      console.error("Failed to upload profile photo:", uploadError);
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    if (!uploadError) {
+      const { data: publicUrlData } = supabase.storage
+        .from("profile-photos")
+        .getPublicUrl(fileName);
+      photoUrl = publicUrlData.publicUrl;
+    } else {
+      console.warn("Supabase storage upload failed, using data URI fallback:", uploadError.message);
+      photoUrl = `data:${file.type};base64,${buffer.toString("base64")}`;
     }
-
-    const { data: publicUrlData } = supabase.storage
-      .from("profile-photos")
-      .getPublicUrl(fileName);
-
-    const photoUrl = publicUrlData.publicUrl;
 
     // Update user record in database
     await supabase

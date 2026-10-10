@@ -97,6 +97,7 @@ export function ScrapbookCardModal({
                 <img
                   src={person.profile_photo_url}
                   alt={person.full_name || "Neighbor"}
+                  referrerPolicy="no-referrer"
                   className="w-20 h-20 rounded-2xl object-cover border-4 border-[var(--color-surface)] shadow-lg"
                 />
               ) : (

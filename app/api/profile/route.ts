@@ -43,6 +43,7 @@ export async function GET() {
   const digest = (user as any).profile_digest || {};
   return NextResponse.json({
     ...user,
+    profile_photo_url: user.profile_photo_url || (user as any).picture || (user as any).image || null,
     push_reward_claimed: Boolean(digest.push_reward_claimed || digest.rewarded_actions?.includes("push_notifications_enabled")),
     help_offers: user.help_offers || digest.help_offers || [],
     tinkering_with: user.tinkering_with || digest.tinkering_with || [],

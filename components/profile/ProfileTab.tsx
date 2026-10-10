@@ -1,22 +1,64 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { calculateProfileCompleteness, getProfileCompletenessItems } from "@/lib/profile-validation";
 
 export function ProfileTab() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/profile")
       .then((r) => r.json())
       .then((data) => {
-        if (data && !data.error) setUser(data);
+        if (data && !data.error) {
+          setUser(data);
+          setPhotoError(false);
+        }
       })
       .catch((e) => console.error("Failed to load profile:", e))
       .finally(() => setLoading(false));
   }, []);
+
+  const handlePhotoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image must be under 5MB");
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/profile/upload-photo", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to upload photo");
+      }
+
+      const data = await res.json();
+      setUser((prev: any) => ({ ...prev, profile_photo_url: data.photoUrl }));
+      setPhotoError(false);
+    } catch (err: any) {
+      console.error("Photo upload error:", err);
+      alert(err.message || "Failed to upload photo");
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    }
+  };
 
   if (loading) {
     return (
@@ -70,24 +112,62 @@ export function ProfileTab() {
             />
           </svg>
 
-          {/* User Image / Initials in Center */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-16 h-16 rounded-full overflow-hidden bg-[var(--color-primary-subtle)] text-[var(--color-primary)] font-bold text-xl flex items-center justify-center shadow-inner">
-              {user?.profile_photo_url ? (
-                <img
-                  src={user.profile_photo_url}
-                  alt={user?.full_name || "Profile"}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span>{(user?.full_name || user?.userName || "U").charAt(0).toUpperCase()}</span>
-              )}
+          {/* User Image / Initials in Center with click-to-upload */}
+          <div
+            onClick={() => photoInputRef.current?.click()}
+            title="Click to upload / change profile photo"
+            className="absolute inset-2.5 rounded-full overflow-hidden border-2 border-[var(--color-surface)] shadow-inner group cursor-pointer bg-[var(--color-primary-subtle)] flex items-center justify-center"
+          >
+            {user?.profile_photo_url && !photoError ? (
+              <img
+                src={user.profile_photo_url}
+                alt={user?.full_name || "Profile"}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+                onError={() => setPhotoError(true)}
+              />
+            ) : (
+              <span className="text-[var(--color-primary)] font-bold text-xl">
+                {(user?.full_name || user?.userName || "U").charAt(0).toUpperCase()}
+              </span>
+            )}
+
+            {/* Camera overlay hover */}
+            <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-semibold">
+              <span>📷</span>
+              <span>{uploadingPhoto ? "..." : "Change"}</span>
             </div>
           </div>
 
+          {/* Photo upload camera button */}
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            disabled={uploadingPhoto}
+            className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center shadow-md hover:scale-105 transition-transform border border-white cursor-pointer z-10"
+            title="Upload profile photo"
+          >
+            {uploadingPhoto ? (
+              <span className="w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            )}
+          </button>
+
+          <input
+            type="file"
+            ref={photoInputRef}
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoFileUpload}
+          />
+
           {/* % Badge Pill at bottom of circle */}
           <span
-            className="absolute -bottom-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold text-white shadow-xs"
+            className="absolute -bottom-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold text-white shadow-xs z-10"
             style={{ backgroundColor: ringColor }}
           >
             {completeness}%

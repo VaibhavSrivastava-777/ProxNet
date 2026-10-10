@@ -448,6 +448,7 @@ export function ProximityCardModal({
                 <img
                   src={person.profile_photo_url}
                   alt={displayName}
+                  referrerPolicy="no-referrer"
                   className="w-20 h-20 rounded-2xl object-cover border-4 border-[var(--color-surface)] shadow-md bg-[var(--color-surface-secondary)]"
                 />
               ) : (
