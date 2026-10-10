@@ -409,8 +409,15 @@ export function JobsFeed() {
       }
 
       if (companyJobs.length > 0) {
-        // Sort jobs within company descending by matchRate
-        companyJobs.sort((a, b) => b.matchRate - a.matchRate);
+        // Sort jobs within company descending by matchRate (newest date as tie-breaker)
+        companyJobs.sort((a, b) => {
+          const matchDiff = b.matchRate - a.matchRate;
+          if (matchDiff !== 0) return matchDiff;
+          const dateA = a.raw_posted_at ? new Date(a.raw_posted_at).getTime() : 0;
+          const dateB = b.raw_posted_at ? new Date(b.raw_posted_at).getTime() : 0;
+          if (dateB !== dateA) return dateB - dateA;
+          return a.title.localeCompare(b.title);
+        });
         const topJob = companyJobs[0];
         const otherJobs = companyJobs.slice(1);
 
@@ -495,7 +502,7 @@ export function JobsFeed() {
     const isAllFunc = selectedFunctions.includes("all") || selectedFunctions.length === 0;
     const isAllKw = selectedKeywords.includes("all") || selectedKeywords.length === 0;
 
-    return result
+    const filteredGroups = result
       .map((g) => {
         const matchedJobs = g.allJobs.filter((j) => {
           // 1. Search Query
@@ -601,6 +608,16 @@ export function JobsFeed() {
 
         if (matchedJobs.length === 0) return null;
 
+        // Ensure matched jobs within company are sorted descending by matchRate (newest date as tie-breaker)
+        matchedJobs.sort((a, b) => {
+          const matchDiff = b.matchRate - a.matchRate;
+          if (matchDiff !== 0) return matchDiff;
+          const dateA = a.raw_posted_at ? new Date(a.raw_posted_at).getTime() : 0;
+          const dateB = b.raw_posted_at ? new Date(b.raw_posted_at).getTime() : 0;
+          if (dateB !== dateA) return dateB - dateA;
+          return a.title.localeCompare(b.title);
+        });
+
         return {
           ...g,
           topJob: matchedJobs[0],
@@ -610,6 +627,14 @@ export function JobsFeed() {
         };
       })
       .filter(Boolean) as CompanyJobGroup[];
+
+    // Sort company groups strictly by top matchRate descending, exactly like default state
+    return filteredGroups.sort((a, b) => {
+      const topDiff = b.topJob.matchRate - a.topJob.matchRate;
+      if (topDiff !== 0) return topDiff;
+      if (b.totalJobsCount !== a.totalJobsCount) return b.totalJobsCount - a.totalJobsCount;
+      return a.company.localeCompare(b.company);
+    });
   }, [allCompanyGroups, searchQuery, selectedLocations, selectedAge, selectedFunctions, selectedKeywords]);
 
   // Paginated company groups: first 30, then +20 each time
