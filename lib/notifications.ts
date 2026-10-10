@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { fcmMessaging } from "./firebase-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { deduplicateNotifications, getNotificationDeduplicationKey } from "./notification-deduplication";
 
 /**
  * Frames FCM notification title and body into concise, complete sentences
@@ -276,18 +277,9 @@ export async function sendNotification(
     const shouldSendEmail = isFallback || isDetailedNotification || isPriorityNotification;
 
     if (shouldSendEmail) {
-      const { checkEmailRateLimit, recordEmailSent, generateContextEmail } = await import("@/lib/email-templates");
-
-      // Anti-spam gate check (fallback emails and detailed job notifications bypass rate limit)
-      const rateCheck = checkEmailRateLimit(userId, notifType, isFallback || isDetailedNotification || data?.forceEmail === true);
-      if (!rateCheck.allowed) {
-        console.log(`[Anti-Spam] Suppressed email to ${userId} (${notifType}): ${rateCheck.reason}`);
-        return;
-      }
-
       let { data: user, error: uError } = await supabase
         .from("users")
-        .select("email, full_name")
+        .select("id, email, full_name, company, job_title, home_lat, home_lng, home_name, resume_text, resume_url, linkedin_profile_url, profile_photo_url, about, professional_bio, profile_digest")
         .eq("id", userId)
         .single();
 
@@ -298,7 +290,12 @@ export async function sendNotification(
           const { data: authData } = await supabase.auth.admin.getUserById(userId);
           if (authData?.user?.email) {
             recipientEmail = authData.user.email.trim();
-            user = { ...(user || {}), email: recipientEmail, full_name: user?.full_name || authData.user.user_metadata?.full_name || "Neighbor" };
+            user = {
+              ...(user || {}),
+              id: user?.id || userId,
+              email: recipientEmail,
+              full_name: user?.full_name || authData.user.user_metadata?.full_name || "Neighbor",
+            } as any;
             // Self-heal public.users record asynchronously
             Promise.resolve(supabase.from("users").update({ email: recipientEmail }).eq("id", userId)).catch(() => {});
           }
@@ -312,6 +309,28 @@ export async function sendNotification(
         return;
       }
 
+      const { isProfileComplete, calculateProfileCompleteness } = await import("@/lib/profile-validation");
+      const userProfileComplete = user ? isProfileComplete(user) : false;
+      const completenessScore = user ? calculateProfileCompleteness(user) : 0;
+
+      const { checkEmailRateLimit, recordEmailSent, generateContextEmail } = await import("@/lib/email-templates");
+
+      // Prioritized Anti-spam & Quota Gate check:
+      // Users who completed their profiles receive high-priority delivery allowance.
+      // Incomplete profiles are throttled/deprioritized for non-essential digests and capped strictly.
+      const rateCheck = checkEmailRateLimit(userId, notifType, {
+        forceEmail: data?.forceEmail === true,
+        isProfileComplete: userProfileComplete,
+        completenessScore,
+        isDetailedNotification,
+        isFallback,
+      });
+
+      if (!rateCheck.allowed) {
+        console.log(`[Prioritized Delivery] Suppressed Resend email to ${userId} (${notifType}): ${rateCheck.reason}`);
+        return;
+      }
+
       // Query other recent unread notifications to club into a digest if multiple items are waiting
       let otherUnreadNotifs: Array<{ id: string; title: string; body: string; url: string; created_at?: string }> = [];
       try {
@@ -321,11 +340,15 @@ export async function sendNotification(
           .eq("user_id", userId)
           .eq("is_read", false)
           .order("created_at", { ascending: false })
-          .limit(5);
+          .limit(25);
 
-        if (recentUnread && recentUnread.length > 1) {
-          // Exclude the notification we just inserted
-          otherUnreadNotifs = recentUnread.filter((n) => n.title !== title || n.url !== url).slice(0, 3);
+        if (recentUnread && recentUnread.length > 0) {
+          const currentKey = getNotificationDeduplicationKey({ title, url, body, data });
+          const deduped = deduplicateNotifications(recentUnread);
+          // Exclude notifications that share the same topic/key or url with the one just sent
+          otherUnreadNotifs = deduped
+            .filter((n) => getNotificationDeduplicationKey(n) !== currentKey && n.url !== url)
+            .slice(0, 3);
         }
       } catch (err) {
         console.warn("Failed to fetch other unread notifications for email clubbing:", err);
@@ -343,7 +366,7 @@ export async function sendNotification(
           otherUnreadNotifs,
         });
 
-        console.log(`[Resend] Sending ${emailContent.category} notification email to ${recipientEmail} (${emailContent.subject})...`);
+        console.log(`[Resend] Priority dispatch (${userProfileComplete ? "HIGH - Complete Profile" : "STANDARD/DEPRIORITIZED - Incomplete Profile"}) sending ${emailContent.category} email to ${recipientEmail} (${emailContent.subject})...`);
         const fromEmail = process.env.RESEND_FROM_EMAIL || "notifications@proxnet.in";
 
         const res = await fetch("https://api.resend.com/emails", {
@@ -357,6 +380,13 @@ export async function sendNotification(
             to: recipientEmail,
             subject: emailContent.subject,
             html: emailContent.html,
+            headers: {
+              "X-Priority": userProfileComplete ? "1" : "3",
+            },
+            tags: [
+              { name: "profile_complete", value: userProfileComplete ? "true" : "false" },
+              { name: "completeness_score", value: String(completenessScore) },
+            ],
           }),
           next: { revalidate: 0 },
         });

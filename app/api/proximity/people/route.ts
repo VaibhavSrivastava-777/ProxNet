@@ -61,7 +61,7 @@ export async function GET(request: Request) {
   // Note: scrapbook attributes (ask_me_about, help_offers, etc.) live inside profile_digest
   const { data: users, error: errUsers } = await supabase
     .from("users")
-    .select("id, email, full_name, company, job_title, about, professional_bio, tags, profile_digest, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility, embedding")
+    .select("id, email, full_name, company, job_title, about, professional_bio, tags, profile_digest, resume_text, home_lat, home_lng, office_lat, office_lng, active_location, profile_photo_url, anonymous_name, visibility, embedding")
     .eq("is_active", true)
     .neq("id", user.id)
     .neq("id", "a2a05c8b-5a70-4212-990e-276b91219a24")
@@ -188,6 +188,8 @@ function isBotOrAiUser(u: any): boolean {
         about: (u as any).about || null,
         professional_bio: (u as any).professional_bio || null,
         tags: u.tags || [],
+        profile_digest: digest || (u as any).profile_digest || null,
+        resume_text: (u as any).resume_text ? (u as any).resume_text.slice(0, 1500) : null,
         help_offers: (Array.isArray(u.help_offers) && u.help_offers.length > 0) ? u.help_offers : (digest.help_offers || []),
         tinkering_with: (Array.isArray(u.tinkering_with) && u.tinkering_with.length > 0) ? u.tinkering_with : (digest.tinkering_with || []),
         ask_me_about: (Array.isArray(u.ask_me_about) && u.ask_me_about.length > 0) ? u.ask_me_about : (digest.ask_me_about || []),
@@ -263,6 +265,8 @@ function isBotOrAiUser(u: any): boolean {
         about: (u as any).about || null,
         professional_bio: (u as any).professional_bio || null,
         tags: u.tags || [],
+        profile_digest: digest || (u as any).profile_digest || null,
+        resume_text: (u as any).resume_text ? (u as any).resume_text.slice(0, 1500) : null,
         help_offers: (Array.isArray(u.help_offers) && u.help_offers.length > 0) ? u.help_offers : (digest.help_offers || []),
         tinkering_with: (Array.isArray(u.tinkering_with) && u.tinkering_with.length > 0) ? u.tinkering_with : (digest.tinkering_with || []),
         ask_me_about: (Array.isArray(u.ask_me_about) && u.ask_me_about.length > 0) ? u.ask_me_about : (digest.ask_me_about || []),

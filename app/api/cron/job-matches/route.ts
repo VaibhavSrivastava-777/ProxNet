@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
 import { getAdminSession } from "@/lib/admin-session";
+import { prioritizeUsersByProfileCompleteness } from "@/lib/profile-validation";
 
 export const maxDuration = 60;
 
@@ -48,8 +49,11 @@ async function handleJobMatches(request: Request) {
   const { rerankJobsForCandidate } = await import("@/lib/jobs/reranker");
   const { isSameCompany, isIndiaLocation } = await import("@/lib/jobs/job-filters");
 
+  // Prioritize sending Resend emails and matches to users who have completed their profiles
+  const prioritizedUsers = prioritizeUsersByProfileCompleteness(users);
+
   // 2. Evaluate top 3 job matches for each member (clubbing profile completion if incomplete)
-  for (const user of users) {
+  for (const user of prioritizedUsers) {
     // Check deduplication: skip if user already received daily top 3 notification within 20 hours
     const { data: recentNotifs } = await supabase
       .from("in_app_notifications")

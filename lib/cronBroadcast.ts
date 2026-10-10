@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
+import { prioritizeUsersByProfileCompleteness } from "@/lib/profile-validation";
 
 // Helper to determine time of day (AM or PM broadcast)
 // Based on current UTC time. IST is UTC+5:30.
@@ -44,15 +44,18 @@ export async function handleBroadcast(request: Request) {
   const supabase = createAdminClient();
   const broadcastType = getBroadcastType();
 
-  // Fetch all active users with their locations
-  const { data: users, error: usersError } = await supabase
+  // Fetch all active users with their locations and profile fields
+  const { data: rawUsers, error: usersError } = await supabase
     .from("users")
-    .select("id, is_active, home_lat, home_lng, office_lat, office_lng")
+    .select("id, is_active, home_lat, home_lng, office_lat, office_lng, full_name, email, company, job_title, home_name, resume_text, profile_digest")
     .eq("is_active", true);
 
-  if (usersError || !users) {
+  if (usersError || !rawUsers) {
     return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
   }
+
+  // Prioritize sending notifications & Resend emails to users who have completed their profiles
+  const users = prioritizeUsersByProfileCompleteness(rawUsers);
 
   // Pre-fetch all global data to avoid N+1 queries in the loop
   let globalCarpoolPosts: any[] = [];

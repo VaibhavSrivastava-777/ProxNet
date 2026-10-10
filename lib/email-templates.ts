@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { deduplicateNotifications } from "./notification-deduplication";
 
 export interface EmailTemplatePayload {
   recipientName: string;
@@ -33,16 +34,39 @@ interface UserEmailStats {
 
 const userEmailRateMap = new Map<string, UserEmailStats>();
 
+export interface EmailRateLimitOptions {
+  forceEmail?: boolean;
+  isProfileComplete?: boolean;
+  completenessScore?: number;
+  isDetailedNotification?: boolean;
+  isFallback?: boolean;
+}
+
 /**
- * Anti-spam gatekeeper to prevent inbox flooding for users without FCM tokens.
+ * Anti-spam and quota gatekeeper.
+ * Prioritizes sending Resend emails to users who have completed their profiles,
+ * ensuring high-intent, active members receive delivery while throttling/deprioritizing
+ * non-essential digests for incomplete profiles.
  */
 export function checkEmailRateLimit(
   userId: string,
   notificationType: string,
-  forceEmail?: boolean
-): { allowed: boolean; reason?: string } {
+  forceOrOptions?: boolean | EmailRateLimitOptions
+): { allowed: boolean; reason?: string; priority?: "high" | "standard" | "deprioritized" } {
   const now = Date.now();
   const todayStr = new Date().toISOString().slice(0, 10);
+
+  const options: EmailRateLimitOptions =
+    typeof forceOrOptions === "boolean"
+      ? { forceEmail: forceOrOptions }
+      : forceOrOptions || {};
+
+  const {
+    forceEmail = false,
+    isProfileComplete = true,
+    completenessScore = 100,
+    isDetailedNotification = false,
+  } = options;
 
   let stats = userEmailRateMap.get(userId);
   if (!stats || stats.dateStr !== todayStr) {
@@ -56,28 +80,12 @@ export function checkEmailRateLimit(
     userEmailRateMap.set(userId, stats);
   }
 
-  // High-priority live beacon, direct contact, and detailed job notifications bypass email checks
-  const isDetailedNotification =
-    notificationType === "daily_top_3_jobs" ||
-    notificationType === "morning_job_brief" ||
-    notificationType === "top_3_jobs" ||
-    notificationType.startsWith("job_match") ||
-    notificationType === "job_digest" ||
-    notificationType.startsWith("weekly_digest");
-
-  if (
-    forceEmail ||
-    isDetailedNotification ||
-    notificationType === "beacon_broadcast" ||
-    notificationType === "beacon_join" ||
-    notificationType === "new_question" ||
-    notificationType === "direct_question" ||
-    notificationType === "referral_request"
-  ) {
-    return { allowed: true };
+  // 1. Explicit bypass
+  if (forceEmail) {
+    return { allowed: true, priority: isProfileComplete ? "high" : "standard" };
   }
 
-  // Cooldown rules are preserved for rapid chat bursts (2 minute threshold)
+  // 2. Direct peer-to-peer chat messages (cooldown applies for bursts)
   const isChatMessage =
     notificationType === "chat_message" ||
     notificationType === "colleague_message" ||
@@ -87,11 +95,79 @@ export function checkEmailRateLimit(
     const timeSinceLastChat = now - stats.lastChatSentAt;
     const CHAT_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes debounce
     if (timeSinceLastChat < CHAT_COOLDOWN_MS) {
-      return { allowed: false, reason: `Chat email cooldown active (${Math.round((CHAT_COOLDOWN_MS - timeSinceLastChat) / 1000)}s left)` };
+      return {
+        allowed: false,
+        reason: `Chat email cooldown active (${Math.round((CHAT_COOLDOWN_MS - timeSinceLastChat) / 1000)}s left)`,
+        priority: "high",
+      };
     }
+    return { allowed: true, priority: isProfileComplete ? "high" : "standard" };
   }
 
-  return { allowed: true };
+  // 3. Urgent transactional notifications (questions, beacons, inbound referral requests)
+  const isUrgentTransactional =
+    notificationType === "beacon_broadcast" ||
+    notificationType === "beacon_join" ||
+    notificationType === "new_question" ||
+    notificationType === "direct_question" ||
+    notificationType === "referral_request" ||
+    notificationType === "job_referral_request";
+
+  if (isUrgentTransactional) {
+    return { allowed: true, priority: isProfileComplete ? "high" : "standard" };
+  }
+
+  // 4. Profile completion onboarding reminders
+  if (notificationType === "profile_reminder" || notificationType === "complete_profile") {
+    if (stats.countToday >= 1) {
+      return {
+        allowed: false,
+        reason: "Daily profile completion reminder already delivered.",
+        priority: "standard",
+      };
+    }
+    return { allowed: true, priority: "standard" };
+  }
+
+  // 5. Incomplete Profile Deprioritization:
+  // Non-essential digests and job matches are gated to preserve Resend email quota for complete profiles
+  if (!isProfileComplete) {
+    // Suppress general activity / generic broadcast emails for incomplete profiles
+    if (
+      notificationType === "weekly_digest_activity" ||
+      notificationType === "job_digest" ||
+      notificationType.startsWith("daily_engagement")
+    ) {
+      return {
+        allowed: false,
+        reason: "Deprioritized: Non-essential digest email suppressed for incomplete profile to prioritize completed profiles.",
+        priority: "deprioritized",
+      };
+    }
+
+    // Limit incomplete profiles to at most 1 email per day across all types
+    if (stats.countToday >= 1) {
+      return {
+        allowed: false,
+        reason: "Deprioritized: Daily email limit (1) reached for incomplete profile. Resend quota reserved for complete profiles.",
+        priority: "deprioritized",
+      };
+    }
+
+    return { allowed: true, priority: "deprioritized" };
+  }
+
+  // 6. Complete Profiles:
+  // High Priority allowance. Up to 6 emails per day across jobs, digests, and network alerts.
+  if (stats.countToday >= 6) {
+    return {
+      allowed: false,
+      reason: "Daily high-priority email limit (6) reached for user.",
+      priority: "high",
+    };
+  }
+
+  return { allowed: true, priority: "high" };
 }
 
 /**
@@ -647,41 +723,44 @@ export function generateContextEmail(payload: EmailTemplatePayload): GeneratedEm
   // Build the clubbed unread activity section if other unread notifications exist
   let clubbedSectionHtml = "";
   if (otherUnreadNotifs && otherUnreadNotifs.length > 0) {
-    const itemsHtml = otherUnreadNotifs
-      .slice(0, 3)
-      .map((item) => {
-        const itemUrl = item.url?.startsWith("http") ? item.url : `${baseUrl}${item.url || "/"}`;
-        return `
-          <li style="margin-bottom: 8px; font-size: 13px; color: #334155; line-height: 1.4;">
-            <a href="${itemUrl}" style="color: #0A66C2; text-decoration: none; font-weight: 600;">
-              ${escapeHtml(item.title)}
-            </a>
-            <span style="display: block; color: #64748b; font-size: 12px; margin-top: 2px;">
-              ${escapeHtml(item.body.slice(0, 90))}${item.body.length > 90 ? "..." : ""}
-            </span>
-          </li>
-        `;
-      })
-      .join("");
+    const dedupedOtherNotifs = deduplicateNotifications(otherUnreadNotifs);
+    if (dedupedOtherNotifs.length > 0) {
+      const itemsHtml = dedupedOtherNotifs
+        .slice(0, 3)
+        .map((item) => {
+          const itemUrl = item.url?.startsWith("http") ? item.url : `${baseUrl}${item.url || "/"}`;
+          return `
+            <li style="margin-bottom: 8px; font-size: 13px; color: #334155; line-height: 1.4;">
+              <a href="${itemUrl}" style="color: #0A66C2; text-decoration: none; font-weight: 600;">
+                ${escapeHtml(item.title)}
+              </a>
+              <span style="display: block; color: #64748b; font-size: 12px; margin-top: 2px;">
+                ${escapeHtml(item.body.slice(0, 90))}${item.body.length > 90 ? "..." : ""}
+              </span>
+            </li>
+          `;
+        })
+        .join("");
 
-    clubbedSectionHtml = `
-      <!-- Clubbed / Batch Activity Digest Section -->
-      <div style="margin-top: 24px; padding: 16px; background-color: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
-        <div style="display: flex; align-items: center; margin-bottom: 10px;">
-          <span style="font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">
-            📌 Also waiting for you (${otherUnreadNotifs.length} other update${otherUnreadNotifs.length > 1 ? "s" : ""})
-          </span>
+      clubbedSectionHtml = `
+        <!-- Clubbed / Batch Activity Digest Section -->
+        <div style="margin-top: 24px; padding: 16px; background-color: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
+          <div style="display: flex; align-items: center; margin-bottom: 10px;">
+            <span style="font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">
+              📌 Also waiting for you (${dedupedOtherNotifs.length} other update${dedupedOtherNotifs.length > 1 ? "s" : ""})
+            </span>
+          </div>
+          <ul style="margin: 0; padding-left: 16px;">
+            ${itemsHtml}
+          </ul>
+          <div style="text-align: right; margin-top: 10px;">
+            <a href="${baseUrl}/notifications" style="font-size: 12px; color: #0A66C2; font-weight: 600; text-decoration: none;">
+              View all notifications &rarr;
+            </a>
+          </div>
         </div>
-        <ul style="margin: 0; padding-left: 16px;">
-          ${itemsHtml}
-        </ul>
-        <div style="text-align: right; margin-top: 10px;">
-          <a href="${baseUrl}/notifications" style="font-size: 12px; color: #0A66C2; font-weight: 600; text-decoration: none;">
-            View all notifications &rarr;
-          </a>
-        </div>
-      </div>
-    `;
+      `;
+    }
   }
 
   // Full HTML assembly

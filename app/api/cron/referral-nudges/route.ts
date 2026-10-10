@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
 import { getAdminSession } from "@/lib/admin-session";
+import { prioritizeUsersByProfileCompleteness } from "@/lib/profile-validation";
 
 export const maxDuration = 60;
 
@@ -51,7 +52,7 @@ async function handleReferralNudges(request: Request) {
   // 2. Fetch all active users with their company
   const { data: allUsers, error: usersErr } = await supabase
     .from("users")
-    .select("id, full_name, email, company, job_title, profile_digest")
+    .select("id, full_name, email, company, job_title, home_lat, home_lng, home_name, resume_text, profile_digest")
     .eq("is_blocked", false)
     .eq("is_active", true);
 
@@ -81,8 +82,11 @@ async function handleReferralNudges(request: Request) {
   const tenDaysAgo = new Date();
   tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
 
+  // Prioritize users who have completed their profiles first
+  const prioritizedUsers = prioritizeUsersByProfileCompleteness(allUsers);
+
   // 3. For each user, find companies with open jobs AND colleagues/referrers (excluding themselves)
-  for (const user of allUsers) {
+  for (const user of prioritizedUsers) {
     // Deduplication check: Avoid sending if user already received a referral nudge in the last 10 days
     const { data: recentNotifs } = await supabase
       .from("in_app_notifications")

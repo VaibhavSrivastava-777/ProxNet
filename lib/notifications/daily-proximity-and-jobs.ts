@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
 import { haversineDistanceMeters } from "@/lib/geo/haversine";
 import { isSameCompany, isIndiaLocation } from "@/lib/jobs/job-filters";
+import { prioritizeUsersByProfileCompleteness } from "@/lib/profile-validation";
 
 export interface DailyDigestResult {
   userId: string;
@@ -267,7 +268,7 @@ export async function runDailyProximityAndJobsCron(): Promise<{
 
   const { data: users, error } = await supabase
     .from("users")
-    .select("id")
+    .select("id, full_name, email, company, job_title, home_lat, home_lng, home_name, resume_text, profile_digest")
     .eq("is_blocked", false)
     .eq("is_active", true);
 
@@ -276,10 +277,13 @@ export async function runDailyProximityAndJobsCron(): Promise<{
     return { totalUsersChecked: 0, neighborsAlertedCount: 0, jobsAlertedCount: 0 };
   }
 
+  // Prioritize dispatching Resend emails and digests to users who have completed their profiles
+  const prioritizedUsers = prioritizeUsersByProfileCompleteness(users);
+
   let neighborsAlertedCount = 0;
   let jobsAlertedCount = 0;
 
-  for (const u of users) {
+  for (const u of prioritizedUsers) {
     try {
       const res = await sendDailyUserDigest(u.id);
       if (res.neighborNotificationSent) neighborsAlertedCount++;

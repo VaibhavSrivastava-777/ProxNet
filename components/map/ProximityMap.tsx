@@ -205,7 +205,7 @@ export function ProximityMap() {
   const [locationMode, setLocationMode] = useState<"home" | "office">("home");
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const [viewMode, setViewMode] = useState<"discover" | "list" | "map">("discover");
+  const [viewMode, setViewMode] = useState<"discover" | "list" | "map">("list");
   const [tagFilter, setTagFilter] = useState("");
   
   // Follows & profile modal states
@@ -756,25 +756,12 @@ export function ProximityMap() {
             </div>
           </div>
 
-          {/* View Mode Switcher: Proximity Cards / List / Map */}
+          {/* View Mode Switcher: List / Map */}
           <div className="flex bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] p-1 rounded-xl shrink-0 gap-1">
             <button
               type="button"
-              onClick={() => setViewMode("discover")}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1.5 ${
-                viewMode === "discover"
-                  ? "bg-[var(--color-primary)] text-white shadow-xs"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
-              }`}
-              title="Proximity Cards View"
-            >
-              <span>🃏</span>
-              <span className="hidden sm:inline">Cards</span>
-            </button>
-            <button
-              type="button"
               onClick={() => setViewMode("list")}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1.5 ${
                 viewMode === "list"
                   ? "bg-[var(--color-primary)] text-white shadow-xs"
                   : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
@@ -782,12 +769,12 @@ export function ProximityMap() {
               title="List View"
             >
               <span>📋</span>
-              <span className="hidden sm:inline">List</span>
+              <span>List</span>
             </button>
             <button
               type="button"
               onClick={() => setViewMode("map")}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border-0 cursor-pointer flex items-center gap-1.5 ${
                 viewMode === "map"
                   ? "bg-[var(--color-primary)] text-white shadow-xs"
                   : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] bg-transparent"
@@ -795,7 +782,7 @@ export function ProximityMap() {
               title="Map View"
             >
               <span>🗺️</span>
-              <span className="hidden sm:inline">Map</span>
+              <span>Map</span>
             </button>
           </div>
         </div>

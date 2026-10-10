@@ -16,6 +16,7 @@ import { NotificationCenter } from "./NotificationCenter";
 import { PushNotificationModal } from "./PushNotificationModal";
 import { ProfileWizardModal } from "@/components/profile/ProfileWizardModal";
 import { getMissingProfileWizardSteps } from "@/lib/profile-wizard";
+import { deduplicateNotifications } from "@/lib/notification-deduplication";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -234,7 +235,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
     fetch("/api/notifications")
       .then((r) => r.json())
       .then((data) => {
-        if (data.notifications) setInAppNotifications(data.notifications);
+        if (data.notifications) setInAppNotifications(deduplicateNotifications(data.notifications));
       })
       .catch(() => {});
   };
@@ -928,7 +929,7 @@ export function NavClient({ session, userName, userId }: NavClientProps) {
           const newNotif = payload.new as any;
           if (newNotif) {
             setInAppNotifications((prev) =>
-              prev.some((n) => n.id === newNotif.id) ? prev : [newNotif, ...prev]
+              deduplicateNotifications([newNotif, ...prev])
             );
             triggerToast({
               title: newNotif.title,

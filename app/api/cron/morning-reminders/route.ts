@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
 import { getAdminSession } from "@/lib/admin-session";
+import { prioritizeUsersByProfileCompleteness } from "@/lib/profile-validation";
 
 export const maxDuration = 60;
 
@@ -274,13 +275,16 @@ export async function handleMorningReminders(request?: Request | null, bypassAut
       // Fetch active seekers: users with a resume who visited jobs tab recently
       const { data: seekers } = await supabase
         .from("users")
-        .select("id, email, full_name, resume_text, embedding, job_title, company, about, professional_bio, profile_digest, tags")
+        .select("id, email, full_name, resume_text, embedding, job_title, company, about, professional_bio, profile_digest, tags, home_lat, home_lng, home_name")
         .eq("is_active", true)
         .eq("is_blocked", false);
 
       const { rerankJobsForCandidate } = await import("@/lib/jobs/reranker");
 
-      for (const seeker of seekers || []) {
+      // Prioritize sending Resend emails and morning briefs to seekers with complete profiles first
+      const prioritizedSeekers = prioritizeUsersByProfileCompleteness(seekers || []);
+
+      for (const seeker of prioritizedSeekers) {
         // Only send to users who have a resume (active seekers)
         if (!seeker.resume_text || seeker.resume_text.trim().length < 50) continue;
 

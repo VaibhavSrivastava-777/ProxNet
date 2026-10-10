@@ -89,6 +89,221 @@ function computeReasonToEngage(myProfile: any, targetPerson: any): { reason: str
   return null;
 }
 
+function extractActionableCommunityProfile(person: any): {
+  askMeAbout: string[];
+  helpOffers: string[];
+  tinkeringWith: string[];
+} {
+  if (!person) return { askMeAbout: [], helpOffers: [], tinkeringWith: [] };
+
+  const digest = person.profile_digest || {};
+  const skills: string[] = Array.isArray(digest.skills)
+    ? digest.skills.filter((s: any) => typeof s === "string" && !s.toLowerCase().startsWith("skill"))
+    : [];
+  const rawTags: string[] = (person.tags || [])
+    .map((t: string) => t.replace(/^#+/, "").trim())
+    .filter(Boolean);
+
+  const bio: string = (person.professional_bio || person.about || digest.summary || "").trim();
+  const resume: string = (person.resume_text || "").trim();
+  const combinedText = `${person.job_title || ""} ${person.company || ""} ${bio} ${resume} ${rawTags.join(" ")}`.toLowerCase();
+  const company = (person.company || "").trim();
+  const title = (person.job_title || "").trim();
+  const inst = (person.institute_name || person.institute_affiliation || "").trim();
+  const society = (person.society_name || "").trim();
+
+  // Parse years of experience
+  let expYears: number | null = typeof digest.experienceYears === "number" ? digest.experienceYears : null;
+  if (!expYears) {
+    const yrMatch = bio.match(/(\d{1,2})\+?\s*(?:years|yrs)/i) || resume.match(/(\d{1,2})\+?\s*(?:years|yrs)/i);
+    if (yrMatch) {
+      expYears = parseInt(yrMatch[1], 10);
+    }
+  }
+
+  const isSeniorLeader = /manager|director|vp|head|founder|principal|architect|lead/i.test(title) || (expYears !== null && expYears >= 8);
+  const isTechRole = /developer|engineer|architect|tech|software|devops|data|ai|ml|fullstack|frontend|backend/i.test(title) || combinedText.includes("software") || combinedText.includes("engineering");
+  const isProductRole = /product|pm|ui\/ux|design/i.test(title);
+  const isSalesRole = /sales|business development|b2b|account executive|gtm/i.test(title);
+  const isFinanceRole = /finance|financial|consultant|consulting|audit|fp&a|analyst/i.test(title);
+  const isCsRole = /customer success|client success|retention|support/i.test(title);
+
+  // --- 1. ASK ME ABOUT ---
+  const askList: string[] = [];
+  const genericTokens = ["tech & product", "bangalore tech scene", "best practices", "skill1", "skill2"];
+
+  if (Array.isArray(person.ask_me_about)) {
+    for (const item of person.ask_me_about) {
+      if (typeof item === "string" && item.trim()) {
+        const clean = item.trim();
+        if (!genericTokens.some((tok) => clean.toLowerCase().includes(tok))) {
+          askList.push(clean);
+        }
+      }
+    }
+  }
+
+  // Tags
+  for (const tag of rawTags) {
+    if (tag.length > 2 && !genericTokens.some((tok) => tag.toLowerCase().includes(tok))) {
+      askList.push(tag);
+    }
+  }
+
+  // Skills mapping
+  for (const sk of skills) {
+    const sLower = sk.toLowerCase();
+    if (sLower.includes("software development") || sLower.includes("software engineering")) {
+      askList.push("Software Architecture & Scalable Systems");
+    } else if (sLower.includes("project management") || sLower.includes("agile")) {
+      askList.push("Project Management & Agile Delivery");
+    } else if (sLower.includes("problem-solving")) {
+      askList.push("Technical Problem Solving & System Design");
+    } else if (sLower.includes("team collaboration") || sLower.includes("leadership")) {
+      askList.push("Engineering Collaboration & Team Culture");
+    } else if (sLower.length >= 2 && !askList.includes(sk)) {
+      askList.push(sk);
+    }
+  }
+
+  // Deep domain detection
+  if (combinedText.includes("financial technology") || combinedText.includes("trading") || combinedText.includes("fintech") || combinedText.includes("capital market")) {
+    askList.push("FinTech & Capital Markets Architecture");
+  }
+  if (combinedText.includes("ai") || combinedText.includes("machine learning") || combinedText.includes("llm") || combinedText.includes("data science")) {
+    askList.push("AI/ML Integration & Emerging Tech");
+  }
+  if (combinedText.includes("cloud") || combinedText.includes("devops") || combinedText.includes("kubernetes") || combinedText.includes("distributed")) {
+    askList.push("Cloud Infrastructure & Distributed Systems");
+  }
+  if (combinedText.includes("security") || combinedText.includes("zero trust") || combinedText.includes("cyber") || combinedText.includes("zscaler")) {
+    askList.push("Zero Trust Architecture & Enterprise Security");
+  }
+  if (isProductRole || combinedText.includes("product strategy") || combinedText.includes("roadmap")) {
+    askList.push("Product Strategy & Roadmap Prioritization");
+  }
+  if (isSalesRole || combinedText.includes("enterprise sales")) {
+    askList.push("Enterprise B2B Sales & GTM Execution");
+  }
+  if (isFinanceRole) {
+    askList.push("Corporate Finance & Strategic Analysis");
+  }
+  if (isCsRole) {
+    askList.push("Customer Success & Retention Metrics");
+  }
+
+  // Seniority & Leadership Guidance
+  if (isSeniorLeader) {
+    if (expYears && expYears >= 10) {
+      askList.push(`Senior Leadership & Org Scaling (${expYears}+ Years)`);
+    } else {
+      askList.push("Tech Leadership & Cross-Functional Execution");
+    }
+  }
+
+  // Company Culture & Interview Insights
+  if (company && company.toLowerCase() !== "independent / startup" && company.toLowerCase() !== "nearby company") {
+    const culturePhrase = isTechRole ? `Engineering culture & teams at ${company}` : `Work culture & team dynamics at ${company}`;
+    askList.push(culturePhrase);
+    if (isSeniorLeader || /google|mckinsey|lseg|zscaler|wipro|nagarro|persistent|microsoft|amazon/i.test(company)) {
+      askList.push(`Hiring loops & interview expectations at ${company}`);
+    }
+  }
+
+  // Alumni & Institute
+  if (inst) {
+    askList.push(`${inst} alumni network & career journey`);
+  }
+  // Local society
+  if (society) {
+    askList.push(`Neighborhood community & life in ${society}`);
+  }
+
+  // Deduplicate and select top 4
+  const uniqueAsk = Array.from(new Set(askList)).slice(0, 4);
+  if (uniqueAsk.length === 0) {
+    if (title) uniqueAsk.push(`${title} Strategy & Tooling`);
+    if (company) uniqueAsk.push(`Working culture at ${company}`);
+    uniqueAsk.push("Tech Ecosystem & Career Navigation");
+  }
+
+  // --- 2. I CAN HELP WITH ---
+  const helpList: string[] = [];
+  const genericHelpTokens = ["tech advice & peer connection", "resume review & career navigation"];
+
+  if (Array.isArray(person.help_offers)) {
+    for (const item of person.help_offers) {
+      if (typeof item === "string" && item.trim()) {
+        const clean = item.trim();
+        if (!genericHelpTokens.some((tok) => clean.toLowerCase().includes(tok))) {
+          helpList.push(clean);
+        }
+      }
+    }
+  }
+
+  // Company referrals
+  if (company && company.toLowerCase() !== "independent / startup" && company.toLowerCase() !== "nearby company") {
+    helpList.push(`Internal referrals & team navigation at ${company}`);
+    helpList.push(`Interview prep & insider guidance for ${company}`);
+  }
+
+  // Role-specific help
+  if (isSeniorLeader) {
+    helpList.push("Mentorship for professionals stepping into Leadership");
+    helpList.push("Team scaling, hiring playbooks & org design");
+  }
+
+  if (isTechRole) {
+    helpList.push("System design reviews & architectural sounding board");
+    helpList.push("Technical resume review & coding prep");
+  } else if (isProductRole) {
+    helpList.push("PRD breakdowns, MVP scoping & user discovery");
+    helpList.push("Product interview prep & case studies");
+  } else if (isSalesRole) {
+    helpList.push("Enterprise deal closing & B2B pipeline strategy");
+  } else if (isFinanceRole) {
+    helpList.push("Financial modeling & consulting interview prep");
+  } else if (isCsRole) {
+    helpList.push("Customer onboarding playbooks & churn reduction");
+  }
+
+  if (inst) {
+    helpList.push(`Mentoring fellow ${inst} graduates`);
+  }
+
+  helpList.push("Cross-domain peer networking & career navigation");
+
+  const uniqueHelp = Array.from(new Set(helpList)).slice(0, 4);
+
+  // --- 3. TINKERING WITH ---
+  const tinkerList: string[] = [];
+  if (Array.isArray(person.tinkering_with)) {
+    for (const item of person.tinkering_with) {
+      if (typeof item === "string" && item.trim()) {
+        tinkerList.push(item.trim());
+      }
+    }
+  }
+
+  if (tinkerList.length === 0) {
+    if (isTechRole) {
+      tinkerList.push("Autonomous AI Agents & Local LLMs");
+      tinkerList.push("Serverless Edge Architectures");
+    } else if (isProductRole) {
+      tinkerList.push("AI-driven user research & rapid prototyping");
+    } else if (isSeniorLeader) {
+      tinkerList.push("AI productivity workflows for high-performing teams");
+    }
+  }
+
+  return {
+    askMeAbout: uniqueAsk,
+    helpOffers: uniqueHelp,
+    tinkeringWith: Array.from(new Set(tinkerList)).slice(0, 3),
+  };
+}
+
 export function ProximityCardModal({
   person,
   currentUserProfile,
@@ -99,6 +314,9 @@ export function ProximityCardModal({
   userBeacon,
 }: ProximityCardModalProps) {
   const [copied, setCopied] = useState(false);
+  const [isCelebrated, setIsCelebrated] = useState(person?.is_celebrated || false);
+  const [celebrating, setCelebrating] = useState(false);
+  const [graffitiToast, setGraffitiToast] = useState<{ name: string } | null>(null);
 
   if (!person) return null;
 
@@ -127,26 +345,12 @@ export function ProximityCardModal({
   const engagement = computeReasonToEngage(currentUserProfile, person);
   const distanceStr = formatDistance(person.distance);
 
-  // Effective scrapbook entries with intelligent fallback
-  const askMeAboutList: string[] = (person.ask_me_about && person.ask_me_about.length > 0)
-    ? person.ask_me_about
-    : (person.tags && person.tags.length > 0)
-    ? person.tags.slice(0, 3).map((t: string) => t.replace(/^#+/, ""))
-    : [
-        person.job_title ? `${person.job_title} best practices` : "Tech & Product",
-        person.company ? `Work culture at ${person.company}` : "Bangalore Tech Scene",
-      ];
-
-  const helpOffersList: string[] = (person.help_offers && person.help_offers.length > 0)
-    ? person.help_offers
-    : [
-        person.company ? `Referrals & insights at ${person.company}` : "Tech advice & peer connection",
-        "Resume review & career navigation",
-      ];
-
-  const tinkeringWithList: string[] = (person.tinkering_with && person.tinkering_with.length > 0)
-    ? person.tinkering_with
-    : [];
+  // Deep, actionable community intelligence mining
+  const {
+    askMeAbout: askMeAboutList,
+    helpOffers: helpOffersList,
+    tinkeringWith: tinkeringWithList,
+  } = extractActionableCommunityProfile(person);
 
   const handleShare = () => {
     const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/network` : "https://www.proxnet.in/network";
@@ -155,13 +359,38 @@ export function ProximityCardModal({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCelebrate = async () => {
+    if (isCelebrated || celebrating || (currentUserProfile && currentUserProfile.id === person.id)) return;
+    setCelebrating(true);
+    setIsCelebrated(true);
+    setGraffitiToast({ name: displayName });
+    setTimeout(() => {
+      setGraffitiToast(null);
+    }, 4500);
+
+    try {
+      await fetch("/api/profile-celebrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetId: person.id,
+          graffitiNote: "celebrated your professional profile and contributions in the community!",
+        }),
+      });
+    } catch (err) {
+      console.error("[ProximityCardModal] Celebrate error:", err);
+    } finally {
+      setCelebrating(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm animate-fadeIn"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl transition-all animate-scaleIn max-h-[92vh] flex flex-col"
+        className="w-full max-w-lg overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl transition-all animate-scaleIn max-h-[92vh] flex flex-col relative"
         style={{
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 20px rgba(59, 130, 246, 0.15)",
         }}
@@ -187,6 +416,28 @@ export function ProximityCardModal({
             ✕
           </button>
         </div>
+
+        {/* Floating Celebration Toast Banner */}
+        {graffitiToast && (
+          <div className="mx-6 mt-3 p-3 rounded-2xl bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 text-white shadow-xl border border-white/30 flex items-center gap-3 animate-scaleIn z-10 shrink-0">
+            <span className="text-2xl shrink-0">🎉</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black m-0 truncate">
+                You celebrated {graffitiToast.name}!
+              </p>
+              <p className="text-[11px] text-white/90 m-0 mt-0.5">
+                A graffiti notice has been delivered to their ProxNet profile.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGraffitiToast(null)}
+              className="text-white/80 hover:text-white bg-transparent border-0 cursor-pointer text-xs p-1"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Scrollable Card Body */}
         <div className="px-6 pb-6 pt-0 relative -mt-10 overflow-y-auto flex-1">
@@ -261,7 +512,7 @@ export function ProximityCardModal({
                 </span>
               </div>
               <p className="text-xs font-serif italic leading-relaxed m-0 text-amber-800 dark:text-amber-100">
-                "{engagement.reason}"
+                &quot;{engagement.reason}&quot;
               </p>
             </div>
           )}
@@ -306,8 +557,8 @@ export function ProximityCardModal({
             </div>
           )}
 
-          {/* Neighbor Scrapbook Tags */}
-          <div className="space-y-3 pt-1 border-t border-[var(--color-border-light)]">
+          {/* Neighbor Scrapbook Tags: Actionable, Deep Community Insights */}
+          <div className="space-y-3.5 pt-3 border-t border-[var(--color-border-light)]">
             {askMeAboutList.length > 0 && (
               <div>
                 <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block mb-1.5 flex items-center gap-1">
@@ -318,7 +569,7 @@ export function ProximityCardModal({
                   {askMeAboutList.map((topic: string, idx: number) => (
                     <span
                       key={idx}
-                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20"
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20 transition-all hover:bg-blue-500/15"
                     >
                       {topic}
                     </span>
@@ -337,7 +588,7 @@ export function ProximityCardModal({
                   {helpOffersList.map((offer: string, idx: number) => (
                     <span
                       key={idx}
-                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20"
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 transition-all hover:bg-emerald-500/15"
                     >
                       {offer}
                     </span>
@@ -356,7 +607,7 @@ export function ProximityCardModal({
                   {tinkeringWithList.map((item: string, idx: number) => (
                     <span
                       key={idx}
-                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20"
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 transition-all hover:bg-purple-500/15"
                     >
                       {item}
                     </span>
@@ -367,14 +618,33 @@ export function ProximityCardModal({
           </div>
 
           {/* Action Buttons */}
-          <div className="mt-6 pt-4 border-t border-[var(--color-border-light)] flex items-center gap-3">
+          <div className="mt-6 pt-4 border-t border-[var(--color-border-light)] flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-2.5">
             {onStartChat && (
               <button
                 type="button"
                 onClick={() => onStartChat(person)}
-                className="flex-1 py-2.5 px-4 text-center text-xs font-bold rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 px-3 text-center text-xs font-bold rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 min-w-[100px]"
               >
-                <span>👋</span> Say Hi / Chat
+                <span>👋</span>
+                <span>Say Hi</span>
+              </button>
+            )}
+
+            {/* Celebrate Button */}
+            {(!currentUserProfile || currentUserProfile.id !== person.id) && (
+              <button
+                type="button"
+                onClick={handleCelebrate}
+                disabled={isCelebrated || celebrating}
+                className={`flex-1 py-2.5 px-3 text-center text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 border-0 min-w-[105px] ${
+                  isCelebrated
+                    ? "bg-amber-500 text-white shadow-amber-500/20 cursor-default"
+                    : "bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 text-white hover:opacity-95 active:scale-95 shadow-rose-500/25"
+                }`}
+                title="Celebrate Profile (Sends Graffiti Cheer)"
+              >
+                <span className="shrink-0">🎉</span>
+                <span>{isCelebrated ? "Celebrated!" : "Celebrate"}</span>
               </button>
             )}
 
@@ -382,7 +652,7 @@ export function ProximityCardModal({
               <button
                 type="button"
                 onClick={(e) => onFollowToggle(e, person)}
-                className={`py-2.5 px-4 text-center text-xs font-semibold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                className={`py-2.5 px-3 text-center text-xs font-semibold rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1 ${
                   person.is_followed
                     ? "bg-[var(--color-primary-subtle)] text-[var(--color-primary)] border-[var(--color-primary)]/20"
                     : "bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]"
@@ -395,10 +665,10 @@ export function ProximityCardModal({
             <button
               type="button"
               onClick={handleShare}
-              className="py-2.5 px-3 text-center text-xs font-medium rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] transition-all cursor-pointer flex items-center justify-center gap-1"
+              className="py-2.5 px-2.5 text-center text-xs font-medium rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-secondary)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0"
               title="Share profile"
             >
-              <span>{copied ? "✓ Copied!" : "🔗 Share"}</span>
+              <span>{copied ? "✓" : "🔗"}</span>
             </button>
           </div>
         </div>

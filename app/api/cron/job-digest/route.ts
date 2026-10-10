@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
 import { getAdminSession } from "@/lib/admin-session";
+import { prioritizeUsersByProfileCompleteness } from "@/lib/profile-validation";
 
 export const maxDuration = 60;
 
@@ -63,7 +64,7 @@ async function handleJobDigest(request: Request) {
   // 2. Fetch all active, non-blocked users
   const { data: users, error: userErr } = await supabase
     .from("users")
-    .select("id, full_name, email, company, job_title, about, professional_bio, resume_text, profile_digest, embedding, tags")
+    .select("id, full_name, email, company, job_title, about, professional_bio, resume_text, profile_digest, embedding, tags, home_lat, home_lng, home_name")
     .eq("is_blocked", false)
     .eq("is_active", true);
 
@@ -78,7 +79,10 @@ async function handleJobDigest(request: Request) {
 
   const { rerankJobsForCandidate } = await import("@/lib/jobs/reranker");
 
-  for (const user of users) {
+  // Prioritize users who have completed their profiles first
+  const prioritizedUsers = prioritizeUsersByProfileCompleteness(users);
+
+  for (const user of prioritizedUsers) {
     // Deduplication check: Avoid sending if user already received a weekly digest in the last 6 days
     const { data: recentNotifs } = await supabase
       .from("in_app_notifications")

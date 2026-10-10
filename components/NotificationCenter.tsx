@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { deduplicateNotifications } from "@/lib/notification-deduplication";
 
 export interface InAppNotification {
   id: string;
@@ -219,9 +220,10 @@ export function NotificationCenter({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [filterTab, setFilterTab] = useState<"all" | "unread">("all");
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const dedupedList = useMemo(() => deduplicateNotifications(notifications), [notifications]);
+  const unreadCount = dedupedList.filter((n) => !n.is_read).length;
 
-  const filteredNotifications = notifications.filter((n) => {
+  const filteredNotifications = dedupedList.filter((n) => {
     if (filterTab === "unread") return !n.is_read;
     return true;
   });

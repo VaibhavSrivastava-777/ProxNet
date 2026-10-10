@@ -73,6 +73,32 @@ export function isProfileIncomplete(user: any): boolean {
   return isOnboardingIncomplete(user);
 }
 
+/**
+ * Checks whether user has completed minimum profile onboarding requirements.
+ */
+export function isProfileComplete(user: any): boolean {
+  return !isProfileIncomplete(user);
+}
+
+/**
+ * Prioritizes a list of users for batch operations (e.g. Resend email jobs, crons):
+ * 1. Users with completed profiles appear first.
+ * 2. Within each group, users with higher profile completeness scores appear first.
+ */
+export function prioritizeUsersByProfileCompleteness<T extends Record<string, any>>(users: T[]): T[] {
+  if (!Array.isArray(users) || users.length <= 1) return users || [];
+  return [...users].sort((a, b) => {
+    const completeA = isProfileComplete(a) ? 1 : 0;
+    const completeB = isProfileComplete(b) ? 1 : 0;
+    if (completeA !== completeB) {
+      return completeB - completeA; // Complete profiles first
+    }
+    const scoreA = calculateProfileCompleteness(a);
+    const scoreB = calculateProfileCompleteness(b);
+    return scoreB - scoreA; // Higher completeness score first
+  });
+}
+
 export interface CompletenessItem {
   key: string;
   label: string;
