@@ -75,6 +75,7 @@ export const ApplicationPipeline: React.FC<ApplicationPipelineProps> = ({ onRefr
         );
         fetchApplications();
         if (onRefreshNeeded) onRefreshNeeded();
+        window.dispatchEvent(new CustomEvent("job_application_updated", { detail: { applicationId: id, stage: newStage } }));
       }
     } catch (err) {
       console.error("Failed to update application stage:", err);
@@ -92,6 +93,7 @@ export const ApplicationPipeline: React.FC<ApplicationPipelineProps> = ({ onRefr
       if (res.ok) {
         setApplications((prev) => prev.filter((app) => app.id !== id));
         fetchApplications();
+        window.dispatchEvent(new CustomEvent("job_application_updated", { detail: { applicationId: id, deleted: true } }));
       }
     } catch (err) {
       console.error("Failed to delete application:", err);

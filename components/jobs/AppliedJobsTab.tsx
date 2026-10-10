@@ -74,6 +74,7 @@ export function AppliedJobsTab() {
         setApplications((prev) =>
           prev.map((app) => (app.id === id ? { ...app, stage: newStage } : app))
         );
+        window.dispatchEvent(new CustomEvent("job_application_updated", { detail: { applicationId: id, stage: newStage } }));
       }
     } catch (err) {
       console.error("Failed to update application stage:", err);
@@ -88,6 +89,7 @@ export function AppliedJobsTab() {
       });
       if (res.ok) {
         setApplications((prev) => prev.filter((app) => app.id !== id));
+        window.dispatchEvent(new CustomEvent("job_application_updated", { detail: { applicationId: id, deleted: true } }));
       }
     } catch (err) {
       console.error("Failed to delete application:", err);
@@ -95,6 +97,7 @@ export function AppliedJobsTab() {
   };
 
   // Open details anytime with option to anchor directly to Playbook or Overview
+  const openSavedPlaybook = (app: ApplicationRecord) => openOpportunityDetails(app, "prepare");
   const openOpportunityDetails = (app: ApplicationRecord, tab: "overview" | "prepare" = "overview") => {
     let prepData: PreparationData | null = null;
     if (app.notes) {

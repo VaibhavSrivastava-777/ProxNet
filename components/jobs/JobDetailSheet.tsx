@@ -12,6 +12,7 @@ export interface JobItem {
   url: string;
   description: string;
   posted_at?: string;
+  raw_posted_at?: string;
   experience?: string;
   matchRate: number;
   keywords?: string[];
@@ -227,6 +228,7 @@ export function JobDetailSheet({
   const [copiedPitch, setCopiedPitch] = useState(false);
   const [copiedBridgeNote, setCopiedBridgeNote] = useState(false);
   const [directApplied, setDirectApplied] = useState(false);
+  const [currentStage, setCurrentStage] = useState<string | null>(null);
   const [creditDeductionInfo, setCreditDeductionInfo] = useState<{ prev: number; current: number } | null>(null);
   const [linkNotice, setLinkNotice] = useState<{ message: string; url?: string } | null>(null);
   const [checkingLink, setCheckingLink] = useState(false);
@@ -241,8 +243,28 @@ export function JobDetailSheet({
     }
     setPrepareError(null);
     setDirectApplied(false);
+    setCurrentStage(null);
     setCreditDeductionInfo(null);
     setLinkNotice(null);
+
+    if (job) {
+      fetch("/api/jobs/applications")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!data?.applications) return;
+          const found = data.applications.find((a: any) =>
+            (a.job_id && a.job_id === job.id) ||
+            (a.job_url && job.url && a.job_url.trim().toLowerCase() === job.url.trim().toLowerCase()) ||
+            (a.company?.trim().toLowerCase() === job.company?.trim().toLowerCase() &&
+              a.job_title?.trim().toLowerCase() === job.title?.trim().toLowerCase())
+          );
+          if (found) {
+            setCurrentStage(found.stage || "pipe");
+            if (found.stage === "applied") setDirectApplied(true);
+          }
+        })
+        .catch(() => {});
+    }
   }, [job, cachedPreparation, initialTab]);
 
   useEffect(() => {
@@ -353,7 +375,7 @@ export function JobDetailSheet({
 
     setCheckingLink(false);
 
-    // 1. Open official active job opportunity in external browser/new window
+    // 1. Open official active job opportunity in external browser/new window (window.open(job.url, "_blank"))
     openExternalUrl(finalUrlToOpen);
 
     setDirectApplied(true);
@@ -379,9 +401,60 @@ export function JobDetailSheet({
           }),
         }),
       });
-      window.dispatchEvent(new CustomEvent("job_application_updated"));
+      setCurrentStage("applied");
+      window.dispatchEvent(
+        new CustomEvent("job_application_updated", {
+          detail: {
+            jobId: job.id,
+            company: job.company,
+            title: job.title,
+            url: job.url,
+            stage: "applied",
+          },
+        })
+      );
     } catch (e) {
       console.warn("Failed to record direct application:", e);
+    }
+  };
+
+  const handleStatusChange = async (newStage: string) => {
+    if (!job) return;
+    try {
+      await fetch("/api/jobs/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId: job.id,
+          company: job.company,
+          jobTitle: job.title,
+          jobUrl: job.url,
+          stage: newStage,
+          matchScore: job.matchRate,
+          notes: JSON.stringify({
+            ...(preparation || cachedPreparation || {}),
+            statusUpdatedAt: new Date().toISOString(),
+            sourceUrl: job.url,
+            location: job.location,
+            isPrepared: Boolean(preparation || cachedPreparation),
+          }),
+        }),
+      });
+      setCurrentStage(newStage);
+      if (newStage === "applied") setDirectApplied(true);
+      window.dispatchEvent(
+        new CustomEvent("job_application_updated", {
+          detail: {
+            jobId: job.id,
+            company: job.company,
+            title: job.title,
+            url: job.url,
+            stage: newStage,
+          },
+        })
+      );
+    } catch (e) {
+      console.warn("Failed to update status:", e);
     }
   };
 
@@ -480,7 +553,29 @@ export function JobDetailSheet({
                 Prepare for this specific interview (1 ⚡) or apply on the official ATS board.
               </p>
             </div>
-            <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0">
+            <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto shrink-0">
+              {/* Pipeline Status Selector */}
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs">
+                <span className="text-[11px] font-semibold text-[var(--color-text-secondary)]">Status:</span>
+                <select
+                  value={currentStage || "none"}
+                  onChange={(e) => {
+                    if (e.target.value !== "none") {
+                      handleStatusChange(e.target.value);
+                    }
+                  }}
+                  className="text-xs font-bold bg-transparent text-[var(--color-text)] border-none focus:outline-none cursor-pointer"
+                  title="Move opportunity status in your tracker"
+                >
+                  <option value="none">Not Applied</option>
+                  <option value="applied">Applied</option>
+                  <option value="interview">Interview</option>
+                  <option value="pipe">In Pipeline</option>
+                  <option value="offer">Offer</option>
+                  <option value="rejected">Archived / Rejected</option>
+                </select>
+              </div>
+
               <button
                 type="button"
                 onClick={handlePrepareMe}

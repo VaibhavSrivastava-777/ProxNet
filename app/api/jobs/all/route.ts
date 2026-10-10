@@ -195,8 +195,8 @@ export async function GET(request: Request) {
       await refreshCompaniesCache(supabase);
     }
 
-    // 2. Concurrently fetch lightweight user profile & follows for personalized referral flags
-    const [userProfileRes, followsRes] = await Promise.all([
+    // 2. Concurrently fetch lightweight user profile, follows, and tracked/applied applications for this user
+    const [userProfileRes, followsRes, userAppsRes] = await Promise.all([
       supabase
         .from("users")
         .select("job_title, resume_text, resume_url, wallet, company, invite_code, profile_digest, about, professional_bio")
@@ -206,6 +206,10 @@ export async function GET(request: Request) {
         .from("follows")
         .select("following_id")
         .eq("follower_id", user.id),
+      supabase
+        .from("job_applications")
+        .select("job_id, company, job_title, job_url, stage")
+        .eq("user_id", user.id),
     ]);
 
     const userProfile = userProfileRes.data;
@@ -213,21 +217,50 @@ export async function GET(request: Request) {
     const userSkills = userProfile ? Array.from(extractCandidateSkills(userProfile)) : [];
     const followedSet = new Set(followsRes.data?.map(f => f.following_id) || []);
 
-    // 3. Personalize followed status on referral contacts (instant memory map)
+    // Build sets of opportunities whose status has been changed / tracked by this user
+    const userApps = userAppsRes.data || [];
+    const appliedJobIds = new Set<string>();
+    const appliedUrls = new Set<string>();
+    const appliedCompanyTitleKeys = new Set<string>();
+
+    for (const app of userApps) {
+      if (app.job_id) appliedJobIds.add(app.job_id);
+      if (app.job_url) appliedUrls.add(app.job_url.trim().toLowerCase());
+      if (app.company && app.job_title) {
+        appliedCompanyTitleKeys.add(`${app.company.trim().toLowerCase()}:::${app.job_title.trim().toLowerCase()}`);
+      }
+    }
+
+    // 3. Personalize followed status on referral contacts & exclude opportunities this user has moved to Applied / tracker
     const baseList = cachedCompaniesList || [];
-    const personalizedCompanies = baseList.map(comp => {
-      const filteredReferrers = comp.referralContacts.filter(r => r.id !== user.id);
-      return {
-        company: comp.company,
-        contactsCount: filteredReferrers.length,
-        referralContacts: filteredReferrers.map(rc => ({
-          id: rc.id,
-          alias: rc.alias,
-          is_followed: followedSet.has(rc.id),
-        })),
-        jobs: comp.jobs,
-      };
-    });
+    const personalizedCompanies = baseList
+      .map(comp => {
+        const filteredReferrers = comp.referralContacts.filter(r => r.id !== user.id);
+        const compLower = comp.company.trim().toLowerCase();
+
+        // Omit any opportunities this user has moved to Applied / changed status for
+        const unappliedJobs = comp.jobs.filter(j => {
+          if (j.id && appliedJobIds.has(j.id)) return false;
+          if (j.url && appliedUrls.has(j.url.trim().toLowerCase())) return false;
+          const tcKey = `${compLower}:::${(j.title || "").trim().toLowerCase()}`;
+          if (appliedCompanyTitleKeys.has(tcKey)) return false;
+          return true;
+        });
+
+        return {
+          company: comp.company,
+          contactsCount: filteredReferrers.length,
+          referralContacts: filteredReferrers.map(rc => ({
+            id: rc.id,
+            alias: rc.alias,
+            is_followed: followedSet.has(rc.id),
+          })),
+          jobs: unappliedJobs,
+        };
+      })
+      .filter(comp => comp.jobs.length > 0 || comp.contactsCount > 0);
+
+    const totalAvailableJobs = personalizedCompanies.reduce((acc, c) => acc + c.jobs.length, 0);
 
     return NextResponse.json({
       success: true,
@@ -241,7 +274,12 @@ export async function GET(request: Request) {
       userDiscipline,
       userSkills,
       totalCompanies: personalizedCompanies.length,
-      totalJobs: cachedTotalJobsCount,
+      totalJobs: totalAvailableJobs,
+      appliedSignatures: [
+        ...Array.from(appliedJobIds).map(id => `id:${id}`),
+        ...Array.from(appliedUrls).map(u => `url:${u}`),
+        ...Array.from(appliedCompanyTitleKeys).map(k => `tc:${k}`),
+      ],
       companies: personalizedCompanies,
     }, {
       headers: {
