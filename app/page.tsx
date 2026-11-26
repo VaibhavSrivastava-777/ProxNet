@@ -8,6 +8,7 @@ import { HomeWidgets } from "@/components/home/HomeWidgets";
 import { isOnboardingIncomplete } from "@/lib/profile-validation";
 
 import { LandingStoreButtons } from "@/components/auth/LandingStoreButtons";
+import { SHOW_OTHER_FEATURES } from "@/lib/features";
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -70,21 +71,22 @@ export default async function HomePage({
       <section className="relative overflow-hidden bg-gradient-to-br from-[var(--color-primary)] to-[#004182] px-4 py-24 text-center text-white sm:py-32">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iLjE1Ii8+PC9zdmc+')] bg-[length:24px_24px] opacity-20" />
         <div className="relative mx-auto max-w-4xl animate-fadeInUp">
-          <h1 className="text-display mb-6 text-white leading-tight">Get Referred. Get Hired. Anonymously.</h1>
+          <h1 className="text-display mb-6 text-white leading-tight">Get Referred. Get Hired.</h1>
           <div className="text-body-lg mx-auto mb-10 max-w-2xl text-white/90" style={{ minHeight: "84px" }}>
-            <TypewriterText 
-              speedMs={65} 
-              text="Unlock verified job referrals from professionals inside top companies. Request referrals anonymously, get hired, and claim bonuses — all without revealing your identity." 
+            <TypewriterText
+              speedMs={65}
+              text="Request a referral from a verified professional inside the company you want to join. Pay only when a referral is posted."
             />
           </div>
           <div className="flex flex-col items-center justify-center gap-4">
 
-            <LoginButton className="btn btn-linkedin btn-lg shadow-xl shadow-black/20" showLinkedIn={false} />
-            <p className="text-caption text-white/70 font-medium tracking-wide">🔒 100% ANONYMOUS • GOOGLE VERIFIED • FREE TO USE</p>
+            <LoginButton className="btn btn-lg shadow-xl shadow-black/20" />
+            <p className="text-caption text-white/70 font-medium tracking-wide">GOOGLE SIGN-IN • 50 RS PER REFERRAL REQUEST</p>
           </div>
         </div>
       </section>
 
+      {SHOW_OTHER_FEATURES && (<>
       {/* Network Hub Features */}
       <section className="px-4 py-20 bg-[var(--color-bg)]">
         <div className="mx-auto max-w-5xl">
@@ -167,14 +169,16 @@ export default async function HomePage({
         </div>
       </section>
 
+      </>)}
+
       {/* Bottom CTA */}
       <section className="px-4 py-24 text-center bg-[var(--color-surface)] flex flex-col items-center">
         <h2 className="text-h2 mb-4">Ready to unlock your professional neighborhood?</h2>
         <p className="text-body text-[var(--color-text-secondary)] mb-8 max-w-md">
-          Join now to ask your awkward career questions anonymously and get referred to top companies!
+          Sign in with Google to request a referral from a verified professional at your target company.
         </p>
 
-        <LoginButton className="btn btn-linkedin btn-lg" showLinkedIn={false} />
+        <LoginButton className="btn btn-lg" />
       </section>
 
       {/* Footer */}

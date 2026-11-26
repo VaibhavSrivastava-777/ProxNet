@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotification } from "@/lib/notifications";
-import { awardWalletCredits, transferCredits } from "@/lib/wallet";
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -43,37 +42,8 @@ export async function POST(request: Request) {
     .eq("thread_id", threadId)
     .neq("user_id", user.id);
 
-  // Check if this is the user's first response to someone else's referral ask
-  let creditReward: { creditsAwarded: number; newBalance: number; message?: string } | null = null;
-  const { count: userMsgCount } = await supabase
-    .from("job_messages")
-    .select("id", { count: "exact", head: true })
-    .eq("thread_id", threadId)
-    .eq("sender_id", user.id);
-
-  if (userMsgCount === 1) {
-    const { count: priorMsgCount } = await supabase
-      .from("job_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("thread_id", threadId)
-      .neq("sender_id", user.id);
-
-    if (priorMsgCount && priorMsgCount > 0) {
-      const requesterId = others?.[0]?.user_id;
-      if (requesterId) {
-        const transferRes = await transferCredits(requesterId, user.id, 3, "referral_response_transfer", threadId);
-        if (transferRes.success) {
-          creditReward = {
-            creditsAwarded: 3,
-            newBalance: transferRes.toBalance,
-            message: "+3 credits transferred from requester for responding to referral ask!",
-          };
-        }
-      } else {
-        creditReward = await awardWalletCredits(user.id, "responded_referral_ask", threadId);
-      }
-    }
-  }
+  // Credits are no longer awarded for replies. The giver earns a credit only when
+  // the seeker confirms the referral (see /api/referrals/[id]/confirm).
 
   if (others && others.length > 0) {
     const targetUserId = others[0].user_id;
@@ -95,10 +65,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({
-    message: msg,
-    creditsAwarded: creditReward?.creditsAwarded || 0,
-    newBalance: creditReward?.newBalance,
-    rewardMessage: creditReward?.message,
-  });
+  return NextResponse.json({ message: msg });
 }

@@ -136,8 +136,8 @@ export default function LoginPage() {
           </a>
         </div>
 
-        {/* LinkedIn sign-in form */}
-        <LoginButton className="btn btn-linkedin" style={{ width: "100%" }} />
+        {/* Google sign-in */}
+        <LoginButton className="btn" style={{ width: "100%" }} />
 
         {/* Security note */}
         <p

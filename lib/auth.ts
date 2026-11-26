@@ -1,19 +1,14 @@
 import NextAuth from "next-auth";
-import LinkedIn from "next-auth/providers/linkedin";
 import Google from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { cookies } from "next/headers";
 import { findUserByLinkedInSub, upsertOAuthUser } from "./users";
 
+// Google is the only sign-in provider. The `linkedin_sub` column and
+// `linkedinSub` session field now hold the Google subject ID (legacy names kept
+// to avoid a wider refactor; see users.ts for how existing accounts are matched).
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
-    LinkedIn({
-      clientId: process.env.LINKEDIN_CLIENT_ID!,
-      clientSecret: process.env.LINKEDIN_CLIENT_SECRET!,
-      authorization: {
-        params: { scope: "openid profile email" },
-      },
-    }),
     Google({
       clientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
@@ -63,25 +58,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         name?: string | null;
         email?: string | null;
         image?: string | null;
-        headline?: string | null;
-        profileUrl?: string | null;
       };
 
       const prof = profile as Record<string, any> | undefined;
-      const linkedinProfileUrl =
-        u.profileUrl ||
-        (prof?.vanityName ? `https://www.linkedin.com/in/${prof.vanityName}` : null);
-
       const picture = u.image || prof?.picture || null;
-      const headline = u.headline || prof?.headline || null;
 
       const dbUser = await upsertOAuthUser({
         sub: sub,
         email: u.email || prof?.email || null,
         name: u.name || prof?.name || null,
         picture: picture,
-        linkedinProfileUrl: linkedinProfileUrl,
-        headline: headline,
         referrerCode,
       });
       return !!dbUser;
