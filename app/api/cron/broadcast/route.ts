@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { handleBroadcast } from "@/lib/cronBroadcast";
 
 export async function GET(request: Request) {

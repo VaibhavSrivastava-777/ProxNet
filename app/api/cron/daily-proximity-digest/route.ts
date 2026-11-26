@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { runDailyProximityAndJobsCron } from "@/lib/notifications/daily-proximity-and-jobs";
 import { getAdminSession } from "@/lib/admin-session";

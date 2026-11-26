@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 
 // AI suggestions in chat have been decommissioned per WhatsApp-grade UX requirements.

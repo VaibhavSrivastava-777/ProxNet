@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TOP_DESIGNATIONS, searchDesignations } from "@/lib/data/curated-suggestions";
