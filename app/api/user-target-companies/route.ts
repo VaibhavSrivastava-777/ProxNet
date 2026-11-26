@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -8,6 +9,7 @@ import { isJobEligible, normalizeJobUrl, normalizeJobTitle } from "@/lib/jobs/jo
 export const maxDuration = 60;
 
 export async function GET() {
+  await connection();
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

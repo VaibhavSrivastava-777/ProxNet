@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateAlias } from "@/lib/anonymize";
@@ -14,6 +15,7 @@ const SEED_DATA = [
 ];
 
 export async function GET() {
+  await connection();
   const supabase = createAdminClient();
 
   const { data: users } = await supabase.from("users").select("id").limit(5);

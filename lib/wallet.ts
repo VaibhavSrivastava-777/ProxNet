@@ -11,7 +11,8 @@ export type CreditReason =
   | "responded_referral_ask"
   | "answered_career_question"
   | "profile_100_percent"
-  | "onboarding_bounty";
+  | "onboarding_bounty"
+  | "referral_completed";
 
 export const CREDIT_REWARDS: Record<CreditReason, { amount: number; label: string }> = {
   push_notifications_enabled: { amount: 5, label: "Enabling Notifications" },
@@ -20,6 +21,7 @@ export const CREDIT_REWARDS: Record<CreditReason, { amount: number; label: strin
   answered_career_question: { amount: 3, label: "Answering a Career Question" },
   profile_100_percent: { amount: 5, label: "Completing 100% of Profile" },
   onboarding_bounty: { amount: 10, label: "Onboarding Pioneer Professional" },
+  referral_completed: { amount: 1, label: "Referral Delivered" },
 };
 
 export type DebitReason =

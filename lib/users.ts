@@ -132,6 +132,9 @@ export async function upsertOAuthUser(params: {
   const normalizedUrl = normalizeLinkedInUrl(params.linkedinProfileUrl);
   const { company: parsedCompany, title: parsedTitle } = parseLinkedInHeadline(params.headline);
 
+  // Match order: Google subject (returning users), then LinkedIn URL (legacy),
+  // then email. Email matching links accounts created before Google-only login:
+  // their `linkedin_sub` is overwritten below with the Google subject.
   let existing =
     (await findUserByLinkedInSub(params.sub)) ??
     (normalizedUrl ? await findUserByLinkedInUrl(normalizedUrl) : null) ??
@@ -222,7 +225,7 @@ export async function upsertOAuthUser(params: {
     .insert({
       linkedin_sub: params.sub,
       email: params.email ?? null,
-      full_name: params.name ?? "LinkedIn User",
+      full_name: params.name ?? "ProxNet User",
       profile_photo_url: params.picture ?? null,
       linkedin_profile_url: normalizedUrl,
       company: parsedCompany ?? null,
