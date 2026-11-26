@@ -35,6 +35,9 @@ export function ReferralHub() {
   const [hub, setHub] = useState<Hub | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Lives here (not in FindReferral) so switching tabs does not reload it.
+  const [companies, setCompanies] = useState<Company[] | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
 
   const loadHub = useCallback(async () => {
     const res = await fetch("/api/referrals", { cache: "no-store" });
@@ -43,6 +46,10 @@ export function ReferralHub() {
 
   useEffect(() => {
     loadHub();
+    fetch("/api/referrals/companies", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setCompanies(j.companies ?? []))
+      .catch(() => setCompanies([]));
   }, [loadHub]);
 
   /** POST to an API route, show any error, and refresh the hub on success. */
@@ -114,9 +121,16 @@ export function ReferralHub() {
       )}
 
       {tab === "find" && (
-        <FindReferral balance={hub?.balance ?? 0} busyId={busyId} onRequest={(giverId) =>
-          act(giverId, "/api/referrals", { giverId }, "Request sent. You'll be charged 1 credit only if they accept.")
-        } />
+        <FindReferral
+          balance={hub?.balance ?? 0}
+          busyId={busyId}
+          companies={companies}
+          selected={selectedCompany}
+          onSelect={setSelectedCompany}
+          onRequest={(giverId) =>
+            act(giverId, "/api/referrals", { giverId }, "Request sent. You'll be charged 1 credit only if they accept.")
+          }
+        />
       )}
 
       {tab === "incoming" && (
@@ -165,22 +179,20 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 function FindReferral({
   balance,
   busyId,
+  companies,
+  selected,
+  onSelect,
   onRequest,
 }: {
   balance: number;
   busyId: string | null;
+  companies: Company[] | null;
+  selected: Company | null;
+  onSelect: (company: Company | null) => void;
   onRequest: (giverId: string) => Promise<unknown>;
 }) {
-  const [companies, setCompanies] = useState<Company[] | null>(null);
-  const [selected, setSelected] = useState<Company | null>(null);
+  const setSelected = onSelect;
   const [givers, setGivers] = useState<Giver[] | null>(null);
-
-  useEffect(() => {
-    fetch("/api/referrals/companies", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => setCompanies(j.companies ?? []))
-      .catch(() => setCompanies([]));
-  }, []);
 
   useEffect(() => {
     if (!selected) return;
@@ -373,7 +385,14 @@ function RequestList({
 function CompanyLogo({ name, logoUrl }: { name: string; logoUrl: string | null }) {
   if (logoUrl) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={logoUrl} alt={`${name} logo`} className="h-12 w-12 rounded-lg object-contain bg-white" />;
+    return (
+      <img
+        src={logoUrl}
+        alt={`${name} logo`}
+        referrerPolicy="no-referrer"
+        className="h-12 w-12 rounded-lg object-contain bg-white"
+      />
+    );
   }
   return (
     <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-[var(--color-primary-subtle)] text-lg font-bold text-[var(--color-primary)]">
@@ -385,7 +404,14 @@ function CompanyLogo({ name, logoUrl }: { name: string; logoUrl: string | null }
 function Avatar({ name, photo }: { name: string; photo: string | null }) {
   if (photo) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={photo} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />;
+    return (
+      <img
+        src={photo}
+        alt=""
+        referrerPolicy="no-referrer"
+        className="h-10 w-10 shrink-0 rounded-full object-cover"
+      />
+    );
   }
   return (
     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-subtle)] font-bold text-[var(--color-primary)]">
