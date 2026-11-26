@@ -402,13 +402,15 @@ function CompanyLogo({ name, logoUrl }: { name: string; logoUrl: string | null }
 }
 
 function Avatar({ name, photo }: { name: string; photo: string | null }) {
-  if (photo) {
+  const [failed, setFailed] = useState(false);
+  if (photo && !failed) {
     // eslint-disable-next-line @next/next/no-img-element
     return (
       <img
         src={photo}
         alt=""
         referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
         className="h-10 w-10 shrink-0 rounded-full object-cover"
       />
     );
