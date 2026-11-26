@@ -149,7 +149,11 @@ export async function upsertOAuthUser(params: {
     };
     if (params.email) updates.email = params.email;
     if (params.name && (!existing.full_name || existing.full_name === "LinkedIn User")) updates.full_name = params.name;
-    if (params.picture && !existing.profile_photo_url) updates.profile_photo_url = params.picture;
+    // Replace a missing photo, or a LinkedIn CDN link (those URLs are signed and expire).
+    const storedPhotoIsExpiringLinkedIn = existing.profile_photo_url?.includes("licdn.com") ?? false;
+    if (params.picture && (!existing.profile_photo_url || storedPhotoIsExpiringLinkedIn)) {
+      updates.profile_photo_url = params.picture;
+    }
     if (existing.linkedin_profile_url && isSyntheticLinkedInUrl(existing.linkedin_profile_url, existing.linkedin_sub)) {
       updates.linkedin_profile_url = normalizedUrl || null;
     } else if (normalizedUrl && !existing.linkedin_profile_url) {
