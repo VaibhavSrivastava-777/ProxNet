@@ -1,9 +1,11 @@
+import { connection } from "next/server";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // GET: Fetch user's application pipeline with counts per stage
 export async function GET() {
+  await connection();
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

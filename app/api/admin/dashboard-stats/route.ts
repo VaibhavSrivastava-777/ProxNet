@@ -1,9 +1,11 @@
+import { connection } from "next/server";
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSameCompany } from "@/lib/jobs/job-filters";
 
 export async function GET() {
+  await connection();
   const session = await getAdminSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

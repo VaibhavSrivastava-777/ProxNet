@@ -1,7 +1,9 @@
+import { connection } from "next/server";
 import { NextResponse } from "next/server";
 import { getInstitutes, findOrCreateInstitute } from "@/lib/institutes";
 
 export async function GET() {
+  await connection();
   try {
     const institutes = await getInstitutes();
     return NextResponse.json({ institutes });
